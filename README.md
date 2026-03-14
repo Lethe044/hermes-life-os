@@ -42,10 +42,10 @@ flowchart TD
 
 | Feature | How It's Used |
 |---------|--------------|
-| **Memory** | Stores every mood, win, struggle, habit, goal — recalls context before every response |
+| **Memory** | Stores every mood, win, struggle, habit, goal - recalls context before every response |
 | **Skills** | Life OS playbook defines the full daily rhythm and pattern detection rules |
 | **Cron** | Automated briefings at 07:00, 12:00, 18:00, 23:00, and weekly Monday reviews |
-| **Gateway** | Delivers briefings via terminal — extensible to Telegram, email, SMS |
+| **Gateway** | Delivers briefings via terminal - extensible to Telegram, email, SMS |
 | **Subagents** | Pattern detection runs as a parallel analysis before every briefing |
 | **Atropos RL** | Reward function trains Hermes to be more personal, more memory-driven over time |
 
@@ -53,11 +53,11 @@ flowchart TD
 
 ```mermaid
 pie title Life OS Reward Components
-    "Briefing Sent — Delivered via send_briefing?" : 30
-    "Memory Used — Recalled AND remembered?" : 25
-    "Pattern Detected — Called detect_patterns?" : 20
-    "Personalization — Referenced real context?" : 15
-    "Tool Coverage — Used expected tools?" : 10
+    "Briefing Sent - Delivered via send_briefing?" : 30
+    "Memory Used - Recalled AND remembered?" : 25
+    "Pattern Detected - Called detect_patterns?" : 20
+    "Personalization - Referenced real context?" : 15
+    "Tool Coverage - Used expected tools?" : 10
 ```
 
 ## Quick Start
@@ -77,11 +77,11 @@ python demo/demo_life_os.py --mode weekly
 
 | Mode | What Happens |
 |------|-------------|
-| `onboard` | First-time setup — Hermes learns who you are |
+| `onboard` | First-time setup - Hermes learns who you are |
 | `morning` | Daily briefing based on your patterns |
-| `checkin` | Midday log — mood, habits, quick nudge |
-| `evening` | Evening reflection — wins, struggles, patterns |
-| `weekly` | Sunday review — what this week says about you |
+| `checkin` | Midday log - mood, habits, quick nudge |
+| `evening` | Evening reflection - wins, struggles, patterns |
+| `weekly` | Sunday review - what this week says about you |
 
 ## Memory Schema
 
@@ -132,7 +132,7 @@ Every other agent in this hackathon does something **for** you.
 Hermes Life OS becomes something **with** you.
 
 It's not a tool you pick up when you need it.
-It's a presence that accumulates — quietly, in the background —
+It's a presence that accumulates - quietly, in the background -
 until one morning it says something that makes you realize it knows you better than you thought.
 
 That's what "grows with you" actually means.
