@@ -1,0 +1,24 @@
+environment:
+  name: life-os
+  class: environments.life_os_env.LifeOSEnv
+
+training:
+  workers: 4
+  batch_size: 16
+  max_turns_per_episode: 20
+  temperature: 0.8
+
+model:
+  name: openrouter/nousresearch/hermes-3-llama-3.1-405b
+  max_tokens: 1500
+
+reward_weights:
+  briefing_sent: 0.30
+  memory_used: 0.25
+  pattern_detected: 0.20
+  personalization: 0.15
+  tool_coverage: 0.10
+
+logging:
+  wandb_project: hermes-life-os
+  log_every_n_steps: 10
