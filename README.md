@@ -149,6 +149,40 @@ graph LR
     style D1 fill:#2980b9,color:#fff
 ```
 
+## Voice Mode
+
+```bash
+python demo/demo_life_os.py --voice --model google/gemini-2.0-flash-001
+```
+
+Speak to Hermes directly. It listens via microphone, processes your input using
+everything it knows about you, and responds out loud via system TTS.
+
+No extra API key needed - uses built-in Windows/Linux speech synthesis.
+
+To stop: say or type `exit`
+
+---
+
+## What's New
+
+**v1.2.0 - Voice & Performance**
+- Voice mode - speak to Hermes, hear responses via system TTS
+- Concurrent tool execution - read-only tools run in parallel threads
+- Microphone input via SpeechRecognition
+
+**v1.1.0 - Health & Wellness Expansion**
+- Nutrition, sleep, hydration, fitness, mental, focus tracking
+- Full health dashboard and weekly health report
+- Interactive chat mode
+
+**v1.0.0 - Initial Release**
+- 12 demo modes covering every life dimension
+- Pattern detection across mood, sleep, nutrition, stress, focus
+- Memory-driven briefings, Atropos RL environment
+
+---
+
 ## Running Tests
 
 ```bash
