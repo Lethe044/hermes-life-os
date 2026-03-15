@@ -123,7 +123,7 @@ Type `exit` to leave.
 
 Example conversations:
 - "I feel stressed today, any advice?"
-- "Log my lunch — grilled chicken and rice, about 600 calories"
+- "Log my lunch - grilled chicken and rice, about 600 calories"
 - "How has my sleep been this week?"
 - "I just ran 5km, log it"
 - "What patterns are you seeing in my data?"
