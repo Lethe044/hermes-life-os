@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Hermes Life OS — Full Featured Demo
+Hermes Life OS - Full Featured Demo
 =====================================
 A personal operating system that learns who you are,
 tracks your health, habits, goals, and mental state,
@@ -257,7 +257,7 @@ def detect_patterns() -> Dict[str, Any]:
     # Correlations
     if mood_scores and sleep_hours and len(mood_scores) >= 3 and len(sleep_hours) >= 3:
         patterns["correlations"].append(
-            "Sleep and mood data available — correlation analysis active."
+            "Sleep and mood data available - correlation analysis active."
         )
 
     # Habit streaks
@@ -266,11 +266,11 @@ def detect_patterns() -> Dict[str, Any]:
         streak = habit.get("streak", 0)
         if streak >= 7:
             patterns["insights"].append(
-                f"'{name}' is at {streak} days — this is becoming a real part of your identity."
+                f"'{name}' is at {streak} days - this is becoming a real part of your identity."
             )
         elif streak == 0 and habit.get("last_done"):
             patterns["insights"].append(
-                f"'{name}' streak is at zero. Easy to restart — just one day."
+                f"'{name}' streak is at zero. Easy to restart - just one day."
             )
 
     return patterns
@@ -881,7 +881,7 @@ DEMO_SCENARIOS = {
         "title": "Nutrition Check-in",
         "prompt": textwrap.dedent(f"""
             Let's review my nutrition today.
-            - Breakfast: Greek yogurt with berries (~300 cal, 20g protein)
+            - Breakfast: Yogurt with berries (~300 cal, 20g protein)
             - Lunch: Grilled chicken salad (~500 cal, 35g protein)
             - Snack: Apple and almonds (~200 cal)
             - Dinner: Salmon with vegetables (~550 cal, 40g protein)
@@ -897,7 +897,7 @@ DEMO_SCENARIOS = {
             Log last night's sleep and analyze.
             - Went to bed at 11:30pm
             - Woke up at 7:00am (7.5 hours)
-            - Sleep quality: 8/10 — felt well rested
+            - Sleep quality: 8/10 - felt well rested
             - No interruptions
 
             Log it. Pull recent sleep data. Detect sleep patterns.
@@ -990,7 +990,7 @@ SYSTEM = textwrap.dedent("""
 # Agent loop
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL = "openrouter/auto"
+DEFAULT_MODEL = "nousresearch/hermes-3-llama-3.1-405b"
 
 
 def run_life_os(scenario: Dict[str, Any], api_key: str,
@@ -1047,7 +1047,8 @@ def run_life_os(scenario: Dict[str, Any], api_key: str,
             ))
 
         if not msg.tool_calls or resp.choices[0].finish_reason == "stop":
-            if briefings_sent == 0 and turn < max_turns - 1:
+            # In chat mode, don't force send_briefing — let model respond naturally
+            if briefings_sent == 0 and turn < max_turns - 1 and user_message == "":
                 messages.append({"role": "user", "content":
                     "Please deliver your response using send_briefing now."})
                 continue
@@ -1129,13 +1130,24 @@ def run_life_os(scenario: Dict[str, Any], api_key: str,
 def run_chat_mode(api_key: str, model: str = DEFAULT_MODEL):
     """Interactive chat - you type, Hermes responds using your full memory."""
     console.print(Panel(
-        "[bold cyan]Hermes Life OS — Chat Mode[/]\n"
+        "[bold cyan]Hermes Life OS - Chat Mode[/]\n"
         "[dim]Type anything. Hermes will respond using everything it knows about you.\n"
         "Type 'exit' or 'quit' to leave.[/]",
         border_style="cyan",
     ))
 
     seed_demo_memory()
+
+    # Chat system prompt
+    chat_system = (
+        "You are Hermes Life OS - a personal assistant that tracks health and life data. "
+        "ALWAYS use tools. Never respond without calling at least one tool first. "
+        "If user says log/track/record anything: call the appropriate log tool immediately. "
+        "If user asks how they feel or pattern questions: call detect_patterns and get_health_dashboard. "
+        "Always call get_profile first. Always end with send_briefing. "
+        "log_meal for food, log_workout for exercise, log_hydration for water, "
+        "log_sleep for sleep, log_stress for stress, log_focus_session for work sessions."
+    )
 
     while True:
         try:
@@ -1151,11 +1163,12 @@ def run_chat_mode(api_key: str, model: str = DEFAULT_MODEL):
         if not user_input:
             continue
 
+        # Use lighter system prompt for chat
         scenario = {
             "title": "Chat",
             "prompt": user_input,
         }
-        run_life_os(scenario, api_key, model, max_turns=15, user_message=user_input)
+        run_life_os(scenario, api_key, model, max_turns=10, user_message=user_input)
 
 
 # ---------------------------------------------------------------------------
