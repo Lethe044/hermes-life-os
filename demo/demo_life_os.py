@@ -261,6 +261,27 @@ def detect_patterns() -> Dict[str, Any]:
             "Sleep and mood data available - correlation analysis active."
         )
 
+    # Dream patterns
+    dream_entries = [r for r in recent if r.get("type") == "dream"]
+    if dream_entries:
+        all_symbols = []
+        tones = []
+        for d in dream_entries:
+            all_symbols.extend(d.get("symbols", []))
+            tones.append(d.get("tone", "neutral"))
+        negative_tones = tones.count("negative")
+        if negative_tones >= 3:
+            patterns["insights"].append(
+                f"You've had {negative_tones} negative dreams recently. "
+                f"This often correlates with stress or poor sleep."
+            )
+        recurring = [s for s in set(all_symbols) if all_symbols.count(s) >= 2]
+        if recurring:
+            patterns["insights"].append(
+                f"Recurring dream symbols: {', '.join(recurring[:3])}. "
+                f"These patterns may reflect your current emotional state."
+            )
+
     # Habit streaks
     for habit in load_habits():
         name = habit.get("name", "")
@@ -654,7 +675,33 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             "memory_entries": memory_count(),
         }, indent=2, ensure_ascii=False)
 
-    return f"Unknown tool: {name}"
+    # ── log_dream ──────────────────────────────────────────────────────────────
+    elif name == "log_dream":
+        entry = {
+            "date":      time.strftime("%Y-%m-%d"),
+            "content":   inp.get("content", ""),
+            "emotions":  inp.get("emotions", []),
+            "symbols":   inp.get("symbols", []),
+            "tone":      inp.get("tone", "neutral"),
+            "vividness": inp.get("vividness", 5),
+        }
+        write_memory({"type": "dream", **entry})
+        # Check for recurring symbols
+        recent = get_recent_memory(days=30)
+        dream_entries = [r for r in recent if r.get("type") == "dream"]
+        all_symbols = []
+        for d in dream_entries:
+            all_symbols.extend(d.get("symbols", []))
+        recurring = []
+        for s in set(all_symbols):
+            if all_symbols.count(s) >= 2:
+                recurring.append(f"{s} ({all_symbols.count(s)}x)")
+        result = f"Dream logged. Vividness: {entry['vividness']}/10, Tone: {entry['tone']}"
+        if recurring:
+            result += f"\nRecurring symbols this month: {', '.join(recurring)}"
+        return result
+
+        return f"Unknown tool: {name}"
 
 # ---------------------------------------------------------------------------
 # Tool schemas
@@ -791,6 +838,17 @@ TOOLS = [
     {"type": "function", "function": {"name": "get_profile",
         "description": "Load full profile, habits, goals, memory stats.",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {
+        "name": "log_dream",
+        "description": "Log a dream from this morning. Include content, emotions, symbols, tone and vividness.",
+        "parameters": {"type": "object", "properties": {
+            "content":   {"type": "string", "description": "What happened in the dream"},
+            "emotions":  {"type": "array",  "items": {"type": "string"}, "description": "Emotions felt: anxiety, joy, fear, peace, etc."},
+            "symbols":   {"type": "array",  "items": {"type": "string"}, "description": "Key symbols: flying, water, exam, chasing, etc."},
+            "tone":      {"type": "string", "description": "Overall tone: positive/negative/neutral/mixed"},
+            "vividness": {"type": "integer","description": "How vivid was it 1-10"},
+        }, "required": ["content"]}}},
 ]
 
 # ---------------------------------------------------------------------------
@@ -944,6 +1002,20 @@ DEMO_SCENARIOS = {
             with insights on my best focus times and distraction patterns.
         """).strip(),
     },
+    "dream": {
+        "title": "Dream Journal - Morning Log",
+        "prompt": (
+            "Good morning. I just woke up and want to log last night's dream before I forget it.\n\n"
+            "I was at my old school but it looked different. I had an important exam but "
+            "I couldn't find the classroom. I kept running down hallways that changed shape. "
+            "There was water flooding from somewhere. I felt anxious but also strangely calm "
+            "by the end. Overall it was vivid, maybe 7/10.\n\n"
+            "Log this dream with all details - emotions, symbols, tone, vividness. "
+            "Then check if there are any recurring patterns in my recent dreams. "
+            "Also look at my recent stress and sleep data - is there a correlation? "
+            "Give me a brief dream analysis as a morning briefing."
+        ),
+    },
     "health": {
         "title": "Full Health Dashboard",
         "prompt": textwrap.dedent(f"""
@@ -979,6 +1051,7 @@ SYSTEM = textwrap.dedent("""
     Available tracking tools:
     - log_meal, log_sleep, log_hydration, log_workout
     - log_stress, log_meditation, log_gratitude, log_focus_session
+    - log_dream (for dream journal - symbols, emotions, tone, vividness)
     - update_habit, update_goal
     - get_health_dashboard, get_weekly_health_report
     - detect_patterns, remember, recall
@@ -1079,7 +1152,7 @@ def run_life_os(scenario: Dict[str, Any], api_key: str,
             "save_profile": "👤", "get_profile": "👤",
         }
 
-        # Parallel tools: read-only, no side effects — safe to run concurrently
+        # Parallel tools: read-only, no side effects - safe to run concurrently
         PARALLEL_TOOLS = {
             "get_profile", "get_health_dashboard",
             "get_weekly_health_report", "detect_patterns", "recall",
@@ -1443,6 +1516,24 @@ def seed_demo_memory():
     hydration["goal"]      = 8
     save_hydration(hydration)
 
+    # Seed dream entries
+    dream_seeds = [
+        {"type": "dream", "date": time.strftime("%Y-%m-%d"),
+         "content": "running late, couldn't find the meeting room",
+         "emotions": ["anxiety", "frustration"], "symbols": ["running", "office", "late"],
+         "tone": "negative", "vividness": 6},
+        {"type": "dream", "date": time.strftime("%Y-%m-%d"),
+         "content": "flying over a city, felt free",
+         "emotions": ["joy", "peace"], "symbols": ["flying", "city", "freedom"],
+         "tone": "positive", "vividness": 8},
+        {"type": "dream", "date": time.strftime("%Y-%m-%d"),
+         "content": "exam I hadn't studied for, water flooding the room",
+         "emotions": ["anxiety", "panic"], "symbols": ["exam", "water", "school"],
+         "tone": "negative", "vividness": 7},
+    ]
+    for d in dream_seeds:
+        write_memory(d)
+
     console.print("[dim]Demo memory ready.[/]")
 
 
@@ -1452,7 +1543,8 @@ def seed_demo_memory():
 
 def main():
     parser = argparse.ArgumentParser(description="Hermes Life OS")
-    parser.add_argument("--mode", choices=list(DEMO_SCENARIOS.keys()), default="morning")
+    parser.add_argument("--mode", choices=list(DEMO_SCENARIOS.keys()), default="morning",
+                        help="Mode: " + ", ".join(DEMO_SCENARIOS.keys()))
     parser.add_argument("--model",     default=DEFAULT_MODEL)
     parser.add_argument("--max-turns", type=int, default=25)
     parser.add_argument("--fresh",     action="store_true", help="Clear all data and start fresh")
