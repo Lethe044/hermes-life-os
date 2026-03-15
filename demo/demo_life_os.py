@@ -821,7 +821,7 @@ DEMO_SCENARIOS = {
         """).strip(),
     },
     "morning": {
-        "title": f"Morning Briefing — {date_str}",
+        "title": f"Morning Briefing - {date_str}",
         "prompt": textwrap.dedent(f"""
             Good morning. Today is {date_str}, {day_name}.
             Check my profile, recall recent memory, detect all patterns,
@@ -881,7 +881,7 @@ DEMO_SCENARIOS = {
         "title": "Nutrition Check-in",
         "prompt": textwrap.dedent(f"""
             Let's review my nutrition today.
-            - Breakfast: Yogurt with berries (~300 cal, 20g protein)
+            - Breakfast: Greek yogurt with berries (~300 cal, 20g protein)
             - Lunch: Grilled chicken salad (~500 cal, 35g protein)
             - Snack: Apple and almonds (~200 cal)
             - Dinner: Salmon with vegetables (~550 cal, 40g protein)
@@ -990,6 +990,11 @@ SYSTEM = textwrap.dedent("""
 # Agent loop
 # ---------------------------------------------------------------------------
 
+# Model options:
+# nousresearch/hermes-3-llama-3.1-405b  - Hermes 3
+# google/gemini-2.0-flash-001           - Gemini 2.0 Flash
+# openrouter/auto                        - Auto-select available model
+
 DEFAULT_MODEL = "nousresearch/hermes-3-llama-3.1-405b"
 
 
@@ -1047,7 +1052,7 @@ def run_life_os(scenario: Dict[str, Any], api_key: str,
             ))
 
         if not msg.tool_calls or resp.choices[0].finish_reason == "stop":
-            # In chat mode, don't force send_briefing — let model respond naturally
+            # In chat mode, don't force send_briefing - let model respond naturally
             if briefings_sent == 0 and turn < max_turns - 1 and user_message == "":
                 messages.append({"role": "user", "content":
                     "Please deliver your response using send_briefing now."})
@@ -1130,7 +1135,7 @@ def run_life_os(scenario: Dict[str, Any], api_key: str,
 def run_chat_mode(api_key: str, model: str = DEFAULT_MODEL):
     """Interactive chat - you type, Hermes responds using your full memory."""
     console.print(Panel(
-        "[bold cyan]Hermes Life OS - Chat Mode[/]\n"
+        "[bold cyan]Hermes Life OS — Chat Mode[/]\n"
         "[dim]Type anything. Hermes will respond using everything it knows about you.\n"
         "Type 'exit' or 'quit' to leave.[/]",
         border_style="cyan",
