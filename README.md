@@ -1,21 +1,20 @@
 # Hermes Life OS 🧠
 
-**The agent that grows with you.**
+**The personal OS that grows with you.**
 
 > Built for the NousResearch "Show us what Hermes Agent can do" hackathon.
 
-Most agents complete a task and forget you exist.
-Hermes Life OS remembers everything, detects patterns in your life,
-and shows up every morning knowing you a little better than the day before.
+Most productivity tools forget you the moment you close them.
+Hermes Life OS remembers everything - your mood, your meals, your sleep, your stress,
+your wins and your struggles - and gets smarter about you every single day.
 
 ## What It Does
 
-Give it your day. It remembers your mood, your wins, your habits, your struggles.
-Over time it starts noticing things you haven't — three bad Mondays in a row,
-an energy crash that always hits at 3pm, a habit streak you didn't realize you were building.
-
+Tell it how you feel. Log what you ate. Track your sleep.
+Over time it starts connecting dots you haven't: energy crashes after poor sleep,
+mood dips on low-hydration days, focus drops when stress spikes.
 Every morning it briefs you. Every evening it reflects with you.
-Every week it tells you what it's seeing.
+Every week it tells you what the data says about your life.
 
 **The longer you use it, the more it knows. The more it knows, the more useful it becomes.**
 
@@ -24,10 +23,10 @@ Every week it tells you what it's seeing.
 ```mermaid
 flowchart TD
     A([👤 You share something]) --> B
-    B[🧠 REMEMBER<br/>Store mood, energy,<br/>wins, habits, goals] --> C
-    C[🔍 RECALL<br/>Search memory<br/>for relevant context] --> D
-    D[📊 DETECT PATTERNS<br/>Mood trends · Energy cycles<br/>Habit streaks · Goal progress] --> E
-    E[📋 BRIEF<br/>Personalized message<br/>based on YOUR patterns] --> F
+    B[🧠 REMEMBER<br/>Mood · Sleep · Meals<br/>Stress · Focus · Habits] --> C
+    C[🔍 RECALL<br/>Search memory<br/>for context] --> D
+    D[📊 DETECT PATTERNS<br/>Correlations across<br/>all life dimensions] --> E
+    E[📋 BRIEF<br/>Personalized insight<br/>based on YOUR data] --> F
     F([🌱 Hermes knows you<br/>a little better today])
 
     G([⏰ Cron Schedule<br/>07:00 Morning<br/>12:00 Midday<br/>18:00 Evening<br/>23:00 Consolidate<br/>Mon 08:00 Weekly]) --> C
@@ -42,12 +41,37 @@ flowchart TD
 
 | Feature | How It's Used |
 |---------|--------------|
-| **Memory** | Stores every mood, win, struggle, habit, goal - recalls context before every response |
-| **Skills** | Life OS playbook defines the full daily rhythm and pattern detection rules |
+| **Memory** | Stores every mood, meal, sleep entry, workout, stress log - recalls before every response |
+| **Skills** | Life OS playbook defines daily rhythm, pattern detection rules, and briefing format |
 | **Cron** | Automated briefings at 07:00, 12:00, 18:00, 23:00, and weekly Monday reviews |
 | **Gateway** | Delivers briefings via terminal - extensible to Telegram, email, SMS |
-| **Subagents** | Pattern detection runs as a parallel analysis before every briefing |
-| **Atropos RL** | Reward function trains Hermes to be more personal, more memory-driven over time |
+| **Subagents** | Pattern detection runs across all health dimensions in parallel |
+| **Atropos RL** | Reward function trains Hermes to be more personal and memory-driven over time |
+
+## Tracking Capabilities
+
+| Category | What Hermes Tracks |
+|----------|-------------------|
+| 🥗 Nutrition | Meals, calories, protein/carbs/fat, daily totals |
+| 😴 Sleep | Duration, quality score, 7-day averages |
+| 💧 Hydration | Daily water intake with progress bar |
+| 💪 Fitness | Workouts, duration, intensity, weekly count |
+| 🧘 Mental | Stress levels, meditation sessions, gratitude logs |
+| 🎯 Focus | Deep work sessions, distractions, quality scores |
+| ✅ Habits | Streaks, best streaks, completion tracking |
+| 🎯 Goals | Progress percentages, milestones, notes |
+| 😊 Mood & Energy | Daily scores, trend detection, dip alerts |
+
+## Pattern Detection
+
+Hermes automatically detects and surfaces:
+- Mood dips lasting 3+ consecutive days
+- Sleep deprivation affecting focus and mood
+- Energy crashes correlated with nutrition gaps
+- Stress spikes and their triggers
+- Habit streaks worth celebrating
+- Goal stalls that need a nudge
+- Hydration gaps on high-stress days
 
 ## Reward Function
 
@@ -68,34 +92,41 @@ set OPENROUTER_API_KEY=sk-or-...
 
 python demo/demo_life_os.py --mode onboard
 python demo/demo_life_os.py --mode morning
-python demo/demo_life_os.py --mode checkin
-python demo/demo_life_os.py --mode evening
-python demo/demo_life_os.py --mode weekly
+python demo/demo_life_os.py --mode chat
 ```
 
-## Demo Modes
+## All Demo Modes
 
 | Mode | What Happens |
 |------|-------------|
 | `onboard` | First-time setup - Hermes learns who you are |
-| `morning` | Daily briefing based on your patterns |
+| `morning` | Daily briefing based on all your patterns |
 | `checkin` | Midday log - mood, habits, quick nudge |
 | `evening` | Evening reflection - wins, struggles, patterns |
 | `weekly` | Sunday review - what this week says about you |
+| `nutrition` | Log meals and get nutrition insights |
+| `sleep` | Log sleep and get sleep analysis |
+| `fitness` | Log workouts and track fitness patterns |
+| `mental` | Log stress, meditation, and gratitude |
+| `focus` | Log deep work sessions and productivity |
+| `health` | Full health dashboard - all data in one view |
+| `chat` | **Interactive conversation** - type anything |
 
-## Memory Schema
+## Chat Mode
 
-Everything Hermes stores about you:
-
+```bash
+python demo/demo_life_os.py --mode chat
 ```
-MOOD     → date · score (1-10) · note
-ENERGY   → date · level (low/medium/high) · context
-HABIT    → name · streak · last_done
-GOAL     → name · progress % · deadline · last_note
-WIN      → date · description
-STRUGGLE → date · description · resolved
-INSIGHT  → date · observation · confidence
-```
+
+Type naturally. Hermes responds using everything it knows about you.
+Type `exit` to leave.
+
+Example conversations:
+- "I feel stressed today, any advice?"
+- "Log my lunch — grilled chicken and rice, about 600 calories"
+- "How has my sleep been this week?"
+- "I just ran 5km, log it"
+- "What patterns are you seeing in my data?"
 
 ## Project Structure
 
@@ -110,7 +141,7 @@ graph LR
     B --> B1[life-os/SKILL.md<br/>Daily rhythm playbook]
     C --> C1[life_os_env.py<br/>Atropos RL environment]
     C --> C2[life_os_config.yaml<br/>Training config]
-    D --> D1[demo_life_os.py<br/>5-mode demo]
+    D --> D1[demo_life_os.py<br/>12-mode demo]
     E --> E1[test_life_os_env.py<br/>Full test suite]
 
     style B1 fill:#27ae60,color:#fff
@@ -122,7 +153,6 @@ graph LR
 
 ```bash
 python -m pytest tests/ -v
-# or:
 python -c "from environments.life_os_env import smoke_test; smoke_test()"
 ```
 
@@ -131,8 +161,9 @@ python -c "from environments.life_os_env import smoke_test; smoke_test()"
 Every other agent in this hackathon does something **for** you.
 Hermes Life OS becomes something **with** you.
 
-It's not a tool you pick up when you need it.
-It's a presence that accumulates - quietly, in the background -
-until one morning it says something that makes you realize it knows you better than you thought.
+It tracks nutrition, sleep, fitness, stress, focus, hydration, habits, and goals -
+and connects them all. Bad Monday? It checks if you slept poorly Sunday.
+Energy crash at 3pm? It looks at what you ate for lunch.
+Mood dip this week? It finds the pattern you missed.
 
-That's what "grows with you" actually means.
+That is not a tool. That is a presence that accumulates.
