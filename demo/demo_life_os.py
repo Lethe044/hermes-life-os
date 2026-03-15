@@ -1252,8 +1252,10 @@ def run_voice_mode(api_key: str, elevenlabs_key: str, model: str = DEFAULT_MODEL
             try:
                 with sr.Microphone() as source:
                     recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                    recognizer.pause_threshold = 1.5
+                    recognizer.phrase_threshold = 0.3
                     try:
-                        audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                        audio = recognizer.listen(source, timeout=8, phrase_time_limit=20)
                         user_input = recognizer.recognize_google(audio)
                         console.print(f"[bold][You]:[/] {user_input}")
                     except Exception:
