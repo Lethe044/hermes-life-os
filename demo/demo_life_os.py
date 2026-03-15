@@ -58,6 +58,7 @@ except ImportError:
     sys.exit(1)
 
 import shutil
+import concurrent.futures
 console = Console(width=min(110, shutil.get_terminal_size().columns))
 
 # ---------------------------------------------------------------------------
@@ -396,7 +397,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                       "score": inp.get("score", 5)})
         recent_stress = [m for m in mental[-7:] if m.get("score")]
         avg = sum(m["score"] for m in recent_stress) / len(recent_stress) if recent_stress else 0
-        return (f"Stress logged: {inp.get('score',5)}/10 — trigger: {inp.get('trigger','')}\n"
+        return (f"Stress logged: {inp.get('score',5)}/10 - trigger: {inp.get('trigger','')}\n"
                 f"7-day stress average: {avg:.1f}/10")
 
     # ── log_meditation ────────────────────────────────────────────────────────
@@ -493,7 +494,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                           "created": time.strftime("%Y-%m-%d"),
                           "last_updated": time.strftime("%Y-%m-%d"), "last_note": note})
         save_goals(goals)
-        return f"Goal '{goal_name}': {progress}% — {note}"
+        return f"Goal '{goal_name}': {progress}% - {note}"
 
     # ── detect_patterns ───────────────────────────────────────────────────────
     elif name == "detect_patterns":
@@ -921,7 +922,7 @@ DEMO_SCENARIOS = {
         "title": "Mental Wellness Check",
         "prompt": textwrap.dedent(f"""
             Mental wellness check-in.
-            - Stress today: 4/10 — much better than yesterday
+            - Stress today: 4/10 - much better than yesterday
             - Did 15 minutes of meditation this morning
             - Grateful for: good sleep, productive morning, supportive team
             - Mood: 8/10
@@ -991,10 +992,9 @@ SYSTEM = textwrap.dedent("""
 # ---------------------------------------------------------------------------
 
 # Model options:
-# nousresearch/hermes-3-llama-3.1-405b  - Hermes 3
-# google/gemini-2.0-flash-001           - Gemini 2.0 Flash
+# nousresearch/hermes-3-llama-3.1-405b  - Hermes 3 (recommended, requires OpenRouter credits)
+# google/gemini-2.0-flash-001           - Fast alternative, excellent tool calling
 # openrouter/auto                        - Auto-select available model
-
 DEFAULT_MODEL = "nousresearch/hermes-3-llama-3.1-405b"
 
 
@@ -1069,7 +1069,63 @@ def run_life_os(scenario: Dict[str, Any], api_key: str,
             ],
         })
 
-        for tc in msg.tool_calls:
+        icons = {
+            "remember": "🧠", "recall": "🔍", "log_meal": "🥗",
+            "log_sleep": "😴", "log_hydration": "💧", "log_workout": "💪",
+            "log_stress": "😤", "log_meditation": "🧘", "log_gratitude": "🙏",
+            "log_focus_session": "🎯", "update_habit": "✅", "update_goal": "🎯",
+            "detect_patterns": "📊", "get_health_dashboard": "❤️",
+            "get_weekly_health_report": "📋", "send_briefing": "📋",
+            "save_profile": "👤", "get_profile": "👤",
+        }
+
+        # Parallel tools: read-only, no side effects — safe to run concurrently
+        PARALLEL_TOOLS = {
+            "get_profile", "get_health_dashboard",
+            "get_weekly_health_report", "detect_patterns", "recall",
+        }
+
+        parallel_tcs = [tc for tc in msg.tool_calls
+                        if tc.function.name in PARALLEL_TOOLS]
+        sequential_tcs = [tc for tc in msg.tool_calls
+                          if tc.function.name not in PARALLEL_TOOLS]
+
+        def _run_tool(tc):
+            try:
+                tinp = json.loads(tc.function.arguments)
+            except Exception:
+                tinp = {}
+            return tc, tinp, dispatch_tool(tc.function.name, tinp)
+
+        # --- Concurrent execution for read-only tools ---
+        parallel_results = {}
+        if parallel_tcs:
+            if len(parallel_tcs) > 1:
+                console.print(
+                    f"  [dim cyan]⚡ Running {len(parallel_tcs)} tools concurrently...[/]"
+                )
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=len(parallel_tcs)
+            ) as ex:
+                futs = {ex.submit(_run_tool, tc): tc for tc in parallel_tcs}
+                for fut in concurrent.futures.as_completed(futs):
+                    tc, tinp, result = fut.result()
+                    parallel_results[tc.id] = (tc, tinp, result)
+
+            for tc in parallel_tcs:
+                tc_obj, tinp, result = parallel_results[tc.id]
+                tname = tc_obj.function.name
+                calls.append(tname)
+                preview = str(tinp.get("query", ""))[:60]
+                console.print(
+                    f"  {icons.get(tname,'🔧')} [yellow]{tname}[/] [dim]{preview}[/]"
+                )
+                messages.append({
+                    "role": "tool", "tool_call_id": tc.id, "content": result
+                })
+
+        # --- Sequential execution for stateful tools ---
+        for tc in sequential_tcs:
             tname = tc.function.name
             try:
                 tinp = json.loads(tc.function.arguments)
@@ -1077,18 +1133,12 @@ def run_life_os(scenario: Dict[str, Any], api_key: str,
                 tinp = {}
             calls.append(tname)
 
-            icons = {
-                "remember": "🧠", "recall": "🔍", "log_meal": "🥗",
-                "log_sleep": "😴", "log_hydration": "💧", "log_workout": "💪",
-                "log_stress": "😤", "log_meditation": "🧘", "log_gratitude": "🙏",
-                "log_focus_session": "🎯", "update_habit": "✅", "update_goal": "🎯",
-                "detect_patterns": "📊", "get_health_dashboard": "❤️",
-                "get_weekly_health_report": "📋", "send_briefing": "📋",
-                "save_profile": "👤", "get_profile": "👤",
-            }
             preview = str(tinp.get("food", tinp.get("content", tinp.get("query",
-                          tinp.get("task", tinp.get("habit_name", tinp.get("goal_name", "")))))))[:60]
-            console.print(f"  {icons.get(tname,'🔧')} [yellow]{tname}[/] [dim]{preview}[/]")
+                          tinp.get("task", tinp.get("habit_name",
+                          tinp.get("goal_name", "")))))))[:60]
+            console.print(
+                f"  {icons.get(tname,'🔧')} [yellow]{tname}[/] [dim]{preview}[/]"
+            )
 
             result = dispatch_tool(tname, tinp)
 
@@ -1099,7 +1149,8 @@ def run_life_os(scenario: Dict[str, Any], api_key: str,
 
             if tname == "send_briefing":
                 briefings_sent += 1
-            elif tname not in ("get_profile", "get_health_dashboard", "get_weekly_health_report"):
+            elif tname not in ("get_profile", "get_health_dashboard",
+                                "get_weekly_health_report"):
                 if len(result) < 400:
                     console.print(f"  [dim]{result}[/]")
 
@@ -1128,6 +1179,144 @@ def run_life_os(scenario: Dict[str, Any], api_key: str,
             "memories": memories_stored, "briefings": briefings_sent}
 
 
+
+# ---------------------------------------------------------------------------
+# Voice mode
+# ---------------------------------------------------------------------------
+
+def speak(text: str, elevenlabs_key: str = "") -> None:
+    """Speak text using Windows SAPI TTS (free, no API key needed)."""
+    try:
+        import re, subprocess
+        clean = re.sub(r'\[.*?\]', '', text)
+        clean = re.sub(r'[#*`]', '', clean).strip()
+        if not clean:
+            return
+        if os.name == "nt":
+            # Windows built-in TTS via PowerShell - completely free
+            ps_cmd = (
+                f"Add-Type -AssemblyName System.Speech; "
+                f"$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+                f"$s.Rate = 1; "
+                f"$s.Speak(\"{clean[:400]}\");"
+            )
+            subprocess.run(
+                ["powershell", "-NoProfile", "-c", ps_cmd],
+                capture_output=True, timeout=30
+            )
+        else:
+            subprocess.run(["espeak", clean[:400]], capture_output=True, timeout=15)
+    except Exception as e:
+        console.print(f"[dim]Voice: {e}[/]")
+
+def run_voice_mode(api_key: str, elevenlabs_key: str, model: str = DEFAULT_MODEL) -> None:
+    try:
+        import speech_recognition as sr
+        recognizer = sr.Recognizer()
+        mic_available = True
+    except ImportError:
+        mic_available = False
+        console.print("[yellow]pip install SpeechRecognition pyaudio for mic input[/]")
+        console.print("[dim]Falling back to keyboard input with voice output.[/]")
+
+    seed_demo_memory()
+
+    console.print(Panel(
+        "[bold cyan]Hermes Life OS - Voice Mode[/]\n"
+        "[dim]Speak or type. Hermes responds with voice.\n"
+        "Say or type 'exit' to leave.[/]",
+        border_style="cyan",
+    ))
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://openrouter.ai/api/v1",
+        default_headers={
+            "HTTP-Referer": "https://github.com/Lethe044/hermes-life-os",
+            "X-Title": "Hermes Life OS Voice",
+        },
+    )
+
+    voice_system = (
+        "You are Hermes Life OS in voice mode. "
+        "Keep responses SHORT - max 3 sentences. "
+        "No bullet points or markdown. Just natural conversational speech. "
+        "Use tools when needed but always end with a spoken response."
+    )
+
+    messages = [{"role": "system", "content": voice_system}]
+
+    while True:
+        if mic_available:
+            console.print("[dim]Listening... (or type)[/]")
+            try:
+                with sr.Microphone() as source:
+                    recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                    try:
+                        audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+                        user_input = recognizer.recognize_google(audio)
+                        console.print(f"[bold][You]:[/] {user_input}")
+                    except Exception:
+                        user_input = input("[You] (type): ").strip()
+            except Exception:
+                user_input = input("[You]: ").strip()
+        else:
+            user_input = input("\n[You]: ").strip()
+
+        if not user_input:
+            continue
+        if user_input.lower() in ("exit", "quit", "bye", "q"):
+            farewell = "Goodbye! Take care."
+            console.print(f"[green]Hermes:[/] {farewell}")
+            speak(farewell, elevenlabs_key)
+            break
+
+        messages.append({"role": "user", "content": user_input})
+
+        with Progress(SpinnerColumn("dots"),
+                      TextColumn("[cyan]Hermes thinking...[/]"),
+                      transient=True, console=console) as p:
+            p.add_task("")
+            resp = client.chat.completions.create(
+                model=model, messages=messages,
+                tools=TOOLS, tool_choice="auto", max_tokens=300,
+            )
+
+        msg = resp.choices[0].message
+
+        if msg.tool_calls:
+            messages.append({
+                "role": "assistant", "content": msg.content or "",
+                "tool_calls": [
+                    {"id": tc.id, "type": "function",
+                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in msg.tool_calls
+                ],
+            })
+            for tc in msg.tool_calls:
+                try:
+                    tinp = json.loads(tc.function.arguments)
+                except Exception:
+                    tinp = {}
+                result = dispatch_tool(tc.function.name, tinp)
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+            resp2 = client.chat.completions.create(
+                model=model, messages=messages, max_tokens=200)
+            response_text = resp2.choices[0].message.content or ""
+            messages.append({"role": "assistant", "content": response_text})
+        else:
+            response_text = msg.content or ""
+            messages.append({"role": "assistant", "content": response_text})
+
+        if response_text:
+            console.print(Panel(
+                response_text, title="[green]Hermes[/]",
+                border_style="green", width=min(100, console.width - 4),
+            ))
+            speak(response_text, elevenlabs_key)
+
+
+
 # ---------------------------------------------------------------------------
 # Chat mode
 # ---------------------------------------------------------------------------
@@ -1135,7 +1324,7 @@ def run_life_os(scenario: Dict[str, Any], api_key: str,
 def run_chat_mode(api_key: str, model: str = DEFAULT_MODEL):
     """Interactive chat - you type, Hermes responds using your full memory."""
     console.print(Panel(
-        "[bold cyan]Hermes Life OS — Chat Mode[/]\n"
+        "[bold cyan]Hermes Life OS - Chat Mode[/]\n"
         "[dim]Type anything. Hermes will respond using everything it knows about you.\n"
         "Type 'exit' or 'quit' to leave.[/]",
         border_style="cyan",
@@ -1265,6 +1454,8 @@ def main():
     parser.add_argument("--model",     default=DEFAULT_MODEL)
     parser.add_argument("--max-turns", type=int, default=25)
     parser.add_argument("--fresh",     action="store_true", help="Clear all data and start fresh")
+    parser.add_argument("--voice",     action="store_true", help="Voice mode - speak to Hermes")
+    parser.add_argument("--elevenlabs-key", default=None, help="ElevenLabs API key for TTS")
     args = parser.parse_args()
 
     key = os.environ.get("OPENROUTER_API_KEY")
@@ -1286,6 +1477,14 @@ def main():
         "[dim]The personal OS that grows with you[/]",
         border_style="cyan",
     ))
+
+    if args.voice:
+        el_key = args.elevenlabs_key or os.environ.get("ELEVENLABS_API_KEY", "")
+        if not el_key:
+            console.print("[red]Set --elevenlabs-key or ELEVENLABS_API_KEY for voice mode.[/]")
+            sys.exit(1)
+        run_voice_mode(key, el_key, args.model)
+        return
 
     if args.mode == "chat":
         run_chat_mode(key, args.model)
