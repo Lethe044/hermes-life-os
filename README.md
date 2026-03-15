@@ -110,6 +110,7 @@ python demo/demo_life_os.py --mode chat
 | `mental` | Log stress, meditation, and gratitude |
 | `focus` | Log deep work sessions and productivity |
 | `health` | Full health dashboard - all data in one view |
+| `dream` | **Dream journal** - log dreams, detect patterns, sleep/stress correlation |
 | `chat` | **Interactive conversation** - type anything |
 
 ## Chat Mode
@@ -165,6 +166,12 @@ To stop: say or type `exit`
 ---
 
 ## What's New
+
+**v1.3.0 - Dream Journal**
+- Dream logging mode with symbol, emotion, tone and vividness tracking
+- Sleep/mood/stress/dream correlation detection
+- Recurring symbol pattern detection across 30 days
+- Morning briefing includes dream analysis
 
 **v1.2.0 - Voice & Performance**
 - Voice mode - speak to Hermes, hear responses via system TTS
