@@ -59,6 +59,12 @@ except ImportError:
 
 import shutil
 import concurrent.futures
+
+# Ensure this file's own directory is importable regardless of how the
+# script is invoked (as __main__, via pytest, or via importlib spec loading).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from analytics import compute_correlations, format_correlation_insights
+
 console = Console(width=min(110, shutil.get_terminal_size().columns))
 
 # ---------------------------------------------------------------------------
@@ -255,11 +261,11 @@ def detect_patterns() -> Dict[str, Any]:
                 f"Stress levels averaging {avg_stress:.1f}/10. Consider reviewing workload and recovery habits."
             )
 
-    # Correlations
-    if mood_scores and sleep_hours and len(mood_scores) >= 3 and len(sleep_hours) >= 3:
-        patterns["correlations"].append(
-            "Sleep and mood data available - correlation analysis active."
-        )
+    # Correlations - real Pearson correlation across tracked metrics,
+    # computed on daily-averaged values (see analytics.py)
+    correlations = compute_correlations(recent)
+    patterns["correlation_details"] = correlations
+    patterns["correlations"].extend(format_correlation_insights(correlations))
 
     # Dream patterns
     dream_entries = [r for r in recent if r.get("type") == "dream"]

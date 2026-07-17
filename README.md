@@ -73,6 +73,16 @@ Hermes automatically detects and surfaces:
 - Goal stalls that need a nudge
 - Hydration gaps on high-stress days
 
+### Correlation Engine
+
+`demo/analytics.py` computes real Pearson correlation coefficients between
+tracked metrics (mood, sleep, stress, energy, hydration) using daily-averaged
+values from memory. A pair is only surfaced when there's enough data
+(4+ overlapping days by default) and the relationship is meaningful
+(|r| >= 0.4). Each result reports the direction (positive/negative), strength
+(weak/moderate/strong), and the number of days behind it - no external
+dependencies required (pure Python stdlib).
+
 ## Reward Function
 
 ```mermaid
@@ -166,6 +176,16 @@ To stop: say or type `exit`
 ---
 
 ## What's New
+
+**v1.4.0 - Real Correlation Engine**
+- New `demo/analytics.py` module: pure-stdlib Pearson correlation analysis
+  across mood, sleep, stress, energy, and hydration
+- `detect_patterns()` now computes actual daily-aggregated correlations
+  (r-value, day count, direction, strength) instead of a static placeholder
+  message ("correlation analysis active")
+- Correlation insights are surfaced automatically in `detect_patterns`
+  tool output, feeding into morning/evening/weekly briefings
+- 14 new unit tests covering the correlation engine (`tests/test_analytics.py`)
 
 **v1.3.0 - Dream Journal**
 - Dream logging mode with symbol, emotion, tone and vividness tracking
