@@ -152,12 +152,56 @@ graph LR
     B --> B1[life-os/SKILL.md<br/>Daily rhythm playbook]
     C --> C1[life_os_env.py<br/>Atropos RL environment]
     C --> C2[life_os_config.yaml<br/>Training config]
-    D --> D1[demo_life_os.py<br/>12-mode demo]
-    E --> E1[test_life_os_env.py<br/>Full test suite]
+    D --> D1[demo_life_os.py<br/>CLI / chat / voice orchestration]
+    D --> D2[storage.py<br/>Persistence layer]
+    D --> D3[patterns.py<br/>Trend detection]
+    D --> D4[analytics.py<br/>Pearson correlation engine]
+    D --> D5[tools.py<br/>dispatch_tool + TOOLS schema]
+    D --> D6[scheduler.py<br/>Cron-style trigger engine]
+    D --> D7[notifications.py<br/>console/webhook/Telegram/email]
+    D --> D8[run_scheduler.py<br/>Production scheduler entry point]
+    E --> E1[test_life_os_env.py]
+    E --> E2[test_analytics.py]
+    E --> E3[test_storage.py]
+    E --> E4[test_tools.py]
+    E --> E5[test_scheduler.py]
+    E --> E6[test_notifications.py]
 
     style B1 fill:#27ae60,color:#fff
     style C1 fill:#8e44ad,color:#fff
     style D1 fill:#2980b9,color:#fff
+    style D6 fill:#e67e22,color:#fff
+    style D7 fill:#e67e22,color:#fff
+```
+
+`demo_life_os.py` used to be a single ~1600-line file. It's now a thin
+CLI/chat/voice orchestration layer that imports its storage, pattern
+detection, and tool-dispatch logic from focused sibling modules -
+each independently testable and reusable.
+
+## Scheduling & Notifications
+
+`demo/scheduler.py` implements the "Daily Rhythm" cron table from
+`skills/life-os/SKILL.md` (07:00 morning, 12:00 midday, 18:00 evening,
+Monday 08:00 weekly) as a dependency-free polling loop. The scheduling
+logic itself (`due_entries`) is pure and fully unit tested; the actual
+briefing generation and delivery are injected as callables, so the
+core engine has no dependency on the OpenAI client or network access.
+
+`demo/notifications.py` delivers briefings through a pluggable channel,
+selected via `HERMES_NOTIFY_CHANNEL`: `console` (default), `webhook`,
+`telegram`, or `email` (SMTP). All channels are stdlib-only. A failed
+remote channel never crashes the scheduler - it's caught, logged, and
+the briefing still prints to console.
+
+To run the scheduler in production:
+
+```bash
+set OPENROUTER_API_KEY=sk-or-...
+set HERMES_NOTIFY_CHANNEL=telegram
+set TELEGRAM_BOT_TOKEN=...
+set TELEGRAM_CHAT_ID=...
+python demo/run_scheduler.py
 ```
 
 ## Voice Mode
@@ -176,6 +220,20 @@ To stop: say or type `exit`
 ---
 
 ## What's New
+
+**v1.5.0 - Modular Architecture, Scheduler & Notifications**
+- Split the ~1600-line `demo_life_os.py` monolith into focused, independently
+  testable modules: `storage.py`, `patterns.py`, `tools.py` (demo_life_os.py
+  is now the CLI/chat/voice orchestration layer only)
+- New `demo/scheduler.py`: dependency-free cron-style engine implementing
+  the Daily Rhythm table (07:00 morning, 12:00 midday, 18:00 evening,
+  Monday 08:00 weekly), with pure, fully unit-tested scheduling logic
+- New `demo/notifications.py`: pluggable delivery via console, webhook,
+  Telegram, or email (SMTP) - stdlib only, never crashes on missing config
+- New `demo/run_scheduler.py`: production entry point wiring the scheduler
+  to real briefing generation and delivery
+- 77 new unit tests (`test_storage.py`, `test_tools.py`, `test_scheduler.py`,
+  `test_notifications.py`) - total suite grew from 36 to 113 tests, all passing
 
 **v1.4.0 - Real Correlation Engine**
 - New `demo/analytics.py` module: pure-stdlib Pearson correlation analysis
