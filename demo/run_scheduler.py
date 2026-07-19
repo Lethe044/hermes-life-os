@@ -12,7 +12,12 @@ implementing the "Daily Rhythm" cron table from skills/life-os/SKILL.md:
     Monday 08:00    weekly review
 
 Usage:
-    set OPENROUTER_API_KEY=sk-or-...
+    Set one provider's key (or run a local Ollama server - no key needed):
+        set ANTHROPIC_API_KEY=sk-ant-...
+        set OPENAI_API_KEY=sk-...
+        set OPENROUTER_API_KEY=sk-or-...
+    Optionally pin the provider explicitly:
+        set LIFE_OS_PROVIDER=anthropic
     set HERMES_NOTIFY_CHANNEL=telegram   (optional; defaults to console)
     python run_scheduler.py
 
@@ -33,7 +38,7 @@ from scheduler import default_schedule, run_scheduler
 from notifications import send_notification
 
 
-def make_runner(api_key: str, model: str):
+def make_runner(client, model: str):
     """Build a runner(mode) -> str that executes a real briefing and
     captures its rendered output as plain text for delivery."""
     from demo_life_os import DEMO_SCENARIOS, run_life_os, seed_demo_memory
@@ -45,28 +50,33 @@ def make_runner(api_key: str, model: str):
             return f"Unknown mode '{mode}', skipping."
         buf = io.StringIO()
         with redirect_stdout(buf):
-            run_life_os(scenario, api_key, model, max_turns=25)
+            run_life_os(scenario, client, model, max_turns=25)
         return buf.getvalue() or f"{mode} briefing ran with no captured output."
 
     return runner
 
 
 def main():
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        print("Set OPENROUTER_API_KEY first (see demo_life_os.py --help).")
+    from llm_providers import ProviderError, resolve_provider, default_model_for, get_client
+
+    try:
+        provider = resolve_provider(os.environ.get("LIFE_OS_PROVIDER"))
+        client = get_client(provider)
+    except ProviderError as e:
+        print(e)
         sys.exit(1)
 
-    model = os.environ.get("HERMES_MODEL", "anthropic/claude-3.5-sonnet")
+    model = os.environ.get("HERMES_MODEL") or default_model_for(provider)
     schedule = default_schedule()
 
-    print("Hermes Life OS scheduler starting. Schedule:")
+    print(f"Hermes Life OS scheduler starting. Provider: {provider}  Model: {model}")
+    print("Schedule:")
     for entry in schedule:
         days = ",".join(entry.days) if entry.days else "daily"
         print(f"  {entry.time_str}  {entry.mode:<10}  ({days})")
     print("Press Ctrl+C to stop.\n")
 
-    runner = make_runner(api_key, model)
+    runner = make_runner(client, model)
 
     def notifier(title: str, content: str) -> None:
         send_notification(title, content)

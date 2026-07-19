@@ -2,3 +2,6 @@ openai>=1.0.0
 rich>=13.0.0
 pyyaml>=6.0
 pytest>=7.0.0
+
+# Optional: only needed if you use --provider anthropic
+anthropic>=0.34.0

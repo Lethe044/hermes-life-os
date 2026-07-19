@@ -7,8 +7,16 @@ tracks your health, habits, goals, and mental state,
 detects patterns across every dimension of your life,
 and grows smarter every single day.
 
-Requirements:  pip install openai rich
-Setup:         set OPENROUTER_API_KEY=sk-or-...
+Requirements:  pip install -r requirements.txt
+Setup:         Pick one backend, no code changes needed:
+                 - Local, free, no key: run `ollama serve` (pull a tool-calling
+                   model first, e.g. `ollama pull llama3.1`)
+                 - Anthropic:  set ANTHROPIC_API_KEY=sk-ant-...
+                 - OpenAI:     set OPENAI_API_KEY=sk-...
+                 - OpenRouter: set OPENROUTER_API_KEY=sk-or-...
+               The provider is auto-detected from whichever key is set
+               (falls back to ollama). Force one with --provider or
+               LIFE_OS_PROVIDER=anthropic|openai|openrouter|ollama.
 
 Modes:
     onboard    - First time setup
@@ -62,12 +70,6 @@ except ImportError:
     print("pip install rich")
     sys.exit(1)
 
-try:
-    from openai import OpenAI
-except ImportError:
-    print("pip install openai")
-    sys.exit(1)
-
 import shutil
 import concurrent.futures
 
@@ -75,6 +77,9 @@ import concurrent.futures
 # script is invoked (as __main__, via pytest, or via importlib spec loading).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from llm_providers import (
+    PROVIDERS, ProviderError, resolve_provider, default_model_for, get_client,
+)
 from storage import (
     HERMES_DIR, MEMORY_FILE, PROFILE_FILE, HABITS_FILE, GOALS_FILE,
     NUTRITION_FILE, SLEEP_FILE, HYDRATION_FILE, FITNESS_FILE,
@@ -306,25 +311,14 @@ SYSTEM = textwrap.dedent("""
 # Agent loop
 # ---------------------------------------------------------------------------
 
-# Model options:
-# nousresearch/hermes-3-llama-3.1-405b  - Hermes 3 (recommended, requires OpenRouter credits)
-# google/gemini-2.0-flash-001           - Fast alternative, excellent tool calling
-# openrouter/auto                        - Auto-select available model
+# Per-provider defaults live in llm_providers.DEFAULT_MODELS and are picked
+# automatically in main(). This constant only exists as a fallback for
+# functions called directly (e.g. in tests) without going through main().
 DEFAULT_MODEL = "nousresearch/hermes-3-llama-3.1-405b"
 
 
-def run_life_os(scenario: Dict[str, Any], api_key: str,
-                model: str = DEFAULT_MODEL, max_turns: int = 25,
-                user_message: str = "") -> Dict[str, Any]:
-
-    client = OpenAI(
-        api_key=api_key,
-        base_url="https://openrouter.ai/api/v1",
-        default_headers={
-            "HTTP-Referer": "https://github.com/Lethe044/hermes-life-os",
-            "X-Title": "Hermes Life OS",
-        },
-    )
+def run_life_os(scenario: Dict[str, Any], client, model: str = DEFAULT_MODEL,
+                max_turns: int = 25, user_message: str = "") -> Dict[str, Any]:
 
     prompt = user_message if user_message else scenario["prompt"]
 
@@ -524,7 +518,7 @@ def speak(text: str, elevenlabs_key: str = "") -> None:
     except Exception as e:
         console.print(f"[dim]Voice: {e}[/]")
 
-def run_voice_mode(api_key: str, elevenlabs_key: str, model: str = DEFAULT_MODEL) -> None:
+def run_voice_mode(client, elevenlabs_key: str, model: str = DEFAULT_MODEL) -> None:
     try:
         import speech_recognition as sr
         recognizer = sr.Recognizer()
@@ -542,15 +536,6 @@ def run_voice_mode(api_key: str, elevenlabs_key: str, model: str = DEFAULT_MODEL
         "Say or type 'exit' to leave.[/]",
         border_style="cyan",
     ))
-
-    client = OpenAI(
-        api_key=api_key,
-        base_url="https://openrouter.ai/api/v1",
-        default_headers={
-            "HTTP-Referer": "https://github.com/Lethe044/hermes-life-os",
-            "X-Title": "Hermes Life OS Voice",
-        },
-    )
 
     voice_system = (
         "You are Hermes Life OS in voice mode. "
@@ -638,7 +623,7 @@ def run_voice_mode(api_key: str, elevenlabs_key: str, model: str = DEFAULT_MODEL
 # Chat mode
 # ---------------------------------------------------------------------------
 
-def run_chat_mode(api_key: str, model: str = DEFAULT_MODEL):
+def run_chat_mode(client, model: str = DEFAULT_MODEL):
     """Interactive chat - you type, Hermes responds using your full memory."""
     console.print(Panel(
         "[bold cyan]Hermes Life OS - Chat Mode[/]\n"
@@ -679,7 +664,7 @@ def run_chat_mode(api_key: str, model: str = DEFAULT_MODEL):
             "title": "Chat",
             "prompt": user_input,
         }
-        run_life_os(scenario, api_key, model, max_turns=10, user_message=user_input)
+        run_life_os(scenario, client, model, max_turns=10, user_message=user_input)
 
 
 # ---------------------------------------------------------------------------
@@ -783,22 +768,52 @@ def seed_demo_memory():
 # Main
 # ---------------------------------------------------------------------------
 
+def _print_provider_troubleshooting(provider: str, error: Exception) -> None:
+    """Turn a raw client/network exception into a short, actionable hint
+    instead of a bare traceback - most first-run failures are either
+    'ollama isn't running' or 'bad/missing API key'."""
+    console.print(f"\n[red]Request to '{provider}' failed:[/] {error}")
+    if provider == "ollama":
+        console.print(
+            "[yellow]Tip:[/] Ollama provider needs a local server running with a "
+            "tool-calling model pulled:\n"
+            "  ollama serve\n"
+            "  ollama pull llama3.1\n"
+            "Or switch providers: --provider anthropic|openai|openrouter "
+            "(with the matching API key set)."
+        )
+    else:
+        console.print(
+            f"[yellow]Tip:[/] Double-check your API key and that '{provider}' "
+            f"is spelled correctly, or try --provider ollama for a free local run."
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Hermes Life OS")
     parser.add_argument("--mode", choices=list(DEMO_SCENARIOS.keys()), default="morning",
                         help="Mode: " + ", ".join(DEMO_SCENARIOS.keys()))
-    parser.add_argument("--model",     default=DEFAULT_MODEL)
+    parser.add_argument("--provider", choices=list(PROVIDERS), default=None,
+                        help="LLM backend: ollama (free/local), openai, anthropic, "
+                             "openrouter. Default: auto-detect from env vars, "
+                             "falling back to ollama.")
+    parser.add_argument("--model",     default=None,
+                        help="Overrides the provider's default model.")
     parser.add_argument("--max-turns", type=int, default=25)
     parser.add_argument("--fresh",     action="store_true", help="Clear all data and start fresh")
     parser.add_argument("--voice",     action="store_true", help="Voice mode - speak to Hermes")
     parser.add_argument("--elevenlabs-key", default=None, help="ElevenLabs API key for TTS")
     args = parser.parse_args()
 
-    key = os.environ.get("OPENROUTER_API_KEY")
-    if not key:
-        console.print("[red]Set OPENROUTER_API_KEY first.[/]")
-        console.print("  Windows: set OPENROUTER_API_KEY=sk-or-...")
+    try:
+        provider = resolve_provider(args.provider)
+        client = get_client(provider)
+    except ProviderError as e:
+        console.print(f"[red]{e}[/]")
         sys.exit(1)
+
+    model = args.model or default_model_for(provider)
+    console.print(f"[dim]Provider: {provider}  Model: {model}[/]")
 
     if args.fresh:
         for f in [MEMORY_FILE, PROFILE_FILE, HABITS_FILE, GOALS_FILE,
@@ -814,23 +829,31 @@ def main():
         border_style="cyan",
     ))
 
-    if args.voice:
-        el_key = args.elevenlabs_key or os.environ.get("ELEVENLABS_API_KEY", "")
-        if not el_key:
-            console.print("[red]Set --elevenlabs-key or ELEVENLABS_API_KEY for voice mode.[/]")
-            sys.exit(1)
-        run_voice_mode(key, el_key, args.model)
-        return
+    try:
+        if args.voice:
+            el_key = args.elevenlabs_key or os.environ.get("ELEVENLABS_API_KEY", "")
+            if not el_key:
+                console.print("[red]Set --elevenlabs-key or ELEVENLABS_API_KEY for voice mode.[/]")
+                sys.exit(1)
+            run_voice_mode(client, el_key, model)
+            return
 
-    if args.mode == "chat":
-        run_chat_mode(key, args.model)
-        return
+        if args.mode == "chat":
+            run_chat_mode(client, model)
+            return
+    except Exception as e:
+        _print_provider_troubleshooting(provider, e)
+        sys.exit(1)
 
     if args.mode != "onboard":
         seed_demo_memory()
 
     scenario = DEMO_SCENARIOS[args.mode]
-    run_life_os(scenario, key, args.model, args.max_turns)
+    try:
+        run_life_os(scenario, client, model, args.max_turns)
+    except Exception as e:
+        _print_provider_troubleshooting(provider, e)
+        sys.exit(1)
     console.print("\n[bold green]Session complete.[/]")
     console.print(f"[dim]Memory: {MEMORY_FILE}[/]")
 

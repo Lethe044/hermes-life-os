@@ -96,13 +96,28 @@ pie title Life OS Reward Components
 
 ## Quick Start
 
+Works with four LLM backends - pick whichever you already have. The
+provider is auto-detected from whatever key is set (or force one with
+`--provider`).
+
 ```bash
-pip install openai rich
+pip install -r requirements.txt
+
+# Option A - free, fully local, no API key:
+ollama serve
+ollama pull llama3.1
+
+# Option B / C / D - pick one:
+set ANTHROPIC_API_KEY=sk-ant-...
+set OPENAI_API_KEY=sk-...
 set OPENROUTER_API_KEY=sk-or-...
 
 python demo/demo_life_os.py --mode onboard
 python demo/demo_life_os.py --mode morning
 python demo/demo_life_os.py --mode chat
+
+# force a specific backend regardless of which keys are set:
+python demo/demo_life_os.py --mode morning --provider anthropic
 ```
 
 ## All Demo Modes
@@ -197,7 +212,7 @@ the briefing still prints to console.
 To run the scheduler in production:
 
 ```bash
-set OPENROUTER_API_KEY=sk-or-...
+set ANTHROPIC_API_KEY=sk-ant-...   # or OPENAI_API_KEY / OPENROUTER_API_KEY / a running ollama
 set HERMES_NOTIFY_CHANNEL=telegram
 set TELEGRAM_BOT_TOKEN=...
 set TELEGRAM_CHAT_ID=...
@@ -207,7 +222,9 @@ python demo/run_scheduler.py
 ## Voice Mode
 
 ```bash
-python demo/demo_life_os.py --voice --model google/gemini-2.0-flash-001
+python demo/demo_life_os.py --voice
+# or pin a backend/model explicitly:
+python demo/demo_life_os.py --voice --provider anthropic --model claude-sonnet-5
 ```
 
 Speak to Hermes directly. It listens via microphone, processes your input using
@@ -220,6 +237,17 @@ To stop: say or type `exit`
 ---
 
 ## What's New
+
+**v1.6.0 - Multi-Provider LLM Support**
+- New `demo/llm_providers.py`: provider-agnostic client layer supporting
+  Ollama (free, fully local, no API key), OpenAI, Anthropic, and
+  OpenRouter, with auto-detection from whichever key is set
+- `--provider` flag / `LIFE_OS_PROVIDER` env var to force a specific backend
+- Friendly troubleshooting output on connection/auth failures instead of
+  raw tracebacks
+- 16 new unit tests (`test_llm_providers.py`) covering provider resolution
+  and the Anthropic <-> OpenAI message/tool format adapter - total suite
+  grew from 113 to 129 tests, all passing
 
 **v1.5.0 - Modular Architecture, Scheduler & Notifications**
 - Split the ~1600-line `demo_life_os.py` monolith into focused, independently
