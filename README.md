@@ -1,5 +1,9 @@
 # Hermes Life OS 🧠
 
+[![Tests](https://github.com/Lethe044/hermes-life-os/actions/workflows/tests.yml/badge.svg)](https://github.com/Lethe044/hermes-life-os/actions/workflows/tests.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 **The personal OS that grows with you.**
 
 > Built for the NousResearch "Show us what Hermes Agent can do" hackathon.
@@ -120,6 +124,24 @@ python demo/demo_life_os.py --mode chat
 python demo/demo_life_os.py --mode morning --provider anthropic
 ```
 
+### Or run it with Docker - zero Python setup
+
+```bash
+git clone https://github.com/Lethe044/hermes-life-os.git
+cd hermes-life-os
+
+# fully free trial, no API key at all (pairs with a local Ollama container):
+docker compose up -d ollama
+docker compose exec ollama ollama pull llama3.1
+docker compose run --rm hermes-life-os --mode onboard
+
+# already have a provider key? skip ollama:
+docker build -t hermes-life-os .
+docker run --rm -it -e ANTHROPIC_API_KEY=sk-ant-... \
+    -v hermes-life-os-data:/root/.hermes \
+    hermes-life-os --mode morning
+```
+
 ## All Demo Modes
 
 | Mode | What Happens |
@@ -236,7 +258,31 @@ To stop: say or type `exit`
 
 ---
 
+## Dashboard
+
+```bash
+pip install matplotlib   # one-time
+python demo/dashboard.py
+python demo/dashboard.py --days 60 --out my-report.html
+```
+
+Turns your logged mood/sleep/stress/energy/hydration data and the
+correlations Hermes already detects (e.g. "poor sleep tracks with lower
+mood, r=0.62") into a single self-contained HTML report with charts -
+opens straight in your browser, no server, nothing leaves your machine.
+Needs no LLM/API key at all - it's pure local data analysis.
+
 ## What's New
+
+**v1.7.0 - CI, Docker & Dashboard**
+- GitHub Actions workflow runs the full test suite on every push/PR
+  across Python 3.10/3.11/3.12, with a status badge in this README
+- `Dockerfile` + `docker-compose.yml` for a zero-install trial - pairs
+  with a local Ollama container for a completely free, no-API-key run
+- New `demo/dashboard.py`: generates a self-contained HTML report with
+  charts of your mood/sleep/stress/energy/hydration trends and the
+  correlations Hermes detects - pure local data analysis, no LLM call
+- 7 new tests for the dashboard - suite grew from 129 to 136 tests
 
 **v1.6.0 - Multi-Provider LLM Support**
 - New `demo/llm_providers.py`: provider-agnostic client layer supporting

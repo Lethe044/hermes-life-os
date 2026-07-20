@@ -5,3 +5,6 @@ pytest>=7.0.0
 
 # Optional: only needed if you use --provider anthropic
 anthropic>=0.34.0
+
+# Optional: only needed for demo/dashboard.py
+matplotlib>=3.7.0
