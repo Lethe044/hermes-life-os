@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import base64
 import io
+import os
 import sys
 import webbrowser
 from datetime import datetime
@@ -36,7 +37,8 @@ except ImportError:
     print("Dashboard needs matplotlib. Install it with:\n  pip install matplotlib")
     sys.exit(1)
 
-from storage import get_recent_memory, load_habits, MEMORY_FILE
+import storage
+from storage import get_recent_memory, load_habits
 from analytics import daily_averages, compute_correlations, format_correlation_insights
 from patterns import detect_patterns
 
@@ -145,7 +147,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <body>
 <div class="wrap">
   <h1>🧠 Hermes Life OS - Dashboard</h1>
-  <div class="sub">Last {days} days · {entry_count} logged entries · generated {generated_at}</div>
+  <div class="sub">Profile: {profile} · Last {days} days · {entry_count} logged entries · generated {generated_at}</div>
 
   <div class="card">
     <h2>Trends</h2>
@@ -162,7 +164,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     {habits_html}
   </div>
 
-  <div class="footer">Generated locally from ~/.hermes/life-os/memory.jsonl - no data leaves your machine.</div>
+  <div class="footer">Generated locally from {memory_path} - no data leaves your machine.</div>
 </div>
 </body>
 </html>
@@ -199,6 +201,8 @@ def render_html(data: Dict) -> str:
         days=data["days"],
         entry_count=data["entry_count"],
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        profile=storage.ACTIVE_PROFILE,
+        memory_path=storage.MEMORY_FILE,
         chart_html=chart_html,
         insights_html=insights_html,
         habits_html=habits_html,
@@ -210,9 +214,15 @@ def main():
     parser.add_argument("--days", type=int, default=30, help="How many days of history to include")
     parser.add_argument("--out", default="hermes-dashboard.html", help="Output HTML file path")
     parser.add_argument("--no-open", action="store_true", help="Don't auto-open the report in a browser")
+    parser.add_argument("--profile", default=None,
+                        help="Named profile to read data from (see --profile in "
+                             "demo_life_os.py). Default: 'default'. Can also be set "
+                             "via LIFE_OS_PROFILE.")
     args = parser.parse_args()
 
-    if not MEMORY_FILE.exists():
+    storage.set_active_profile(args.profile or os.environ.get("LIFE_OS_PROFILE"))
+
+    if not storage.MEMORY_FILE.exists():
         print("No data yet - run a mode like 'onboard' or 'morning' first to start logging.")
         sys.exit(1)
 

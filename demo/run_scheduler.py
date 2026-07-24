@@ -18,6 +18,8 @@ Usage:
         set OPENROUTER_API_KEY=sk-or-...
     Optionally pin the provider explicitly:
         set LIFE_OS_PROVIDER=anthropic
+    Optionally run against a named profile instead of the default one:
+        set LIFE_OS_PROFILE=alex
     set HERMES_NOTIFY_CHANNEL=telegram   (optional; defaults to console)
     python run_scheduler.py
 
@@ -57,7 +59,10 @@ def make_runner(client, model: str):
 
 
 def main():
+    import storage
     from llm_providers import ProviderError, resolve_provider, default_model_for, get_client
+
+    storage.set_active_profile(os.environ.get("LIFE_OS_PROFILE"))
 
     try:
         provider = resolve_provider(os.environ.get("LIFE_OS_PROVIDER"))
@@ -70,6 +75,7 @@ def main():
     schedule = default_schedule()
 
     print(f"Hermes Life OS scheduler starting. Provider: {provider}  Model: {model}")
+    print(f"Profile: {storage.ACTIVE_PROFILE}")
     print("Schedule:")
     for entry in schedule:
         days = ",".join(entry.days) if entry.days else "daily"

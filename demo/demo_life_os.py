@@ -80,10 +80,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from llm_providers import (
     PROVIDERS, ProviderError, resolve_provider, default_model_for, get_client,
 )
+import storage
 from storage import (
-    HERMES_DIR, MEMORY_FILE, PROFILE_FILE, HABITS_FILE, GOALS_FILE,
-    NUTRITION_FILE, SLEEP_FILE, HYDRATION_FILE, FITNESS_FILE,
-    FOCUS_FILE, MENTAL_FILE,
     load_profile, save_profile, load_habits, save_habits,
     load_goals, save_goals, load_nutrition, save_nutrition,
     load_sleep, save_sleep, load_hydration, save_hydration,
@@ -672,7 +670,7 @@ def run_chat_mode(client, model: str = DEFAULT_MODEL):
 # ---------------------------------------------------------------------------
 
 def seed_demo_memory():
-    if MEMORY_FILE.exists() and MEMORY_FILE.stat().st_size > 200:
+    if storage.MEMORY_FILE.exists() and storage.MEMORY_FILE.stat().st_size > 200:
         return
 
     console.print("[dim]Seeding demo memory...[/]")
@@ -803,7 +801,16 @@ def main():
     parser.add_argument("--fresh",     action="store_true", help="Clear all data and start fresh")
     parser.add_argument("--voice",     action="store_true", help="Voice mode - speak to Hermes")
     parser.add_argument("--elevenlabs-key", default=None, help="ElevenLabs API key for TTS")
+    parser.add_argument("--profile", default=None,
+                        help="Named profile for multi-person households - isolates all "
+                             "data under ~/.hermes/life-os/profiles/<name>/. Default: "
+                             "'default' (the original single-profile layout). Can also "
+                             "be set via LIFE_OS_PROFILE.")
     args = parser.parse_args()
+
+    storage.set_active_profile(args.profile or os.environ.get("LIFE_OS_PROFILE"))
+    if storage.ACTIVE_PROFILE != "default":
+        console.print(f"[dim]Profile: {storage.ACTIVE_PROFILE}[/]")
 
     try:
         provider = resolve_provider(args.provider)
@@ -816,9 +823,9 @@ def main():
     console.print(f"[dim]Provider: {provider}  Model: {model}[/]")
 
     if args.fresh:
-        for f in [MEMORY_FILE, PROFILE_FILE, HABITS_FILE, GOALS_FILE,
-                  NUTRITION_FILE, SLEEP_FILE, HYDRATION_FILE,
-                  FITNESS_FILE, FOCUS_FILE, MENTAL_FILE]:
+        for f in [storage.MEMORY_FILE, storage.PROFILE_FILE, storage.HABITS_FILE, storage.GOALS_FILE,
+                  storage.NUTRITION_FILE, storage.SLEEP_FILE, storage.HYDRATION_FILE,
+                  storage.FITNESS_FILE, storage.FOCUS_FILE, storage.MENTAL_FILE]:
             if f.exists():
                 f.unlink()
         console.print("[dim]All data cleared.[/]")
@@ -855,7 +862,7 @@ def main():
         _print_provider_troubleshooting(provider, e)
         sys.exit(1)
     console.print("\n[bold green]Session complete.[/]")
-    console.print(f"[dim]Memory: {MEMORY_FILE}[/]")
+    console.print(f"[dim]Memory: {storage.MEMORY_FILE}[/]")
 
 
 if __name__ == "__main__":

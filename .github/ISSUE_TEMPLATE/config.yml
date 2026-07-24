@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Setup / usage question
+    url: https://github.com/Lethe044/hermes-life-os/issues/new
+    about: Open a regular issue - "question" is a fine reason to open one.

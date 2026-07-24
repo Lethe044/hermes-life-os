@@ -31,6 +31,7 @@ from storage import (
     load_goals, save_goals,
     load_profile, save_profile,
     write_memory, search_memory, get_recent_memory, memory_count,
+    edit_memory_entry, delete_memory_entry,
 )
 from patterns import detect_patterns
 
@@ -46,7 +47,8 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
     if name == "remember":
         entry = {k: v for k, v in inp.items()}
         write_memory(entry)
-        return f"Remembered: [{inp.get('type','note')}] {str(inp.get('content', inp.get('description','')))[:80]}"
+        return (f"Remembered [id={entry['id']}]: [{inp.get('type','note')}] "
+                f"{str(inp.get('content', inp.get('description','')))[:80]}")
 
     # ── recall ────────────────────────────────────────────────────────────────
     elif name == "recall":
@@ -54,9 +56,29 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         if not results:
             return f"Nothing found for '{inp.get('query','')}'."
         return "\n".join(
-            f"[{r.get('type','?')}] {str(r.get('content', r.get('description','')))[:100]}"
+            f"[id={r.get('id','?')}] [{r.get('type','?')}] "
+            f"{str(r.get('content', r.get('description','')))[:100]}"
             for r in results[-5:]
         )
+
+    # ── correct_entry ────────────────────────────────────────────────────────
+    elif name == "correct_entry":
+        entry_id = inp.get("entry_id", "")
+        updates = inp.get("updates", {})
+        if not isinstance(updates, dict) or not updates:
+            return "No updates provided - specify at least one field to change."
+        if edit_memory_entry(entry_id, updates):
+            return f"Updated entry [id={entry_id}] with {updates}."
+        return (f"No entry found with id '{entry_id}'. Use recall first to find "
+                f"the id of the entry you want to correct.")
+
+    # ── delete_entry ─────────────────────────────────────────────────────────
+    elif name == "delete_entry":
+        entry_id = inp.get("entry_id", "")
+        if delete_memory_entry(entry_id):
+            return f"Deleted entry [id={entry_id}]. This can't be undone."
+        return (f"No entry found with id '{entry_id}'. Use recall first to find "
+                f"the id of the entry you want to delete.")
 
     # ── log_meal ──────────────────────────────────────────────────────────────
     elif name == "log_meal":
@@ -463,6 +485,23 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "query": {"type": "string"},
         }, "required": ["query"]}}},
+
+    {"type": "function", "function": {"name": "correct_entry",
+        "description": "Fix a mistake in a previously logged memory entry (e.g. wrong "
+                       "sleep hours, wrong mood score). Always call recall first to find "
+                       "the entry's id - never guess an id.",
+        "parameters": {"type": "object", "properties": {
+            "entry_id": {"type": "string", "description": "The id shown by recall, e.g. 'a1b2c3d4'."},
+            "updates":  {"type": "object", "description": "Fields to change, e.g. {\"score\": 7} or {\"hours\": 6.5}."},
+        }, "required": ["entry_id", "updates"]}}},
+
+    {"type": "function", "function": {"name": "delete_entry",
+        "description": "Permanently delete a previously logged memory entry. Always call "
+                       "recall first to find the entry's id, and confirm with the user "
+                       "before deleting - this can't be undone.",
+        "parameters": {"type": "object", "properties": {
+            "entry_id": {"type": "string", "description": "The id shown by recall, e.g. 'a1b2c3d4'."},
+        }, "required": ["entry_id"]}}},
 
     {"type": "function", "function": {"name": "log_meal",
         "description": "Log a meal with nutritional info.",

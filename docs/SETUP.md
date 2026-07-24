@@ -53,3 +53,16 @@ Memory:  ~/.hermes/life-os/memory.jsonl
 Profile: ~/.hermes/life-os/profile.json
 Habits:  ~/.hermes/life-os/habits.json
 Goals:   ~/.hermes/life-os/goals.json
+
+Multiple people sharing one install: add --profile <name> (or set
+LIFE_OS_PROFILE) to any command above. Data moves to
+~/.hermes/life-os/profiles/<name>/, fully isolated from everyone else.
+
+## Optional: encryption at rest
+
+set LIFE_OS_ENCRYPTION_KEY=your-passphrase-here
+
+Encrypts every data file and every memory.jsonl line. Off by default.
+There is no password recovery - losing the passphrase means losing
+access to that data, by design. Requires the `cryptography` package
+(pip install "hermes-life-os[encryption]").

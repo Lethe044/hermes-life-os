@@ -1,6 +1,7 @@
 # Hermes Life OS 🧠
 
 [![Tests](https://github.com/Lethe044/hermes-life-os/actions/workflows/tests.yml/badge.svg)](https://github.com/Lethe044/hermes-life-os/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/hermes-life-os)](https://pypi.org/project/hermes-life-os/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -105,7 +106,7 @@ provider is auto-detected from whatever key is set (or force one with
 `--provider`).
 
 ```bash
-pip install -r requirements.txt
+pip install "hermes-life-os[all]"
 
 # Option A - free, fully local, no API key:
 ollama serve
@@ -116,30 +117,37 @@ set ANTHROPIC_API_KEY=sk-ant-...
 set OPENAI_API_KEY=sk-...
 set OPENROUTER_API_KEY=sk-or-...
 
-python demo/demo_life_os.py --mode onboard
-python demo/demo_life_os.py --mode morning
-python demo/demo_life_os.py --mode chat
+hermes-life-os --mode onboard
+hermes-life-os --mode morning
+hermes-life-os --mode chat
 
 # force a specific backend regardless of which keys are set:
-python demo/demo_life_os.py --mode morning --provider anthropic
+hermes-life-os --mode morning --provider anthropic
 ```
 
+Prefer running from source instead of installing? Clone the repo and use
+`python demo/demo_life_os.py ...` in place of `hermes-life-os ...` above
+(same flags, same behavior) - see [Project Structure](#project-structure).
+
 ### Or run it with Docker - zero Python setup
+
+```bash
+# pull the pre-built image - no clone needed:
+docker run --rm -it -e ANTHROPIC_API_KEY=sk-ant-... \
+    -v hermes-life-os-data:/root/.hermes \
+    ghcr.io/lethe044/hermes-life-os:latest --mode morning
+```
+
+Or build it yourself, and get a fully free trial paired with a local
+Ollama container (no API key at all):
 
 ```bash
 git clone https://github.com/Lethe044/hermes-life-os.git
 cd hermes-life-os
 
-# fully free trial, no API key at all (pairs with a local Ollama container):
 docker compose up -d ollama
 docker compose exec ollama ollama pull llama3.1
 docker compose run --rm hermes-life-os --mode onboard
-
-# already have a provider key? skip ollama:
-docker build -t hermes-life-os .
-docker run --rm -it -e ANTHROPIC_API_KEY=sk-ant-... \
-    -v hermes-life-os-data:/root/.hermes \
-    hermes-life-os --mode morning
 ```
 
 ## All Demo Modes
@@ -175,6 +183,40 @@ Example conversations:
 - "How has my sleep been this week?"
 - "I just ran 5km, log it"
 - "What patterns are you seeing in my data?"
+- "I logged 4 hours of sleep by mistake, it was actually 7" - Hermes recalls
+  the entry and corrects it
+- "Delete that last mood entry, I misclicked" - Hermes finds and removes it
+  (asks for confirmation first)
+
+## Multi-Profile (shared households)
+
+```bash
+python demo/demo_life_os.py --mode morning --profile alex
+python demo/dashboard.py --profile alex
+```
+
+By default everything lives at `~/.hermes/life-os/` (unchanged, single
+person). Passing `--profile <name>` (or setting `LIFE_OS_PROFILE`) fully
+isolates that person's data under `~/.hermes/life-os/profiles/<name>/` -
+so a household can share one install without mixing anyone's mood/sleep/
+habit data. Omitting `--profile` always keeps working exactly as before.
+
+## Encryption at Rest (optional)
+
+```bash
+set LIFE_OS_ENCRYPTION_KEY=your-passphrase-here
+python demo/demo_life_os.py --mode morning
+```
+
+Off by default - nothing changes unless you set this. When set, every
+data file (profile, habits, goals, nutrition, sleep, etc.) and every line
+of `memory.jsonl` is encrypted at rest with a key derived from your
+passphrase (PBKDF2-HMAC-SHA256 + Fernet/AES). Existing plaintext data is
+read transparently and gets encrypted the next time it's written - no
+separate migration step. **There is no password recovery** - if you lose
+the passphrase, that data is unrecoverable by design. Requires
+`pip install "hermes-life-os[encryption]"` (or `pip install cryptography`
+if running from source).
 
 ## Project Structure
 
@@ -261,9 +303,9 @@ To stop: say or type `exit`
 ## Dashboard
 
 ```bash
-pip install matplotlib   # one-time
-python demo/dashboard.py
-python demo/dashboard.py --days 60 --out my-report.html
+pip install "hermes-life-os[dashboard]"   # or: pip install matplotlib (running from source)
+hermes-life-os-dashboard
+hermes-life-os-dashboard --days 60 --out my-report.html
 ```
 
 Turns your logged mood/sleep/stress/energy/hydration data and the
@@ -272,7 +314,41 @@ mood, r=0.62") into a single self-contained HTML report with charts -
 opens straight in your browser, no server, nothing leaves your machine.
 Needs no LLM/API key at all - it's pure local data analysis.
 
+![Example dashboard trend chart](docs/images/dashboard-example.png)
+
+*Example output from 28 days of sample data - your own chart will reflect
+whatever you've actually logged.*
+
 ## What's New
+
+**v1.9.0 - Multi-Profile, Encryption at Rest, Correcting/Deleting Entries**
+- `--profile <name>` (or `LIFE_OS_PROFILE`) isolates all data per person
+  under `~/.hermes/life-os/profiles/<name>/` - for shared households.
+  Omitting it keeps the original single-profile layout unchanged.
+- `LIFE_OS_ENCRYPTION_KEY` - optional encryption at rest (PBKDF2-HMAC-SHA256
+  + Fernet/AES) for every data file and every memory.jsonl line. Off by
+  default; existing plaintext data reads transparently and gets encrypted
+  on next write, no separate migration needed.
+- Every memory entry now has a stable id. New `correct_entry` / `delete_entry`
+  tools let you fix a mistake or remove a bad log entry through normal
+  conversation ("that sleep entry was wrong, it was actually 7 hours" /
+  "delete that last entry") instead of it being stuck in an append-only log.
+- 39 new tests (12 profiles, 10 encryption, 12 memory edit/delete at the
+  storage layer, 5 for the correct_entry/delete_entry chat tools) - suite
+  grew from 136 to 175 tests.
+
+**v1.8.0 - PyPI Package, GHCR Image, Contributor Docs**
+- `pip install hermes-life-os` - real PyPI packaging via `pyproject.toml`,
+  with CLI commands `hermes-life-os`, `hermes-life-os-dashboard`,
+  `hermes-life-os-scheduler`. Source layout (`demo/`) unchanged, so
+  existing `python demo/demo_life_os.py` usage still works exactly the
+  same. Auto-published to PyPI on every GitHub Release.
+- `ghcr.io/lethe044/hermes-life-os` - pre-built Docker image, auto-published
+  on every push to `main` and every release. No `git clone` needed to try it.
+- Example dashboard chart embedded in the README (see the
+  [Dashboard](#dashboard) section).
+- `CONTRIBUTING.md` and GitHub issue templates (bug report / feature
+  request) for contributors.
 
 **v1.7.0 - CI, Docker & Dashboard**
 - GitHub Actions workflow runs the full test suite on every push/PR

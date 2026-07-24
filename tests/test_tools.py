@@ -231,6 +231,8 @@ class TestToolsSchema:
             minimal_inputs = {
                 "remember": {"type": "note", "content": "x"},
                 "recall": {"query": "x"},
+                "correct_entry": {"entry_id": "doesnotexist", "updates": {"score": 1}},
+                "delete_entry": {"entry_id": "doesnotexist"},
                 "log_meal": {"meal_time": "lunch", "food": "x"},
                 "log_sleep": {"hours": 7, "quality": 7},
                 "log_hydration": {"glasses": 1},
@@ -255,6 +257,46 @@ class TestToolsSchema:
             assert f"Unknown tool: {name}" not in result
             handled_names.add(name)
         assert handled_names == {t["function"]["name"] for t in tools.TOOLS}
+
+
+class TestCorrectEntryTool:
+    def test_correct_entry_updates_recalled_entry(self, tools):
+        tools.dispatch_tool("remember", {"type": "mood", "content": "meh", "score": 3})
+        recalled = tools.dispatch_tool("recall", {"query": "meh"})
+        entry_id = recalled.split("id=")[1].split("]")[0]
+
+        result = tools.dispatch_tool("correct_entry", {"entry_id": entry_id, "updates": {"score": 8}})
+        assert "Updated" in result
+
+        entries = tools.get_recent_memory(days=1)
+        matching = [e for e in entries if e["id"] == entry_id]
+        assert matching[0]["score"] == 8
+
+    def test_correct_entry_unknown_id(self, tools):
+        result = tools.dispatch_tool("correct_entry", {"entry_id": "nope", "updates": {"score": 1}})
+        assert "No entry found" in result
+
+    def test_correct_entry_no_updates_given(self, tools):
+        tools.dispatch_tool("remember", {"type": "note", "content": "x"})
+        result = tools.dispatch_tool("correct_entry", {"entry_id": "whatever", "updates": {}})
+        assert "No updates provided" in result
+
+
+class TestDeleteEntryTool:
+    def test_delete_entry_removes_recalled_entry(self, tools):
+        tools.dispatch_tool("remember", {"type": "note", "content": "delete me please"})
+        recalled = tools.dispatch_tool("recall", {"query": "delete me"})
+        entry_id = recalled.split("id=")[1].split("]")[0]
+
+        result = tools.dispatch_tool("delete_entry", {"entry_id": entry_id})
+        assert "Deleted" in result
+
+        remaining = tools.dispatch_tool("recall", {"query": "delete me"})
+        assert "Nothing found" in remaining
+
+    def test_delete_entry_unknown_id(self, tools):
+        result = tools.dispatch_tool("delete_entry", {"entry_id": "nope"})
+        assert "No entry found" in result
 
 
 if __name__ == "__main__":

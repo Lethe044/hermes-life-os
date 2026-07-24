@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-life-os"
+version = "1.9.0"
+description = "The personal OS that grows with you - mood, sleep, nutrition and habit tracking with pattern detection, built for Ollama/OpenAI/Anthropic/OpenRouter."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Kıvanç" },
+]
+keywords = ["life-os", "self-tracking", "llm-agent", "habit-tracker", "mood-tracker", "ollama", "anthropic", "openai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Utilities",
+]
+
+dependencies = [
+    "openai>=1.0.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.34.0"]
+dashboard = ["matplotlib>=3.7.0"]
+encryption = ["cryptography>=42.0.0"]
+all = ["anthropic>=0.34.0", "matplotlib>=3.7.0", "cryptography>=42.0.0"]
+dev = ["pytest>=7.0.0"]
+
+[project.urls]
+Homepage = "https://github.com/Lethe044/hermes-life-os"
+Repository = "https://github.com/Lethe044/hermes-life-os"
+Issues = "https://github.com/Lethe044/hermes-life-os/issues"
+
+[project.scripts]
+hermes-life-os = "hermes_life_os.demo_life_os:main"
+hermes-life-os-dashboard = "hermes_life_os.dashboard:main"
+hermes-life-os-scheduler = "hermes_life_os.run_scheduler:main"
+
+[tool.setuptools]
+# The package's real source lives in demo/ (kept as-is so existing docs,
+# Docker, and CI commands like `python demo/demo_life_os.py` keep working
+# unchanged) - this just also exposes it as an installable package.
+package-dir = { "hermes_life_os" = "demo" }
+packages = ["hermes_life_os"]

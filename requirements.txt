@@ -8,3 +8,6 @@ anthropic>=0.34.0
 
 # Optional: only needed for demo/dashboard.py
 matplotlib>=3.7.0
+
+# Optional: only needed if you set LIFE_OS_ENCRYPTION_KEY
+cryptography>=42.0.0
