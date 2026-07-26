@@ -1,3 +1,3 @@
 """Hermes Life OS - the personal OS that grows with you."""
 
-__version__ = "1.9.0"
+__version__ = "1.10.0"

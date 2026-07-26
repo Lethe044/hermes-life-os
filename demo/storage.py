@@ -205,7 +205,13 @@ def _decode_memory_line(line: str, f) -> Optional[Dict]:
 
 def write_memory(entry: Dict):
     entry.setdefault("id", uuid.uuid4().hex[:8])
-    entry["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    # Only stamp "now" if the caller didn't already provide a timestamp -
+    # every real-time logging call site (remember/log_meal/log_sleep/etc,
+    # driven by LLM tool calls) never passes one, so this is identical to
+    # before for all normal usage. This only changes behavior for bulk
+    # imports (see health_import.py) that need to preserve real historical
+    # dates instead of everything landing on "today".
+    entry.setdefault("timestamp", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     with open(MEMORY_FILE, "a", encoding="utf-8") as fh:
         fh.write(_encode_memory_line(entry, _fernet()) + "\n")
 
@@ -293,6 +299,38 @@ def get_recent_memory(days: int = 7) -> List[Dict]:
                         results.append(entry)
                 except Exception:
                     results.append(entry)
+    return results
+
+def get_memory_window(days_ago_start: int, days_ago_end: int = 0) -> List[Dict]:
+    """
+    Entries timestamped between `days_ago_start` and `days_ago_end` days
+    before now (inclusive of the newer bound, exclusive-ish of the older
+    one via >=/< below). `days_ago_start` must be the larger (older)
+    number. E.g. get_memory_window(14, 7) is "the week before last week" -
+    useful for week-over-week / month-over-month comparisons where
+    get_recent_memory()'s single "last N days" isn't enough.
+    """
+    if not MEMORY_FILE.exists():
+        return []
+    now = datetime.utcnow()
+    older_cutoff = now - timedelta(days=days_ago_start)
+    newer_cutoff = now - timedelta(days=days_ago_end)
+    f = _fernet()
+    results = []
+    with open(MEMORY_FILE, encoding="utf-8") as fh:
+        for line in fh:
+            entry = _decode_memory_line(line, f)
+            if entry is None:
+                continue
+            ts = entry.get("timestamp", "")
+            if not ts:
+                continue
+            try:
+                ts_dt = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                continue
+            if older_cutoff <= ts_dt < newer_cutoff:
+                results.append(entry)
     return results
 
 def memory_count() -> int:

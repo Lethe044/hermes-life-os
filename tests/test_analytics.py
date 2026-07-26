@@ -10,6 +10,8 @@ from analytics import (
     daily_averages,
     compute_correlations,
     format_correlation_insights,
+    compute_goal_progress,
+    compare_periods,
 )
 
 
@@ -157,6 +159,80 @@ class TestFormatInsights:
 
     def test_empty_input(self):
         assert format_correlation_insights([]) == []
+
+
+class TestComputeGoalProgress:
+    def test_none_when_not_metric_linked(self):
+        entries = [_entry("mood", "2026-01-01T09:00:00Z", score=8)]
+        assert compute_goal_progress({"name": "x", "progress": 50}, entries) is None
+
+    def test_none_when_no_matching_data(self):
+        goal = {"metric": "sleep", "target": 7, "direction": "at_least"}
+        entries = [_entry("mood", "2026-01-01T09:00:00Z", score=8)]  # no sleep entries
+        assert compute_goal_progress(goal, entries) is None
+
+    def test_at_least_full_progress_when_average_meets_target(self):
+        goal = {"metric": "sleep", "target": 7, "direction": "at_least"}
+        entries = [_entry("sleep", f"2026-01-0{i}T09:00:00Z", hours=8) for i in range(1, 4)]
+        assert compute_goal_progress(goal, entries) == 100.0
+
+    def test_at_least_partial_progress(self):
+        goal = {"metric": "sleep", "target": 8, "direction": "at_least"}
+        entries = [_entry("sleep", f"2026-01-0{i}T09:00:00Z", hours=4) for i in range(1, 4)]
+        assert compute_goal_progress(goal, entries) == 50.0
+
+    def test_at_least_clamped_to_100(self):
+        goal = {"metric": "sleep", "target": 4, "direction": "at_least"}
+        entries = [_entry("sleep", f"2026-01-0{i}T09:00:00Z", hours=10) for i in range(1, 4)]
+        assert compute_goal_progress(goal, entries) == 100.0
+
+    def test_at_most_full_progress_when_average_under_target(self):
+        goal = {"metric": "stress", "target": 5, "direction": "at_most"}
+        entries = [_entry("stress", f"2026-01-0{i}T09:00:00Z", score=3) for i in range(1, 4)]
+        assert compute_goal_progress(goal, entries) == 100.0
+
+    def test_at_most_partial_progress_when_average_over_target(self):
+        goal = {"metric": "stress", "target": 4, "direction": "at_most"}
+        entries = [_entry("stress", f"2026-01-0{i}T09:00:00Z", score=8) for i in range(1, 4)]
+        result = compute_goal_progress(goal, entries)
+        assert 0 < result < 100
+
+    def test_unknown_metric_returns_none(self):
+        goal = {"metric": "not_a_real_metric", "target": 5, "direction": "at_least"}
+        entries = [_entry("mood", "2026-01-01T09:00:00Z", score=8)]
+        assert compute_goal_progress(goal, entries) is None
+
+
+class TestComparePeriods:
+    def test_empty_when_no_overlapping_metrics(self):
+        current = [_entry("mood", "2026-01-08T09:00:00Z", score=8)]
+        previous = [_entry("sleep", "2026-01-01T09:00:00Z", hours=7)]  # different metric
+        assert compare_periods(current, previous) == {}
+
+    def test_computes_delta_and_pct_change(self):
+        current = [_entry("mood", "2026-01-08T09:00:00Z", score=8)]
+        previous = [_entry("mood", "2026-01-01T09:00:00Z", score=4)]
+        result = compare_periods(current, previous)
+        assert result["mood"]["current"] == 8.0
+        assert result["mood"]["previous"] == 4.0
+        assert result["mood"]["delta"] == 4.0
+        assert result["mood"]["pct_change"] == 100.0
+
+    def test_only_includes_metrics_present_in_both_periods(self):
+        current = [
+            _entry("mood", "2026-01-08T09:00:00Z", score=8),
+            _entry("sleep", "2026-01-08T09:00:00Z", hours=7),
+        ]
+        previous = [_entry("mood", "2026-01-01T09:00:00Z", score=4)]  # no sleep here
+        result = compare_periods(current, previous)
+        assert "mood" in result
+        assert "sleep" not in result
+
+    def test_negative_delta_for_decline(self):
+        current = [_entry("stress", "2026-01-08T09:00:00Z", score=3)]
+        previous = [_entry("stress", "2026-01-01T09:00:00Z", score=8)]
+        result = compare_periods(current, previous)
+        assert result["stress"]["delta"] < 0
 
 
 if __name__ == "__main__":

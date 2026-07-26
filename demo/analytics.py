@@ -199,3 +199,88 @@ def format_correlation_insights(correlations: List[Dict[str, Any]], limit: int =
             f"{c['note'].capitalize()}."
         )
     return out
+
+
+# ---------------------------------------------------------------------------
+# Goal <-> metric linkage
+# ---------------------------------------------------------------------------
+
+TRACKABLE_METRICS = ("mood", "energy", "stress", "sleep", "hydration")
+
+
+def compute_goal_progress(goal: Dict[str, Any], entries: List[Dict[str, Any]]) -> Optional[float]:
+    """
+    For a metric-linked goal (has "metric" and "target" fields), compute
+    real progress (0-100) from actual logged data instead of a manual
+    number. Returns None if the goal isn't metric-linked, or if there's
+    no data yet for that metric in `entries` (caller should leave the
+    existing/manual progress value untouched in that case).
+
+    direction: "at_least" (e.g. sleep >= 7h) or "at_most" (e.g. stress <= 4).
+    Progress is the average of the metric over `entries` relative to target,
+    clamped to [0, 100].
+    """
+    metric = goal.get("metric")
+    target = goal.get("target")
+    if not metric or metric not in TRACKABLE_METRICS or target is None:
+        return None
+
+    daily = daily_averages(entries)
+    values = [day.get(metric) for day in daily.values() if metric in day]
+    if not values:
+        return None
+
+    avg = sum(values) / len(values)
+    direction = goal.get("direction", "at_least")
+
+    if direction == "at_most":
+        if avg <= target:
+            return 100.0
+        if target <= 0:
+            return 0.0
+        return round(max(0.0, min(100.0, 100.0 * target / avg)), 1)
+    else:  # at_least
+        if target <= 0:
+            return 100.0 if avg >= target else 0.0
+        return round(max(0.0, min(100.0, 100.0 * avg / target)), 1)
+
+
+# ---------------------------------------------------------------------------
+# Period-over-period comparison (this week vs. last week, etc.)
+# ---------------------------------------------------------------------------
+
+def compare_periods(
+    current_entries: List[Dict[str, Any]],
+    previous_entries: List[Dict[str, Any]],
+) -> Dict[str, Dict[str, float]]:
+    """
+    Compare the average of each tracked metric between two sets of
+    entries (e.g. this week vs. last week). Returns, per metric that
+    has data in *both* periods:
+        {"current": avg, "previous": avg, "delta": current-previous,
+         "pct_change": percent change from previous to current}
+    Metrics missing from either period are simply omitted - a partial
+    result is still useful, so this never raises for missing data.
+    """
+    current_daily = daily_averages(current_entries)
+    previous_daily = daily_averages(previous_entries)
+
+    def _metric_avg(daily: Dict[str, Dict[str, float]], metric: str) -> Optional[float]:
+        values = [day.get(metric) for day in daily.values() if metric in day]
+        return sum(values) / len(values) if values else None
+
+    result: Dict[str, Dict[str, float]] = {}
+    for metric in TRACKABLE_METRICS:
+        cur = _metric_avg(current_daily, metric)
+        prev = _metric_avg(previous_daily, metric)
+        if cur is None or prev is None:
+            continue
+        delta = cur - prev
+        pct_change = (delta / prev * 100.0) if prev != 0 else (100.0 if delta != 0 else 0.0)
+        result[metric] = {
+            "current": round(cur, 2),
+            "previous": round(prev, 2),
+            "delta": round(delta, 2),
+            "pct_change": round(pct_change, 1),
+        }
+    return result

@@ -187,6 +187,9 @@ Example conversations:
   the entry and corrects it
 - "Delete that last mood entry, I misclicked" - Hermes finds and removes it
   (asks for confirmation first)
+- "Set a goal to sleep 7+ hours a night" - Hermes tracks this automatically
+  from your actual logged sleep, no manual progress updates needed
+- "How am I doing on my goals?" / "How does this week compare to last week?"
 
 ## Multi-Profile (shared households)
 
@@ -305,21 +308,79 @@ To stop: say or type `exit`
 ```bash
 pip install "hermes-life-os[dashboard]"   # or: pip install matplotlib (running from source)
 hermes-life-os-dashboard
-hermes-life-os-dashboard --days 60 --out my-report.html
+hermes-life-os-dashboard --days 60 --compare-days 7 --out my-report.html
 ```
 
 Turns your logged mood/sleep/stress/energy/hydration data and the
 correlations Hermes already detects (e.g. "poor sleep tracks with lower
 mood, r=0.62") into a single self-contained HTML report with charts -
 opens straight in your browser, no server, nothing leaves your machine.
-Needs no LLM/API key at all - it's pure local data analysis.
+Needs no LLM/API key at all - it's pure local data analysis. Includes a
+retrospective section comparing this week to last week (`--compare-days`
+changes the window size), color-coded by whether the change is favorable -
+a stress increase shows red, a mood increase shows green.
 
 ![Example dashboard trend chart](docs/images/dashboard-example.png)
 
 *Example output from 28 days of sample data - your own chart will reflect
 whatever you've actually logged.*
 
+## Goal Tracking
+
+Goals can track themselves from real data instead of needing manual
+progress updates - just tell Hermes what to track:
+
+- "Set a goal to sleep 7+ hours a night" -> auto-tracks against your
+  logged sleep, direction "at_least"
+- "Set a goal to keep stress under 4" -> direction "at_most"
+- "How am I doing on my goals?" -> recomputes and reports current progress
+
+Progress is the average of the linked metric over a rolling window
+(7 days by default) relative to the target, clamped to 0-100%. Goals
+without a linked metric keep working exactly as before - a plain
+percentage you update manually.
+
+## Health Data Import
+
+```bash
+pip install hermes-life-os
+hermes-life-os-import --apple-health export.xml
+hermes-life-os-import --csv my_data.csv
+hermes-life-os-import --csv my_data.csv --dry-run   # preview without writing
+```
+
+Reduces manual one-entry-at-a-time logging by bulk-importing data you
+already have, with real historical dates preserved (not stamped "today"):
+
+- **Apple Health** (`export.xml` from Health app -> profile icon -> Export
+  All Health Data): imports Sleep Analysis and Dietary Water records,
+  aggregated per day.
+- **Generic CSV**: any file with a `date` column (YYYY-MM-DD) plus any
+  subset of `sleep_hours, mood, stress, energy, hydration` columns - works
+  for a Google Fit CSV export or your own spreadsheet.
+
+Imported entries are tagged so they're distinguishable from entries
+logged live through chat.
+
 ## What's New
+
+**v1.10.0 - Goal-Metric Linkage, Retrospective Comparison, Health Data Import**
+- Goals can now auto-track from real logged data instead of manual progress
+  updates - `update_goal` accepts `metric`/`target`/`direction`/`window_days`;
+  new `check_goal_progress` tool recomputes and reports current progress.
+- New `compare_periods` tool and a Dashboard "Retrospective" section compare
+  this period to the one before it (week-over-week by default,
+  `--compare-days` to change the window), color-coded by whether the change
+  is favorable per metric.
+- New `hermes-life-os-import` CLI: bulk-imports Apple Health `export.xml`
+  (Sleep Analysis, Dietary Water) or a generic CSV
+  (date + sleep_hours/mood/stress/energy/hydration columns), preserving real
+  historical dates instead of stamping everything "today".
+- `write_memory()` now only stamps "now" when no timestamp was already
+  provided - unchanged for all real-time logging (which never supplies one),
+  enables historical-dated bulk import.
+- 45 new tests (goal-metric linkage, retrospective comparison, health
+  import) - suite grew from 175 to 220.
 
 **v1.9.0 - Multi-Profile, Encryption at Rest, Correcting/Deleting Entries**
 - `--profile <name>` (or `LIFE_OS_PROFILE`) isolates all data per person

@@ -119,3 +119,58 @@ class TestCliEndToEnd:
         assert out_file.exists()
         content = out_file.read_text(encoding="utf-8")
         assert "Hermes Life OS - Dashboard" in content
+
+
+class TestRetrospective:
+    def test_build_dashboard_data_includes_retrospective(self, fake_home):
+        _, dashboard, storage = fake_home
+        storage.HERMES_DIR.mkdir(parents=True, exist_ok=True)
+        _seed_entries(storage, n_days=14)  # spans both this-week and last-week
+
+        data = dashboard.build_dashboard_data(days=30, compare_days=7)
+        assert "retrospective" in data
+        assert data["compare_days"] == 7
+        assert "mood" in data["retrospective"]
+
+    def test_render_shows_retrospective_section(self, fake_home):
+        _, dashboard, storage = fake_home
+        storage.HERMES_DIR.mkdir(parents=True, exist_ok=True)
+        _seed_entries(storage, n_days=14)
+
+        data = dashboard.build_dashboard_data(days=30, compare_days=7)
+        html = dashboard.render_html(data)
+        assert "Retrospective" in html
+        assert "retro-metric" in html  # at least one comparison row rendered
+
+    def test_render_shows_placeholder_when_no_overlap(self, fake_home):
+        _, dashboard, storage = fake_home
+        storage.HERMES_DIR.mkdir(parents=True, exist_ok=True)
+        # only 3 days of data - not enough to have both a "this week" and
+        # "last week" window with overlapping metrics
+        _seed_entries(storage, n_days=3)
+
+        data = dashboard.build_dashboard_data(days=30, compare_days=7)
+        html = dashboard.render_html(data)
+        assert "Not enough data yet to compare periods" in html
+
+    def test_stress_increase_is_colored_as_unfavorable(self, fake_home):
+        """Higher stress is bad, so an *increase* in stress should render
+        with the 'down' (red/unfavorable) styling, not 'up'."""
+        import json
+        from datetime import datetime, timedelta, timezone
+        _, dashboard, storage = fake_home
+        storage.HERMES_DIR.mkdir(parents=True, exist_ok=True)
+        now = datetime.now(timezone.utc)
+        with open(storage.MEMORY_FILE, "a", encoding="utf-8") as f:
+            for i in range(8, 14):
+                ts = (now - timedelta(days=i)).strftime("%Y-%m-%dT09:00:00Z")
+                f.write(json.dumps({"type": "stress", "score": 3, "timestamp": ts}) + "\n")
+            for i in range(0, 6):
+                ts = (now - timedelta(days=i)).strftime("%Y-%m-%dT09:00:00Z")
+                f.write(json.dumps({"type": "stress", "score": 8, "timestamp": ts}) + "\n")
+
+        data = dashboard.build_dashboard_data(days=30, compare_days=7)
+        assert data["retrospective"]["stress"]["delta"] > 0  # stress went up
+        html = dashboard.render_html(data)
+        # stress went up (bad) -> should use the unfavorable/red class
+        assert 'class="retro-down"' in html

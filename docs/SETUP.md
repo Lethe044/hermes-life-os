@@ -66,3 +66,18 @@ Encrypts every data file and every memory.jsonl line. Off by default.
 There is no password recovery - losing the passphrase means losing
 access to that data, by design. Requires the `cryptography` package
 (pip install "hermes-life-os[encryption]").
+
+## Bulk-importing existing data
+
+hermes-life-os-import --apple-health export.xml
+hermes-life-os-import --csv my_data.csv
+
+Preserves real historical dates. See the README's "Health Data Import"
+section for supported formats.
+
+## Goals that track themselves
+
+Instead of manually updating a percentage, link a goal to a metric
+through chat: "set a goal to sleep 7+ hours a night". Progress is then
+computed from your actual logged data. See the README's "Goal Tracking"
+section.

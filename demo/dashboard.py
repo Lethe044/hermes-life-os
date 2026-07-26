@@ -38,8 +38,8 @@ except ImportError:
     sys.exit(1)
 
 import storage
-from storage import get_recent_memory, load_habits
-from analytics import daily_averages, compute_correlations, format_correlation_insights
+from storage import get_recent_memory, load_habits, get_memory_window
+from analytics import daily_averages, compute_correlations, format_correlation_insights, compare_periods
 from patterns import detect_patterns
 
 METRIC_LABELS = {
@@ -91,7 +91,7 @@ def _render_metric_chart(dates: List[str], values: Dict[str, List[float]]) -> st
     return _fig_to_base64(fig)
 
 
-def build_dashboard_data(days: int) -> Dict:
+def build_dashboard_data(days: int, compare_days: int = 7) -> Dict:
     entries = get_recent_memory(days=days)
     daily = daily_averages(entries)
     ordered_dates = sorted(daily.keys())
@@ -107,6 +107,10 @@ def build_dashboard_data(days: int) -> Dict:
     patterns = detect_patterns()
     habits = load_habits()
 
+    current_period = get_recent_memory(days=compare_days)
+    previous_period = get_memory_window(compare_days * 2, compare_days)
+    retrospective = compare_periods(current_period, previous_period)
+
     return {
         "dates": ordered_dates,
         "per_metric": per_metric,
@@ -116,6 +120,8 @@ def build_dashboard_data(days: int) -> Dict:
         "habits": habits,
         "entry_count": len(entries),
         "days": days,
+        "retrospective": retrospective,
+        "compare_days": compare_days,
     }
 
 
@@ -141,6 +147,14 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
             border-bottom: 1px solid #262a33; font-size: 0.92em; }}
   .habit:last-child {{ border-bottom: none; }}
   .streak {{ color: #16a085; font-weight: 600; }}
+  .retro {{ display: flex; justify-content: space-between; align-items: center; padding: 8px 0;
+            border-bottom: 1px solid #262a33; font-size: 0.92em; }}
+  .retro:last-child {{ border-bottom: none; }}
+  .retro-metric {{ text-transform: capitalize; color: #cfd3da; }}
+  .retro-values {{ color: #9aa0a6; font-variant-numeric: tabular-nums; }}
+  .retro-up {{ color: #16a085; font-weight: 600; margin-left: 8px; }}
+  .retro-down {{ color: #c0392b; font-weight: 600; margin-left: 8px; }}
+  .retro-flat {{ color: #9aa0a6; font-weight: 600; margin-left: 8px; }}
   .footer {{ color: #6a6f78; font-size: 0.8em; margin-top: 24px; text-align: center; }}
 </style>
 </head>
@@ -152,6 +166,11 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   <div class="card">
     <h2>Trends</h2>
     {chart_html}
+  </div>
+
+  <div class="card">
+    <h2>Retrospective - last {compare_days} days vs. the {compare_days} before</h2>
+    {retrospective_html}
   </div>
 
   <div class="card">
@@ -184,6 +203,32 @@ def render_html(data: Dict) -> str:
     else:
         insights_html = '<p class="empty">No strong correlations yet - needs more overlapping days of data across metrics.</p>'
 
+    retrospective = data.get("retrospective", {})
+    if retrospective:
+        # for stress, a *decrease* is the favorable direction; for everything
+        # else tracked here, an increase is favorable.
+        higher_is_better = {"mood": True, "energy": True, "sleep": True, "hydration": True, "stress": False}
+        rows = []
+        for metric, stats in retrospective.items():
+            delta = stats["delta"]
+            if delta > 0:
+                arrow, css_class = "\u2191", "retro-up" if higher_is_better.get(metric, True) else "retro-down"
+            elif delta < 0:
+                arrow, css_class = "\u2193", "retro-down" if higher_is_better.get(metric, True) else "retro-up"
+            else:
+                arrow, css_class = "\u2192", "retro-flat"
+            rows.append(
+                f'<div class="retro"><span class="retro-metric">{metric}</span>'
+                f'<span><span class="retro-values">{stats["previous"]} \u2192 {stats["current"]}</span>'
+                f'<span class="{css_class}">{arrow} {abs(stats["pct_change"])}%</span></span></div>'
+            )
+        retrospective_html = "".join(rows)
+    else:
+        retrospective_html = (
+            '<p class="empty">Not enough data yet to compare periods - need logged entries '
+            'in both the current and previous window.</p>'
+        )
+
     habits = data["habits"]
     if habits:
         rows = []
@@ -199,11 +244,13 @@ def render_html(data: Dict) -> str:
 
     return _HTML_TEMPLATE.format(
         days=data["days"],
+        compare_days=data.get("compare_days", 7),
         entry_count=data["entry_count"],
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         profile=storage.ACTIVE_PROFILE,
         memory_path=storage.MEMORY_FILE,
         chart_html=chart_html,
+        retrospective_html=retrospective_html,
         insights_html=insights_html,
         habits_html=habits_html,
     )
@@ -212,6 +259,9 @@ def render_html(data: Dict) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Generate an HTML dashboard from Hermes Life OS data")
     parser.add_argument("--days", type=int, default=30, help="How many days of history to include")
+    parser.add_argument("--compare-days", type=int, default=7,
+                        help="Size (in days) of the retrospective comparison window - "
+                             "default 7 compares this week to last week.")
     parser.add_argument("--out", default="hermes-dashboard.html", help="Output HTML file path")
     parser.add_argument("--no-open", action="store_true", help="Don't auto-open the report in a browser")
     parser.add_argument("--profile", default=None,
@@ -226,7 +276,7 @@ def main():
         print("No data yet - run a mode like 'onboard' or 'morning' first to start logging.")
         sys.exit(1)
 
-    data = build_dashboard_data(args.days)
+    data = build_dashboard_data(args.days, args.compare_days)
     html = render_html(data)
 
     out_path = Path(args.out).resolve()

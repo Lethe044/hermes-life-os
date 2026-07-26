@@ -31,9 +31,10 @@ from storage import (
     load_goals, save_goals,
     load_profile, save_profile,
     write_memory, search_memory, get_recent_memory, memory_count,
-    edit_memory_entry, delete_memory_entry,
+    edit_memory_entry, delete_memory_entry, get_memory_window,
 )
 from patterns import detect_patterns
+from analytics import compute_goal_progress, compare_periods
 
 console = Console(width=min(110, shutil.get_terminal_size().columns))
 
@@ -260,23 +261,92 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         goal_name = inp.get("goal_name", "")
         progress  = inp.get("progress", None)
         note      = inp.get("note", "")
+        metric    = inp.get("metric")
+        target    = inp.get("target")
+        direction = inp.get("direction", "at_least")
+        window_days = inp.get("window_days", 7)
+
         goals     = load_goals()
         found     = False
+        goal_ref  = None
         for g in goals:
             if g["name"].lower() == goal_name.lower():
-                if progress is not None:
-                    g["progress"]     = progress
+                if metric:
+                    g["metric"] = metric
+                    g["target"] = target
+                    g["direction"] = direction
+                    g["window_days"] = window_days
+                if progress is not None and "metric" not in g:
+                    g["progress"] = progress
                 g["last_updated"] = time.strftime("%Y-%m-%d")
                 if note:
                     g["last_note"] = note
                 found = True
+                goal_ref = g
                 break
         if not found:
-            goals.append({"name": goal_name, "progress": progress or 0,
-                          "created": time.strftime("%Y-%m-%d"),
-                          "last_updated": time.strftime("%Y-%m-%d"), "last_note": note})
+            goal_ref = {"name": goal_name, "progress": progress or 0,
+                        "created": time.strftime("%Y-%m-%d"),
+                        "last_updated": time.strftime("%Y-%m-%d"), "last_note": note}
+            if metric:
+                goal_ref["metric"] = metric
+                goal_ref["target"] = target
+                goal_ref["direction"] = direction
+                goal_ref["window_days"] = window_days
+            goals.append(goal_ref)
+
+        if goal_ref.get("metric"):
+            entries = get_recent_memory(days=goal_ref.get("window_days", 7))
+            computed = compute_goal_progress(goal_ref, entries)
+            if computed is not None:
+                goal_ref["progress"] = computed
+
         save_goals(goals)
-        return f"Goal '{goal_name}': {progress}% - {note}"
+        if goal_ref.get("metric"):
+            return (f"Goal '{goal_name}' now auto-tracks {goal_ref['metric']} "
+                    f"({direction.replace('_', ' ')} {target}): {goal_ref['progress']}% - {note}")
+        return f"Goal '{goal_name}': {goal_ref['progress']}% - {note}"
+
+    # ── check_goal_progress ──────────────────────────────────────────────────
+    elif name == "check_goal_progress":
+        goals = load_goals()
+        if not goals:
+            return "No goals set yet."
+        lines = []
+        for g in goals:
+            if g.get("metric"):
+                entries = get_recent_memory(days=g.get("window_days", 7))
+                computed = compute_goal_progress(g, entries)
+                if computed is not None:
+                    g["progress"] = computed
+                lines.append(
+                    f"{g['name']}: {g.get('progress', 0)}% "
+                    f"(auto-tracked: {g['metric']} {g.get('direction','at_least').replace('_',' ')} "
+                    f"{g.get('target')}, last {g.get('window_days',7)} days)"
+                )
+            else:
+                lines.append(f"{g['name']}: {g.get('progress', 0)}% (manually tracked)")
+        save_goals(goals)
+        return "\n".join(lines)
+
+    # ── compare_periods ──────────────────────────────────────────────────────
+    elif name == "compare_periods":
+        window = inp.get("window_days", 7)
+        current = get_recent_memory(days=window)
+        previous = get_memory_window(window * 2, window)
+        comparison = compare_periods(current, previous)
+        if not comparison:
+            return (f"Not enough data yet to compare the last {window} days to the "
+                    f"{window} before that - need overlapping days of the same metric "
+                    f"in both periods.")
+        lines = []
+        for metric, stats in comparison.items():
+            arrow = "up" if stats["delta"] > 0 else ("down" if stats["delta"] < 0 else "flat")
+            lines.append(
+                f"{metric}: {stats['previous']} -> {stats['current']} "
+                f"({arrow} {abs(stats['pct_change'])}%)"
+            )
+        return "\n".join(lines)
 
     # ── detect_patterns ───────────────────────────────────────────────────────
     elif name == "detect_patterns":
@@ -581,12 +651,32 @@ TOOLS = [
         }, "required": ["habit_name", "completed"]}}},
 
     {"type": "function", "function": {"name": "update_goal",
-        "description": "Update goal progress.",
+        "description": "Create or update a goal. For goals that should track themselves "
+                       "automatically from logged data (e.g. 'sleep 7+ hours', 'keep stress "
+                       "under 4'), set metric/target/direction instead of a manual progress "
+                       "number - progress will be computed from real logged averages.",
         "parameters": {"type": "object", "properties": {
-            "goal_name": {"type": "string"},
-            "progress":  {"type": "number"},
-            "note":      {"type": "string"},
+            "goal_name":   {"type": "string"},
+            "progress":    {"type": "number", "description": "Manual progress 0-100. Ignored if metric is set."},
+            "note":        {"type": "string"},
+            "metric":      {"type": "string", "enum": ["mood", "energy", "stress", "sleep", "hydration"],
+                            "description": "Set this to make the goal auto-track from logged data."},
+            "target":      {"type": "number", "description": "Target value for the metric, e.g. 7 for '7 hours of sleep'."},
+            "direction":   {"type": "string", "enum": ["at_least", "at_most"],
+                            "description": "'at_least' for goals like sleep/mood/hydration, 'at_most' for goals like stress."},
+            "window_days": {"type": "integer", "description": "How many recent days to average. Default 7."},
         }, "required": ["goal_name"]}}},
+
+    {"type": "function", "function": {"name": "check_goal_progress",
+        "description": "Show current progress on every goal, refreshing auto-tracked goals from the latest logged data.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "compare_periods",
+        "description": "Compare average mood/energy/stress/sleep/hydration between the last "
+                       "N days and the N days before that (e.g. this week vs last week).",
+        "parameters": {"type": "object", "properties": {
+            "window_days": {"type": "integer", "description": "Size of each period in days. Default 7 (week vs week)."},
+        }, "required": []}}},
 
     {"type": "function", "function": {"name": "detect_patterns",
         "description": "Analyze all memory for trends across mood, energy, sleep, nutrition, stress, habits.",

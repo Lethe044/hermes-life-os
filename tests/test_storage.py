@@ -68,6 +68,14 @@ class TestMemoryJournal:
         results = storage.search_memory("x")
         assert "timestamp" in results[0]
 
+    def test_write_memory_preserves_explicit_timestamp(self, storage):
+        """Needed for bulk/historical import (health_import.py) - a caller
+        that already supplies a timestamp must not have it silently
+        overwritten with 'now'."""
+        storage.write_memory({"type": "sleep", "hours": 7, "timestamp": "2020-01-01T09:00:00Z"})
+        results = storage.search_memory("sleep")
+        assert results[0]["timestamp"] == "2020-01-01T09:00:00Z"
+
     def test_search_memory_no_match(self, storage):
         storage.write_memory({"type": "mood", "content": "great day", "score": 9})
         assert storage.search_memory("nonexistent query xyz") == []
@@ -85,6 +93,24 @@ class TestMemoryJournal:
         storage.write_memory({"type": "mood", "content": "today", "score": 7})
         recent = storage.get_recent_memory(days=7)
         assert len(recent) == 1
+
+    def test_get_memory_window_isolates_a_past_range(self, storage):
+        import json
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        with open(storage.MEMORY_FILE, "a", encoding="utf-8") as f:
+            for days_ago, label in [(2, "this_week"), (10, "last_week"), (20, "two_weeks_ago")]:
+                ts = (now - timedelta(days=days_ago)).strftime("%Y-%m-%dT09:00:00Z")
+                f.write(json.dumps({"type": "mood", "content": label, "timestamp": ts}) + "\n")
+
+        this_week = storage.get_recent_memory(days=7)
+        last_week = storage.get_memory_window(14, 7)
+
+        assert [e["content"] for e in this_week] == ["this_week"]
+        assert [e["content"] for e in last_week] == ["last_week"]
+
+    def test_get_memory_window_empty_when_file_missing(self, storage):
+        assert storage.get_memory_window(14, 7) == []
 
     def test_memory_count(self, storage):
         assert storage.memory_count() == 0

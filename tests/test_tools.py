@@ -243,6 +243,8 @@ class TestToolsSchema:
                 "log_focus_session": {"duration_min": 25, "task": "x"},
                 "update_habit": {"habit_name": "x", "completed": True},
                 "update_goal": {"goal_name": "x", "progress": 10},
+                "check_goal_progress": {},
+                "compare_periods": {},
                 "detect_patterns": {},
                 "get_health_dashboard": {},
                 "get_weekly_health_report": {},
@@ -297,6 +299,94 @@ class TestDeleteEntryTool:
     def test_delete_entry_unknown_id(self, tools):
         result = tools.dispatch_tool("delete_entry", {"entry_id": "nope"})
         assert "No entry found" in result
+
+
+class TestGoalMetricLinkage:
+    def test_manual_goal_unaffected(self, tools):
+        result = tools.dispatch_tool("update_goal", {"goal_name": "Read more", "progress": 40})
+        assert "40" in result
+        goals = tools.load_goals()
+        assert goals[0]["progress"] == 40
+        assert "metric" not in goals[0]
+
+    def test_metric_linked_goal_computes_progress_from_logged_data(self, tools):
+        # log 7 days of sleep averaging 7.5 hours, target is 7+ hours
+        import time as _time
+        from datetime import datetime, timedelta, timezone
+        for i in range(7):
+            ts = (datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y-%m-%dT09:00:00Z")
+            tools.write_memory({"type": "sleep", "hours": 7.5, "timestamp": ts})
+
+        result = tools.dispatch_tool("update_goal", {
+            "goal_name": "Sleep well", "metric": "sleep", "target": 7,
+            "direction": "at_least", "window_days": 7,
+        })
+        assert "auto-track" in result
+        goals = tools.load_goals()
+        goal = goals[0]
+        assert goal["metric"] == "sleep"
+        assert goal["progress"] == 100.0  # 7.5 avg >= 7 target
+
+    def test_at_most_direction_for_stress_goal(self, tools):
+        from datetime import datetime, timedelta, timezone
+        for i in range(7):
+            ts = (datetime.now(timezone.utc) - timedelta(days=i)).strftime("%Y-%m-%dT09:00:00Z")
+            tools.write_memory({"type": "stress", "score": 8, "timestamp": ts})  # target is 4, way over
+
+        result = tools.dispatch_tool("update_goal", {
+            "goal_name": "Lower stress", "metric": "stress", "target": 4, "direction": "at_most",
+        })
+        goals = tools.load_goals()
+        assert goals[0]["progress"] < 100.0  # avg (8) is worse than target (4)
+
+    def test_manual_progress_ignored_when_metric_set_but_no_data(self, tools):
+        result = tools.dispatch_tool("update_goal", {
+            "goal_name": "New metric goal", "progress": 99,
+            "metric": "mood", "target": 8, "direction": "at_least",
+        })
+        goals = tools.load_goals()
+        # no mood data logged yet -> falls back to whatever was set (0 default), not the ignored manual 99
+        assert goals[0]["metric"] == "mood"
+
+
+class TestCheckGoalProgressTool:
+    def test_no_goals(self, tools):
+        result = tools.dispatch_tool("check_goal_progress", {})
+        assert "No goals set yet" in result
+
+    def test_lists_manual_and_auto_goals(self, tools):
+        tools.dispatch_tool("update_goal", {"goal_name": "Manual goal", "progress": 50})
+        tools.dispatch_tool("update_goal", {
+            "goal_name": "Auto goal", "metric": "hydration", "target": 8, "direction": "at_least",
+        })
+        result = tools.dispatch_tool("check_goal_progress", {})
+        assert "Manual goal" in result and "manually tracked" in result
+        assert "Auto goal" in result and "auto-tracked" in result
+
+
+class TestComparePeriodsTool:
+    def test_not_enough_data(self, tools):
+        result = tools.dispatch_tool("compare_periods", {})
+        assert "Not enough data" in result
+
+    def test_compares_two_windows(self, tools):
+        import json
+        import storage
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+
+        def _seed(days_ago_list, score):
+            with open(storage.MEMORY_FILE, "a", encoding="utf-8") as f:
+                for i in days_ago_list:
+                    ts = (now - timedelta(days=i)).strftime("%Y-%m-%dT09:00:00Z")
+                    f.write(json.dumps({"type": "mood", "score": score, "timestamp": ts}) + "\n")
+
+        _seed(range(8, 14), 4)   # previous week averages 4
+        _seed(range(0, 6), 8)    # current week averages 8
+
+        result = tools.dispatch_tool("compare_periods", {"window_days": 7})
+        assert "mood" in result
+        assert "4" in result and "8" in result
 
 
 if __name__ == "__main__":
