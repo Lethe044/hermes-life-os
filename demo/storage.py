@@ -333,6 +333,40 @@ def get_memory_window(days_ago_start: int, days_ago_end: int = 0) -> List[Dict]:
                 results.append(entry)
     return results
 
+def get_memory_by_date_range(start_date: str, end_date: str) -> List[Dict]:
+    """
+    Entries with a date (YYYY-MM-DD, inclusive on both ends) between
+    start_date and end_date. Unlike get_recent_memory()/get_memory_window()
+    (both relative to "now"), this takes absolute calendar dates - meant
+    for natural-language history queries like "how was I in March?",
+    where the LLM resolves the vague phrase to concrete dates and calls
+    this with them. Returns [] for invalid dates instead of raising, so
+    a bad LLM-supplied date degrades to "no data" rather than a crash.
+    """
+    try:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)  # inclusive of end day
+    except (ValueError, TypeError):
+        return []
+    if not MEMORY_FILE.exists():
+        return []
+
+    f = _fernet()
+    results = []
+    with open(MEMORY_FILE, encoding="utf-8") as fh:
+        for line in fh:
+            entry = _decode_memory_line(line, f)
+            if entry is None:
+                continue
+            ts = entry.get("timestamp", "")
+            try:
+                ts_dt = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+            except (ValueError, TypeError):
+                continue
+            if start_dt <= ts_dt < end_dt:
+                results.append(entry)
+    return results
+
 def memory_count() -> int:
     if not MEMORY_FILE.exists():
         return 0
@@ -340,4 +374,10 @@ def memory_count() -> int:
         return sum(1 for _ in open(MEMORY_FILE, encoding="utf-8"))
     except Exception:
         return 0
+
+def get_all_memory() -> List[Dict]:
+    """Every memory entry ever logged, decoded, in file order. Useful for
+    anomaly detection, before/after comparisons, and data export - places
+    where 'the whole history' matters more than 'the last N days'."""
+    return _read_all_memory_entries()
 

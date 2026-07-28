@@ -10,6 +10,7 @@ implementing the "Daily Rhythm" cron table from skills/life-os/SKILL.md:
     12:00           midday check-in
     18:00           evening reflection
     Monday 08:00    weekly review
+    20:00           proactive nudge check (LLM-free, silent if nothing stands out)
 
 Usage:
     Set one provider's key (or run a local Ollama server - no key needed):
@@ -44,8 +45,15 @@ def make_runner(client, model: str):
     """Build a runner(mode) -> str that executes a real briefing and
     captures its rendered output as plain text for delivery."""
     from demo_life_os import DEMO_SCENARIOS, run_life_os, seed_demo_memory
+    from nudges import generate_nudges
 
     def runner(mode: str) -> str:
+        if mode == "nudge_check":
+            # deterministic, no LLM call - empty string means "nothing
+            # notable", which run_scheduler() treats as "don't notify"
+            nudges = generate_nudges()
+            return "\n".join(nudges) if nudges else ""
+
         seed_demo_memory()
         scenario = DEMO_SCENARIOS.get(mode)
         if scenario is None:

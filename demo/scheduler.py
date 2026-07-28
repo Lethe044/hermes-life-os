@@ -42,6 +42,7 @@ DEFAULT_SCHEDULE_DEF = [
     ("12:00", "checkin", None),
     ("18:00", "evening", None),
     ("08:00", "weekly", ["Monday"]),
+    ("20:00", "nudge_check", None),
 ]
 
 
@@ -141,7 +142,7 @@ def run_scheduler(
                     content = runner(entry.mode)
                 except Exception as e:
                     content = f"[scheduler] runner failed for mode '{entry.mode}': {e}"
-            if notifier is not None:
+            if notifier is not None and content:
                 title = f"Hermes Life OS - {entry.mode.title()}"
                 notifier(title, content)
         iterations += 1

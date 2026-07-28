@@ -245,6 +245,9 @@ class TestToolsSchema:
                 "update_goal": {"goal_name": "x", "progress": 10},
                 "check_goal_progress": {},
                 "compare_periods": {},
+                "compare_before_after": {"date": "2026-01-01"},
+                "check_anomalies": {},
+                "get_period_summary": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
                 "detect_patterns": {},
                 "get_health_dashboard": {},
                 "get_weekly_health_report": {},
@@ -387,6 +390,94 @@ class TestComparePeriodsTool:
         result = tools.dispatch_tool("compare_periods", {"window_days": 7})
         assert "mood" in result
         assert "4" in result and "8" in result
+
+
+class TestCompareBeforeAfterTool:
+    def test_not_enough_data(self, tools):
+        result = tools.dispatch_tool("compare_before_after", {"date": "2026-01-01"})
+        assert "Not enough data" in result
+
+    def test_compares_before_and_after_changepoint(self, tools):
+        import json
+        import storage
+        entries = [
+            {"type": "mood", "score": 4, "timestamp": "2026-01-01T09:00:00Z"},
+            {"type": "mood", "score": 4, "timestamp": "2026-01-05T09:00:00Z"},
+            {"type": "mood", "score": 9, "timestamp": "2026-03-01T09:00:00Z"},
+            {"type": "mood", "score": 9, "timestamp": "2026-03-05T09:00:00Z"},
+        ]
+        with open(storage.MEMORY_FILE, "a", encoding="utf-8") as f:
+            for e in entries:
+                f.write(json.dumps(e) + "\n")
+
+        result = tools.dispatch_tool("compare_before_after", {"date": "2026-03-01"})
+        assert "mood" in result
+        assert "4" in result and "9" in result
+
+
+class TestCheckAnomaliesTool:
+    def test_no_anomalies_message(self, tools):
+        result = tools.dispatch_tool("check_anomalies", {})
+        assert "No unusual days detected" in result
+
+    def test_flags_outlier_day(self, tools):
+        import json
+        import storage
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        with open(storage.MEMORY_FILE, "a", encoding="utf-8") as f:
+            for i in range(2, 7):
+                ts = (now - timedelta(days=i)).strftime("%Y-%m-%dT09:00:00Z")
+                f.write(json.dumps({"type": "stress", "score": 3, "timestamp": ts}) + "\n")
+            outlier_ts = now.strftime("%Y-%m-%dT09:00:00Z")
+            f.write(json.dumps({"type": "stress", "score": 15, "timestamp": outlier_ts}) + "\n")
+
+        result = tools.dispatch_tool("check_anomalies", {"window_days": 30})
+        assert now.strftime("%Y-%m-%d") in result
+        assert "stress" in result
+
+
+class TestGetPeriodSummaryTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_period_summary", {
+            "start_date": "2020-01-01", "end_date": "2020-01-31",
+        })
+        assert "No logged data found" in result
+
+    def test_summarizes_period_with_averages_and_notable_entries(self, tools):
+        import json
+        import storage
+        entries = [
+            {"type": "mood", "score": 8, "timestamp": "2026-03-05T09:00:00Z"},
+            {"type": "sleep", "hours": 7, "timestamp": "2026-03-05T09:00:00Z"},
+            {"type": "gratitude", "content": "grateful for a good friend", "timestamp": "2026-03-10T09:00:00Z"},
+        ]
+        with open(storage.MEMORY_FILE, "a", encoding="utf-8") as f:
+            for e in entries:
+                f.write(json.dumps(e) + "\n")
+
+        result = tools.dispatch_tool("get_period_summary", {
+            "start_date": "2026-03-01", "end_date": "2026-03-31",
+        })
+        assert "avg mood" in result
+        assert "avg sleep" in result
+        assert "grateful for a good friend" in result
+
+    def test_excludes_entries_outside_range(self, tools):
+        import json
+        import storage
+        entries = [
+            {"type": "mood", "score": 9, "timestamp": "2026-02-15T09:00:00Z"},  # outside range
+            {"type": "mood", "score": 3, "timestamp": "2026-03-15T09:00:00Z"},  # inside range
+        ]
+        with open(storage.MEMORY_FILE, "a", encoding="utf-8") as f:
+            for e in entries:
+                f.write(json.dumps(e) + "\n")
+
+        result = tools.dispatch_tool("get_period_summary", {
+            "start_date": "2026-03-01", "end_date": "2026-03-31",
+        })
+        assert "avg mood: 3.0" in result
 
 
 if __name__ == "__main__":

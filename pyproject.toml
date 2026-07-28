@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-life-os"
-version = "1.10.0"
+version = "1.11.0"
 description = "The personal OS that grows with you - mood, sleep, nutrition and habit tracking with pattern detection, built for Ollama/OpenAI/Anthropic/OpenRouter."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -48,6 +48,8 @@ hermes-life-os = "hermes_life_os.demo_life_os:main"
 hermes-life-os-dashboard = "hermes_life_os.dashboard:main"
 hermes-life-os-scheduler = "hermes_life_os.run_scheduler:main"
 hermes-life-os-import = "hermes_life_os.health_import:main"
+hermes-life-os-export = "hermes_life_os.data_export:main"
+hermes-life-os-calendar = "hermes_life_os.calendar_import:main"
 
 [tool.setuptools]
 # The package's real source lives in demo/ (kept as-is so existing docs,

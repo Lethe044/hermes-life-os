@@ -190,6 +190,7 @@ Example conversations:
 - "Set a goal to sleep 7+ hours a night" - Hermes tracks this automatically
   from your actual logged sleep, no manual progress updates needed
 - "How am I doing on my goals?" / "How does this week compare to last week?"
+- "Has anything been unusual lately?" / "How was I in March?"
 
 ## Multi-Profile (shared households)
 
@@ -265,10 +266,13 @@ each independently testable and reusable.
 
 `demo/scheduler.py` implements the "Daily Rhythm" cron table from
 `skills/life-os/SKILL.md` (07:00 morning, 12:00 midday, 18:00 evening,
-Monday 08:00 weekly) as a dependency-free polling loop. The scheduling
-logic itself (`due_entries`) is pure and fully unit tested; the actual
-briefing generation and delivery are injected as callables, so the
-core engine has no dependency on the OpenAI client or network access.
+Monday 08:00 weekly, 20:00 proactive nudge check) as a dependency-free
+polling loop. The scheduling logic itself (`due_entries`) is pure and
+fully unit tested; the actual briefing generation and delivery are
+injected as callables, so the core engine has no dependency on the
+OpenAI client or network access. The 20:00 nudge check is LLM-free
+(see "Proactive Nudges" above) and stays silent when there's nothing
+worth flagging.
 
 `demo/notifications.py` delivers briefings through a pluggable channel,
 selected via `HERMES_NOTIFY_CHANNEL`: `console` (default), `webhook`,
@@ -362,7 +366,75 @@ already have, with real historical dates preserved (not stamped "today"):
 Imported entries are tagged so they're distinguishable from entries
 logged live through chat.
 
+## Calendar Import (meeting load vs. mood/stress)
+
+```bash
+hermes-life-os-calendar --ics calendar.ics
+hermes-life-os-calendar --ics calendar.ics --dry-run
+```
+
+Correlates meeting-heavy days with mood/stress/sleep - no OAuth or live
+API needed, just a standard `.ics` export (Google Calendar: Settings ->
+Import & export -> Export; Outlook: File -> Save Calendar; Apple
+Calendar: File -> Export). Only timed events count toward meeting hours
+(all-day events are skipped); recurring events count once, on their
+start date. Once imported, ask Hermes "is my stress linked to
+meeting-heavy days?" or check the dashboard's Correlations section.
+
+## Deeper Analysis: Anomalies & Before/After Comparisons
+
+- "Has anything been unusual lately?" -> flags statistical outlier days
+  (e.g. "today's stress was far above your normal range")
+- "Did starting meditation on March 1st actually help?" -> compares
+  metric averages before vs. after a specific date, instead of just a
+  fixed weekly window
+- "How was I in March?" / "Summarize last month" -> pulls real averages
+  and notable entries (gratitude, dreams, notes) for any date range you
+  ask about
+
+## Proactive Nudges
+
+The scheduler (see above) includes a daily check (20:00 by default) that
+looks for anything worth flagging - an unusual day, a goal falling
+behind - using the same deterministic analysis as the tools above, with
+no LLM call needed. It stays silent on days with nothing notable, so it
+won't spam you.
+
+## Data Export
+
+```bash
+hermes-life-os-export --json backup.json --csv summary.csv
+```
+
+Your data isn't locked in. `--json` writes a complete backup (every
+memory entry plus profile/habits/goals/logs, unmodified). `--csv` writes
+a daily summary in the same shape `hermes-life-os-import --csv` expects -
+export, edit in a spreadsheet, and re-import elsewhere if you want.
+
 ## What's New
+
+**v1.11.0 - Anomaly Detection, Calendar Import, Proactive Nudges, Data Export, History Queries**
+- `check_anomalies` tool + `analytics.detect_anomalies()`: flags statistical
+  outlier days (z-score based) in mood/energy/stress/sleep/hydration.
+- `compare_before_after` tool + `analytics.compare_before_after()`: compares
+  metric averages before vs. after a specific changepoint date (e.g. "did
+  starting meditation on March 1st actually help?").
+- New `hermes-life-os-calendar` CLI: imports meeting hours per day from a
+  standard `.ics` calendar export (Google Calendar/Outlook/Apple Calendar,
+  no OAuth needed). `meeting_hours` is now a fully tracked metric -
+  participates in correlations, goal-linking, retrospectives, and anomaly
+  detection automatically.
+- Proactive nudges: the scheduler's new 20:00 `nudge_check` entry
+  deterministically (no LLM call) surfaces anomalies and lagging
+  metric-linked goals, staying silent when nothing stands out.
+- New `hermes-life-os-export` CLI: `--json` for a complete backup, `--csv`
+  for a daily summary in the same shape `hermes-life-os-import --csv`
+  expects (export, edit, re-import).
+- `get_period_summary` tool + `storage.get_memory_by_date_range()`: natural-
+  language history queries like "how was I in March?" - the LLM resolves
+  the phrase to concrete dates, Hermes returns real averages and notable
+  entries for that period.
+- 52 new tests - suite grew from 220 to 272.
 
 **v1.10.0 - Goal-Metric Linkage, Retrospective Comparison, Health Data Import**
 - Goals can now auto-track from real logged data instead of manual progress

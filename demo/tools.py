@@ -31,10 +31,14 @@ from storage import (
     load_goals, save_goals,
     load_profile, save_profile,
     write_memory, search_memory, get_recent_memory, memory_count,
-    edit_memory_entry, delete_memory_entry, get_memory_window,
+    edit_memory_entry, delete_memory_entry, get_memory_window, get_all_memory,
+    get_memory_by_date_range,
 )
 from patterns import detect_patterns
-from analytics import compute_goal_progress, compare_periods
+from analytics import (
+    compute_goal_progress, compare_periods, compare_before_after,
+    detect_anomalies, daily_averages, TRACKABLE_METRICS,
+)
 
 console = Console(width=min(110, shutil.get_terminal_size().columns))
 
@@ -346,6 +350,69 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                 f"{metric}: {stats['previous']} -> {stats['current']} "
                 f"({arrow} {abs(stats['pct_change'])}%)"
             )
+        return "\n".join(lines)
+
+    # ── compare_before_after ─────────────────────────────────────────────────
+    elif name == "compare_before_after":
+        changepoint = inp.get("date", "")
+        entries = get_all_memory()
+        comparison = compare_before_after(entries, changepoint)
+        if not comparison:
+            return (f"Not enough data around {changepoint} to compare before/after - "
+                    f"need logged entries on both sides of that date, and a valid "
+                    f"YYYY-MM-DD date.")
+        lines = []
+        for metric, stats in comparison.items():
+            arrow = "up" if stats["delta"] > 0 else ("down" if stats["delta"] < 0 else "flat")
+            lines.append(
+                f"{metric}: {stats['previous']} (before {changepoint}) -> "
+                f"{stats['current']} (since {changepoint}) ({arrow} {abs(stats['pct_change'])}%)"
+            )
+        return "\n".join(lines)
+
+    # ── check_anomalies ──────────────────────────────────────────────────────
+    elif name == "check_anomalies":
+        window = inp.get("window_days", 30)
+        entries = get_recent_memory(days=window)
+        anomalies = detect_anomalies(entries)
+        if not anomalies:
+            return f"No unusual days detected in the last {window} days."
+        lines = []
+        for a in anomalies[:5]:
+            lines.append(
+                f"{a['date']}: {a['metric']} was {a['value']} - unusually {a['direction']} "
+                f"your recent average of {a['mean']} (z={a['z_score']})"
+            )
+        return "\n".join(lines)
+
+    # ── get_period_summary ───────────────────────────────────────────────────
+    elif name == "get_period_summary":
+        start = inp.get("start_date", "")
+        end = inp.get("end_date", "")
+        entries = get_memory_by_date_range(start, end)
+        if not entries:
+            return (f"No logged data found between {start} and {end}. Double-check "
+                     f"the dates are valid YYYY-MM-DD and that period was actually logged.")
+
+        daily = daily_averages(entries)
+        lines = [f"Period {start} to {end}: {len(entries)} entries across {len(daily)} logged days."]
+
+        for metric in TRACKABLE_METRICS:
+            values = [d[metric] for d in daily.values() if metric in d]
+            if values:
+                lines.append(f"  avg {metric}: {round(sum(values) / len(values), 2)}")
+
+        notable = [
+            e for e in entries
+            if e.get("type") in ("gratitude", "dream") or e.get("note") or e.get("content")
+        ]
+        if notable:
+            lines.append("Notable entries:")
+            for e in notable[:5]:
+                text = e.get("content") or e.get("note") or e.get("description") or ""
+                date = e.get("timestamp", "")[:10]
+                lines.append(f"  [{date}] {e.get('type', '?')}: {str(text)[:100]}")
+
         return "\n".join(lines)
 
     # ── detect_patterns ───────────────────────────────────────────────────────
@@ -677,6 +744,34 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "window_days": {"type": "integer", "description": "Size of each period in days. Default 7 (week vs week)."},
         }, "required": []}}},
+
+    {"type": "function", "function": {"name": "compare_before_after",
+        "description": "Compare average mood/energy/stress/sleep/hydration before vs. after "
+                       "a specific date - use this when the user asks whether something "
+                       "(a new habit, a life change) actually made a difference, and they "
+                       "give or imply a start date.",
+        "parameters": {"type": "object", "properties": {
+            "date": {"type": "string", "description": "The changepoint date, YYYY-MM-DD. Counted as part of the 'after' period."},
+        }, "required": ["date"]}}},
+
+    {"type": "function", "function": {"name": "check_anomalies",
+        "description": "Find unusually high or low days (statistical outliers) in recent "
+                       "mood/energy/stress/sleep/hydration data - e.g. 'today's stress was "
+                       "way above your normal range'.",
+        "parameters": {"type": "object", "properties": {
+            "window_days": {"type": "integer", "description": "How many recent days to scan. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_period_summary",
+        "description": "Summarize a specific past calendar period (e.g. 'how was I in "
+                       "March?', 'summarize last month') - resolve the user's phrase to "
+                       "concrete YYYY-MM-DD start/end dates yourself, then call this. "
+                       "Returns average metrics for the period plus notable entries "
+                       "(gratitude, dreams, notes).",
+        "parameters": {"type": "object", "properties": {
+            "start_date": {"type": "string", "description": "YYYY-MM-DD, inclusive."},
+            "end_date":   {"type": "string", "description": "YYYY-MM-DD, inclusive."},
+        }, "required": ["start_date", "end_date"]}}},
 
     {"type": "function", "function": {"name": "detect_patterns",
         "description": "Analyze all memory for trends across mood, energy, sleep, nutrition, stress, habits.",

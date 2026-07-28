@@ -12,6 +12,8 @@ from analytics import (
     format_correlation_insights,
     compute_goal_progress,
     compare_periods,
+    compare_before_after,
+    detect_anomalies,
 )
 
 
@@ -233,6 +235,70 @@ class TestComparePeriods:
         previous = [_entry("stress", "2026-01-01T09:00:00Z", score=8)]
         result = compare_periods(current, previous)
         assert result["stress"]["delta"] < 0
+
+
+class TestCompareBeforeAfter:
+    def test_splits_by_changepoint_date(self):
+        entries = [
+            _entry("mood", "2026-01-01T09:00:00Z", score=4),   # before
+            _entry("mood", "2026-01-05T09:00:00Z", score=4),   # before
+            _entry("mood", "2026-03-01T09:00:00Z", score=8),   # after (changepoint itself)
+            _entry("mood", "2026-03-05T09:00:00Z", score=8),   # after
+        ]
+        result = compare_before_after(entries, "2026-03-01")
+        assert result["mood"]["previous"] == 4.0
+        assert result["mood"]["current"] == 8.0
+
+    def test_changepoint_date_itself_counts_as_after(self):
+        entries = [
+            _entry("mood", "2026-02-28T09:00:00Z", score=2),
+            _entry("mood", "2026-03-01T09:00:00Z", score=9),
+        ]
+        result = compare_before_after(entries, "2026-03-01")
+        assert result["mood"]["current"] == 9.0
+        assert result["mood"]["previous"] == 2.0
+
+    def test_invalid_date_returns_empty(self):
+        entries = [_entry("mood", "2026-01-01T09:00:00Z", score=4)]
+        assert compare_before_after(entries, "not-a-date") == {}
+
+    def test_empty_entries_returns_empty(self):
+        assert compare_before_after([], "2026-01-01") == {}
+
+
+class TestDetectAnomalies:
+    def test_flags_clear_outlier(self):
+        # 5 normal days around stress=3, then one wildly high day
+        entries = [_entry("stress", f"2026-01-0{i}T09:00:00Z", score=3) for i in range(1, 6)]
+        entries.append(_entry("stress", "2026-01-06T09:00:00Z", score=15))
+        result = detect_anomalies(entries, min_history_days=5)
+        assert any(a["date"] == "2026-01-06" and a["direction"] == "above" for a in result)
+
+    def test_no_anomalies_in_flat_data(self):
+        entries = [_entry("mood", f"2026-01-0{i}T09:00:00Z", score=5) for i in range(1, 8)]
+        assert detect_anomalies(entries, min_history_days=5) == []
+
+    def test_respects_min_history_days(self):
+        # only 3 days of data, default min_history_days=5 -> nothing flagged
+        entries = [_entry("mood", f"2026-01-0{i}T09:00:00Z", score=3 + i * 5) for i in range(1, 4)]
+        assert detect_anomalies(entries, min_history_days=5) == []
+
+    def test_empty_entries_returns_empty(self):
+        assert detect_anomalies([]) == []
+
+    def test_below_direction_detected(self):
+        entries = [_entry("mood", f"2026-01-0{i}T09:00:00Z", score=8) for i in range(1, 6)]
+        entries.append(_entry("mood", "2026-01-06T09:00:00Z", score=1))
+        result = detect_anomalies(entries, min_history_days=5)
+        assert any(a["date"] == "2026-01-06" and a["direction"] == "below" for a in result)
+
+    def test_sorted_most_extreme_first(self):
+        entries = [_entry("mood", f"2026-01-0{i}T09:00:00Z", score=5) for i in range(1, 6)]
+        entries.append(_entry("mood", "2026-01-07T09:00:00Z", score=6))   # mild
+        entries.append(_entry("mood", "2026-01-08T09:00:00Z", score=20))  # extreme
+        result = detect_anomalies(entries, min_history_days=5)
+        if len(result) >= 2:
+            assert abs(result[0]["z_score"]) >= abs(result[1]["z_score"])
 
 
 if __name__ == "__main__":

@@ -46,6 +46,9 @@ def _extract_metric(entry: Dict[str, Any]) -> Optional[Tuple[str, float]]:
     if t == "hydration":
         val = entry.get("glasses")
         return ("hydration", float(val)) if val is not None else None
+    if t == "calendar":
+        val = entry.get("meeting_hours")
+        return ("meeting_hours", float(val)) if val is not None else None
     return None
 
 
@@ -128,6 +131,9 @@ _PAIR_NOTES = {
     ("stress", "mood"): "stress and mood are linked",
     ("hydration", "energy"): "hydration and energy tend to move together",
     ("hydration", "mood"): "hydration and mood are linked",
+    ("meeting_hours", "stress"): "meeting-heavy days tend to be more stressful",
+    ("meeting_hours", "mood"): "meeting load and mood appear related",
+    ("meeting_hours", "sleep"): "meeting load and sleep appear related",
 }
 
 
@@ -205,7 +211,7 @@ def format_correlation_insights(correlations: List[Dict[str, Any]], limit: int =
 # Goal <-> metric linkage
 # ---------------------------------------------------------------------------
 
-TRACKABLE_METRICS = ("mood", "energy", "stress", "sleep", "hydration")
+TRACKABLE_METRICS = ("mood", "energy", "stress", "sleep", "hydration", "meeting_hours")
 
 
 def compute_goal_progress(goal: Dict[str, Any], entries: List[Dict[str, Any]]) -> Optional[float]:
@@ -284,3 +290,88 @@ def compare_periods(
             "pct_change": round(pct_change, 1),
         }
     return result
+
+
+def compare_before_after(entries: List[Dict[str, Any]], changepoint_date: str) -> Dict[str, Dict[str, float]]:
+    """
+    Compare metric averages before vs. after a specific date (e.g. when
+    a new habit started) - "did stress actually change since I started
+    meditating on 2026-03-01?" changepoint_date is YYYY-MM-DD and is
+    counted as part of the "after" period. Reuses compare_periods()'s
+    output shape ("current" = after, "previous" = before).
+    """
+    try:
+        cutoff = datetime.strptime(changepoint_date, "%Y-%m-%d")
+    except ValueError:
+        return {}
+
+    before, after = [], []
+    for e in entries:
+        ts = e.get("timestamp", "")
+        try:
+            e_dt = datetime.strptime(ts[:10], "%Y-%m-%d")
+        except (ValueError, TypeError):
+            continue
+        (after if e_dt >= cutoff else before).append(e)
+
+    return compare_periods(after, before)
+
+
+# ---------------------------------------------------------------------------
+# Anomaly / outlier detection
+# ---------------------------------------------------------------------------
+
+def _stdev(values: List[float]) -> float:
+    n = len(values)
+    if n < 2:
+        return 0.0
+    mean = sum(values) / n
+    variance = sum((v - mean) ** 2 for v in values) / (n - 1)
+    return variance ** 0.5
+
+
+def detect_anomalies(
+    entries: List[Dict[str, Any]],
+    z_threshold: float = 2.0,
+    min_history_days: int = 5,
+) -> List[Dict[str, Any]]:
+    """
+    Flags daily metric averages that are unusually far (z_threshold
+    standard deviations, default 2.0) from that metric's own historical
+    mean within `entries` - e.g. "today's stress (9) is far above your
+    recent average (4.2 +/- 1.1)". Needs at least `min_history_days` of
+    data for a metric before it will flag anything (too little history
+    makes stdev meaningless). Returns a list of
+    {date, metric, value, mean, stdev, z_score, direction} dicts, most
+    extreme first.
+    """
+    daily = daily_averages(entries)
+    anomalies: List[Dict[str, Any]] = []
+
+    for metric in TRACKABLE_METRICS:
+        dated_values = sorted(
+            (date, day[metric]) for date, day in daily.items() if metric in day
+        )
+        if len(dated_values) < min_history_days:
+            continue
+        values = [v for _, v in dated_values]
+        mean = sum(values) / len(values)
+        stdev = _stdev(values)
+        if stdev == 0:
+            continue  # perfectly flat data - nothing is "anomalous"
+
+        for date, value in dated_values:
+            z = (value - mean) / stdev
+            if abs(z) >= z_threshold:
+                anomalies.append({
+                    "date": date,
+                    "metric": metric,
+                    "value": round(value, 2),
+                    "mean": round(mean, 2),
+                    "stdev": round(stdev, 2),
+                    "z_score": round(z, 2),
+                    "direction": "above" if z > 0 else "below",
+                })
+
+    anomalies.sort(key=lambda a: abs(a["z_score"]), reverse=True)
+    return anomalies

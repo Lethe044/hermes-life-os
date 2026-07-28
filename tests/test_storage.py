@@ -112,6 +112,23 @@ class TestMemoryJournal:
     def test_get_memory_window_empty_when_file_missing(self, storage):
         assert storage.get_memory_window(14, 7) == []
 
+    def test_get_memory_by_date_range_inclusive_bounds(self, storage):
+        import json
+        with open(storage.MEMORY_FILE, "a", encoding="utf-8") as f:
+            for date in ["2026-02-28", "2026-03-01", "2026-03-15", "2026-03-31", "2026-04-01"]:
+                f.write(json.dumps({"type": "mood", "score": 5, "timestamp": f"{date}T09:00:00Z"}) + "\n")
+
+        march = storage.get_memory_by_date_range("2026-03-01", "2026-03-31")
+        dates = {e["timestamp"][:10] for e in march}
+        assert dates == {"2026-03-01", "2026-03-15", "2026-03-31"}
+
+    def test_get_memory_by_date_range_invalid_dates_returns_empty(self, storage):
+        storage.write_memory({"type": "mood", "score": 5})
+        assert storage.get_memory_by_date_range("not-a-date", "also-not-a-date") == []
+
+    def test_get_memory_by_date_range_no_file_returns_empty(self, storage):
+        assert storage.get_memory_by_date_range("2026-01-01", "2026-01-31") == []
+
     def test_memory_count(self, storage):
         assert storage.memory_count() == 0
         storage.write_memory({"type": "mood", "content": "a", "score": 5})

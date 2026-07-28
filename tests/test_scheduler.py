@@ -19,14 +19,14 @@ class TestScheduleEntry:
 
 
 class TestDefaultSchedule:
-    def test_has_four_entries(self):
+    def test_has_five_entries(self):
         sched = default_schedule()
-        assert len(sched) == 4
+        assert len(sched) == 5
 
     def test_modes_match_daily_rhythm(self):
         sched = default_schedule()
         modes = {e.mode for e in sched}
-        assert modes == {"morning", "checkin", "evening", "weekly"}
+        assert modes == {"morning", "checkin", "evening", "weekly", "nudge_check"}
 
     def test_weekly_is_monday_only(self):
         sched = default_schedule()
@@ -100,6 +100,24 @@ class TestRunScheduler:
         assert calls == ["morning"]
         assert len(notified) == 1
         assert "morning content" in notified[0][1]
+
+    def test_empty_runner_output_skips_notification(self):
+        """Needed for nudge_check: a day with nothing notable should
+        stay silent, not send an empty notification."""
+        calls = []
+        notified = []
+        fixed_now = datetime(2026, 7, 17, 20, 0)
+
+        run_scheduler(
+            schedule=[ScheduleEntry("20:00", "nudge_check")],
+            runner=lambda mode: calls.append(mode) or "",  # nothing notable
+            notifier=lambda title, content: notified.append((title, content)),
+            max_iterations=1,
+            clock=lambda: fixed_now,
+            sleeper=lambda s: None,
+        )
+        assert calls == ["nudge_check"]
+        assert notified == []
 
     def test_does_not_call_when_not_due(self):
         calls = []

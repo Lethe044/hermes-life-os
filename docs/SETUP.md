@@ -81,3 +81,22 @@ Instead of manually updating a percentage, link a goal to a metric
 through chat: "set a goal to sleep 7+ hours a night". Progress is then
 computed from your actual logged data. See the README's "Goal Tracking"
 section.
+
+## Calendar import (meeting load)
+
+hermes-life-os-calendar --ics calendar.ics
+
+Imports meeting hours per day from a standard .ics export (no OAuth/API
+needed). See the README's "Calendar Import" section.
+
+## Exporting your data
+
+hermes-life-os-export --json backup.json --csv summary.csv
+
+Your data isn't locked in - see the README's "Data Export" section.
+
+## Proactive nudges
+
+Running the scheduler (python demo/run_scheduler.py) includes a daily
+20:00 check that proactively flags anomalies or lagging goals, with no
+LLM call and no notification at all if nothing stands out.
