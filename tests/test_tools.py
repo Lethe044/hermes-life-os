@@ -231,6 +231,7 @@ class TestToolsSchema:
             minimal_inputs = {
                 "remember": {"type": "note", "content": "x"},
                 "recall": {"query": "x"},
+                "semantic_recall": {"query": "x"},
                 "correct_entry": {"entry_id": "doesnotexist", "updates": {"score": 1}},
                 "delete_entry": {"entry_id": "doesnotexist"},
                 "log_meal": {"meal_time": "lunch", "food": "x"},
@@ -478,6 +479,36 @@ class TestGetPeriodSummaryTool:
             "start_date": "2026-03-01", "end_date": "2026-03-31",
         })
         assert "avg mood: 3.0" in result
+
+
+class TestSemanticRecallTool:
+    def test_gracefully_reports_when_embedding_fails(self, tools):
+        tools.dispatch_tool("remember", {"type": "mood", "content": "feeling something"})
+        result = tools.dispatch_tool("semantic_recall", {"query": "anything"})
+        assert isinstance(result, str)
+        assert "failed" in result.lower() or "unavailable" in result.lower()
+
+    def test_happy_path_with_mocked_embedding_client(self, tools, monkeypatch):
+        import semantic_search
+        from types import SimpleNamespace
+
+        tools.dispatch_tool("remember", {"type": "mood", "content": "feeling overwhelmed at work"})
+
+        class FakeClient:
+            def __init__(self):
+                self.embeddings = SimpleNamespace(create=self._create)
+
+            def _create(self, model, input):
+                vec = [1.0] if "overwhelm" in input.lower() or "stress" in input.lower() else [0.0]
+                return SimpleNamespace(data=[SimpleNamespace(embedding=vec)])
+
+        monkeypatch.setattr(semantic_search, "resolve_embedding_provider", lambda: "ollama")
+        monkeypatch.setattr(semantic_search, "get_embedding_client", lambda provider: FakeClient())
+        monkeypatch.setattr(semantic_search, "default_embedding_model", lambda provider: "fake-model")
+
+        result = tools.dispatch_tool("semantic_recall", {"query": "stress"})
+        assert "overwhelmed at work" in result
+        assert "similarity=" in result
 
 
 if __name__ == "__main__":

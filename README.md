@@ -411,7 +411,90 @@ memory entry plus profile/habits/goals/logs, unmodified). `--csv` writes
 a daily summary in the same shape `hermes-life-os-import --csv` expects -
 export, edit in a spreadsheet, and re-import elsewhere if you want.
 
+## Telegram Bot
+
+```bash
+set TELEGRAM_BOT_TOKEN=...     # from @BotFather
+set TELEGRAM_CHAT_ID=...       # your own numeric chat id
+hermes-life-os-telegram
+```
+
+Talk to Hermes from your phone - no server, no webhook, just long
+polling (keep the process running, e.g. in `tmux`/`screen` or as a
+background service). Only messages from `TELEGRAM_CHAT_ID` are ever
+processed, so your data stays private even if someone finds your bot's
+username. See `demo/telegram_bot.py`'s docstring for the exact setup
+steps (getting a token and finding your chat id).
+
+**Model reliability note:** this project defines a lot of tools (27+).
+Small/CPU-friendly local models (e.g. `llama3.2:3b`) can struggle to use
+them reliably - they may log things you didn't ask for, or occasionally
+emit a raw tool-call attempt as plain text instead of actually calling
+the tool (Hermes detects and filters that specific failure so you never
+see raw JSON, but the underlying action still won't happen). `llama3.1`
+(8B) is noticeably more reliable via Ollama, at the cost of being slower
+on CPU-only machines (several minutes per reply). Any cloud provider
+(Anthropic/OpenAI/OpenRouter) is both faster and more reliable if you
+have API access.
+
+## Semantic Memory Search
+
+`recall` searches by exact keyword; ask Hermes something like "have I
+felt this way before?" or "find entries about feeling overwhelmed" (even
+if you never used that exact word) and it can fall back to
+`semantic_recall` - a local, free embedding search via Ollama (`ollama
+pull nomic-embed-text` first) or OpenAI:
+
+```bash
+set EMBEDDING_PROVIDER=ollama   # or openai; auto-detects from OPENAI_API_KEY otherwise
+```
+
+Embeddings are cached per entry and only recomputed when that entry's
+text actually changes.
+
+## Oura Ring Import
+
+```bash
+set OURA_PERSONAL_ACCESS_TOKEN=...   # https://cloud.ouraring.com/personal-access-tokens
+hermes-life-os-oura --days 30
+```
+
+No OAuth flow - just a personal access token from Oura's own dashboard.
+Imports real sleep duration (merges directly with manually logged and
+Apple-Health-imported sleep) and your daily readiness score (a new
+tracked metric - ask "is my readiness linked to sleep or stress?").
+
 ## What's New
+
+
+**v1.12.0 - Telegram Bot, Semantic Memory Search, Oura Ring Import**
+- New `hermes-life-os-telegram` CLI: talk to Hermes from your phone via
+  long-polling (no server/webhook needed). Restricted to a single
+  `TELEGRAM_CHAT_ID` for privacy. Replies use `run_life_os()`'s new
+  `reply_text` field - the model's actual natural-language answer,
+  extracted directly rather than parsed from rendered terminal output
+  (avoids garbled box-drawing characters and empty-panel replies).
+  Long messages auto-split across Telegram's 4096-char limit; failed
+  polls back off exponentially (5s -> 5min) instead of hammering the
+  API if the token is briefly rate-limited or wrong.
+- Hardening: if a weak/small model emits a raw failed tool-call attempt
+  as plain text (e.g. `{"name":"recall","parameters":{...}}`) instead of
+  actually calling the tool, that's now detected and never relayed to
+  the user as if it were a real answer - seen with small local models
+  (e.g. `llama3.2:3b`) via Ollama, which can also make unreliable tool
+  choices in general; `llama3.1` (8B) or a cloud provider is
+  recommended for more consistent behavior.
+- New `semantic_recall` chat tool + `semantic_search.py`: meaning-based
+  memory search via local (Ollama) or OpenAI embeddings, with a
+  per-entry cache that only recomputes when an entry's text actually
+  changes. Falls back gracefully with a clear message if no embedding
+  provider is reachable.
+- New `hermes-life-os-oura` CLI: imports real sleep duration (merges
+  directly into the existing "sleep" metric alongside manual logs and
+  Apple Health imports) and daily readiness score (`readiness`, a new
+  fully tracked metric) from an Oura Ring, via Personal Access Token -
+  no OAuth flow needed.
+- 83 new tests - suite grew from 272 to 355.
 
 **v1.11.0 - Anomaly Detection, Calendar Import, Proactive Nudges, Data Export, History Queries**
 - `check_anomalies` tool + `analytics.detect_anomalies()`: flags statistical

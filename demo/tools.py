@@ -66,6 +66,33 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             for r in results[-5:]
         )
 
+    # ── semantic_recall ──────────────────────────────────────────────────────
+    elif name == "semantic_recall":
+        try:
+            from semantic_search import (
+                resolve_embedding_provider, get_embedding_client,
+                default_embedding_model, semantic_search as run_semantic_search,
+                EmbeddingProviderError,
+            )
+            provider = resolve_embedding_provider()
+            embed_client = get_embedding_client(provider)
+            model = default_embedding_model(provider)
+            entries = get_all_memory()
+            results = run_semantic_search(embed_client, model, inp.get("query", ""), entries, top_k=5)
+        except EmbeddingProviderError as e:
+            return f"Semantic search unavailable: {e}"
+        except Exception as e:
+            return (f"Semantic search failed ({e}). If you're using Ollama, make sure it's "
+                    f"running and you've pulled an embedding model (ollama pull nomic-embed-text).")
+
+        if not results:
+            return f"Nothing found (by meaning) for '{inp.get('query', '')}'."
+        return "\n".join(
+            f"[id={r.get('id', '?')}] [{r.get('type', '?')}] "
+            f"{str(r.get('content', r.get('description', '')))[:100]} (similarity={round(score, 2)})"
+            for r, score in results
+        )
+
     # ── correct_entry ────────────────────────────────────────────────────────
     elif name == "correct_entry":
         entry_id = inp.get("entry_id", "")
@@ -618,7 +645,16 @@ TOOLS = [
         }, "required": ["type", "content"]}}},
 
     {"type": "function", "function": {"name": "recall",
-        "description": "Search long-term memory.",
+        "description": "Search long-term memory by exact keyword/substring match.",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string"},
+        }, "required": ["query"]}}},
+
+    {"type": "function", "function": {"name": "semantic_recall",
+        "description": "Search long-term memory by *meaning* rather than exact words - use "
+                       "this when recall (keyword search) comes up empty but the user's "
+                       "phrasing suggests related entries might exist under different words "
+                       "(e.g. 'overwhelmed' should find an entry that said 'stressed').",
         "parameters": {"type": "object", "properties": {
             "query": {"type": "string"},
         }, "required": ["query"]}}},

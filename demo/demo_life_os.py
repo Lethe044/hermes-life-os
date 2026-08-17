@@ -315,6 +315,27 @@ SYSTEM = textwrap.dedent("""
 DEFAULT_MODEL = "nousresearch/hermes-3-llama-3.1-405b"
 
 
+def _looks_like_raw_tool_call(text: str) -> bool:
+    """Some smaller/weaker models (especially via Ollama) occasionally
+    fail to use real function calling and instead dump a JSON-looking
+    tool-call attempt directly into the message content, e.g.
+    '{"name":"recall","parameters":{"query":"..."}}'. That's a failed
+    tool call, not an actual answer - don't relay it as if it were one
+    (this matters most for callers like the Telegram bot that forward
+    reply_text directly to the user without a human skimming it first
+    the way a terminal chat session would)."""
+    stripped = text.strip()
+    if not (stripped.startswith("{") and stripped.endswith("}")):
+        return False
+    try:
+        parsed = json.loads(stripped)
+    except (json.JSONDecodeError, ValueError):
+        return False
+    return isinstance(parsed, dict) and "name" in parsed and (
+        "parameters" in parsed or "arguments" in parsed
+    )
+
+
 def run_life_os(scenario: Dict[str, Any], client, model: str = DEFAULT_MODEL,
                 max_turns: int = 25, user_message: str = "") -> Dict[str, Any]:
 
@@ -327,6 +348,7 @@ def run_life_os(scenario: Dict[str, Any], client, model: str = DEFAULT_MODEL,
 
     turn = 0
     calls: List[str] = []
+    reply_fragments: List[str] = []
     start = time.time()
     briefings_sent = 0
     memories_stored = 0
@@ -357,6 +379,8 @@ def run_life_os(scenario: Dict[str, Any], client, model: str = DEFAULT_MODEL,
                 border_style="green",
                 width=min(100, console.width - 4),
             ))
+            if not _looks_like_raw_tool_call(msg.content):
+                reply_fragments.append(msg.content.strip())
 
         if not msg.tool_calls or resp.choices[0].finish_reason == "stop":
             # In chat mode, don't force send_briefing - let model respond naturally
@@ -456,6 +480,9 @@ def run_life_os(scenario: Dict[str, Any], client, model: str = DEFAULT_MODEL,
 
             if tname == "send_briefing":
                 briefings_sent += 1
+                briefing_text = str(tinp.get("content", "")).replace("\\n", "\n").strip()
+                if briefing_text:
+                    reply_fragments.append(briefing_text)
             elif tname not in ("get_profile", "get_health_dashboard",
                                 "get_weekly_health_report"):
                 if len(result) < 400:
@@ -483,7 +510,8 @@ def run_life_os(scenario: Dict[str, Any], client, model: str = DEFAULT_MODEL,
         t.add_row(*row)
     console.print(t)
     return {"turns": turn, "calls": len(calls), "elapsed": elapsed,
-            "memories": memories_stored, "briefings": briefings_sent}
+            "memories": memories_stored, "briefings": briefings_sent,
+            "reply_text": "\n\n".join(f for f in reply_fragments if f)}
 
 
 

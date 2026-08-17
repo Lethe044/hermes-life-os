@@ -100,3 +100,26 @@ Your data isn't locked in - see the README's "Data Export" section.
 Running the scheduler (python demo/run_scheduler.py) includes a daily
 20:00 check that proactively flags anomalies or lagging goals, with no
 LLM call and no notification at all if nothing stands out.
+
+## Telegram bot
+
+set TELEGRAM_BOT_TOKEN=...
+set TELEGRAM_CHAT_ID=...
+hermes-life-os-telegram
+
+See the README's "Telegram Bot" section for setup steps and a note on
+model reliability with small local models.
+
+## Semantic (meaning-based) memory search
+
+set EMBEDDING_PROVIDER=ollama   # or openai
+
+Ollama needs an embedding model pulled first: ollama pull nomic-embed-text.
+See the README's "Semantic Memory Search" section.
+
+## Oura Ring import
+
+set OURA_PERSONAL_ACCESS_TOKEN=...
+hermes-life-os-oura --days 30
+
+Token-based, no OAuth. See the README's "Oura Ring Import" section.

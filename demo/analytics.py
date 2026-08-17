@@ -49,6 +49,9 @@ def _extract_metric(entry: Dict[str, Any]) -> Optional[Tuple[str, float]]:
     if t == "calendar":
         val = entry.get("meeting_hours")
         return ("meeting_hours", float(val)) if val is not None else None
+    if t == "oura_readiness":
+        val = entry.get("score")
+        return ("readiness", float(val)) if val is not None else None
     return None
 
 
@@ -134,6 +137,9 @@ _PAIR_NOTES = {
     ("meeting_hours", "stress"): "meeting-heavy days tend to be more stressful",
     ("meeting_hours", "mood"): "meeting load and mood appear related",
     ("meeting_hours", "sleep"): "meeting load and sleep appear related",
+    ("readiness", "mood"): "recovery/readiness and mood tend to move together",
+    ("readiness", "sleep"): "recovery/readiness tracks with sleep, as expected",
+    ("readiness", "stress"): "recovery/readiness and stress are linked",
 }
 
 
@@ -211,7 +217,7 @@ def format_correlation_insights(correlations: List[Dict[str, Any]], limit: int =
 # Goal <-> metric linkage
 # ---------------------------------------------------------------------------
 
-TRACKABLE_METRICS = ("mood", "energy", "stress", "sleep", "hydration", "meeting_hours")
+TRACKABLE_METRICS = ("mood", "energy", "stress", "sleep", "hydration", "meeting_hours", "readiness")
 
 
 def compute_goal_progress(goal: Dict[str, Any], entries: List[Dict[str, Any]]) -> Optional[float]:
