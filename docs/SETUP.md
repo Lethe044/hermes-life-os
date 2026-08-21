@@ -123,3 +123,20 @@ set OURA_PERSONAL_ACCESS_TOKEN=...
 hermes-life-os-oura --days 30
 
 Token-based, no OAuth. See the README's "Oura Ring Import" section.
+
+## Weekly email summary
+
+set HERMES_SMTP_HOST=smtp.gmail.com
+set HERMES_SMTP_USER=you@gmail.com
+set HERMES_SMTP_PASSWORD=...
+hermes-life-os-weekly-email
+
+Emails the dashboard report. Not scheduled automatically - see the
+README's "Weekly Email Summary" section for cron/Task Scheduler setup.
+
+## Voice notes (Telegram)
+
+pip install "hermes-life-os[voice]"
+
+Send the Telegram bot a voice note - transcribed locally, free, no
+cloud API. See the README's "Voice Notes" section.

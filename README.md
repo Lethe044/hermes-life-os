@@ -464,8 +464,63 @@ Imports real sleep duration (merges directly with manually logged and
 Apple-Health-imported sleep) and your daily readiness score (a new
 tracked metric - ask "is my readiness linked to sleep or stress?").
 
+## Weekly Email Summary
+
+```bash
+set HERMES_SMTP_HOST=smtp.gmail.com
+set HERMES_SMTP_PORT=587
+set HERMES_SMTP_USER=you@gmail.com
+set HERMES_SMTP_PASSWORD=...          # an app password, not your real password
+set HERMES_SMTP_TO=you@gmail.com      # optional, defaults to HERMES_SMTP_USER
+
+hermes-life-os-weekly-email
+hermes-life-os-weekly-email --days 30 --compare-days 7
+```
+
+Emails the same self-contained report `hermes-life-os-dashboard`
+generates - trend charts, correlations, retrospective, habit streaks -
+straight to your inbox. Not wired into the scheduler by default (not
+everyone has SMTP configured); schedule it yourself with your OS's own
+task scheduler if you want it automatic weekly:
+
+```
+Linux/macOS (cron):        0 8 * * 1  hermes-life-os-weekly-email
+Windows (Task Scheduler):  weekly trigger, action = same command
+```
+
+## Voice Notes (Telegram)
+
+```bash
+pip install "hermes-life-os[voice]"   # or: pip install faster-whisper
+```
+
+Send the Telegram bot a voice note instead of typing - it's downloaded
+and transcribed locally (a free Whisper model via `faster-whisper`, no
+cloud API, no per-minute cost) before being processed exactly like a
+typed message. The reply is prefixed with what Hermes heard, so you can
+catch a bad transcription. `WHISPER_MODEL` (default `base`) controls
+speed vs. accuracy - `tiny` is fastest, `small`/`medium` are more
+accurate but slower on CPU-only machines. Without `faster-whisper`
+installed, voice notes get a clear "couldn't process" reply instead of
+silently failing.
+
 ## What's New
 
+
+**v1.13.0 - Weekly Email Summary, Voice Notes**
+- New `hermes-life-os-weekly-email` CLI: emails the same self-contained
+  dashboard report (charts, correlations, retrospective, habits) that
+  `hermes-life-os-dashboard` generates. Reuses the existing SMTP
+  settings (`HERMES_SMTP_*`); new `notifications.send_html_email()`
+  sends HTML with a plain-text fallback. Not wired into the scheduler
+  by default - schedule it yourself with cron/Task Scheduler if wanted.
+- Telegram bot now accepts voice notes: downloaded and transcribed
+  locally via a free Whisper model (`faster-whisper`, no cloud API,
+  `WHISPER_MODEL` env var to pick model size), then processed exactly
+  like a typed message. The reply is prefixed with what Hermes heard,
+  and a missing/failed transcription gets a clear message instead of
+  silently failing.
+- 36 new tests - suite grew from 355 to 391.
 
 **v1.12.0 - Telegram Bot, Semantic Memory Search, Oura Ring Import**
 - New `hermes-life-os-telegram` CLI: talk to Hermes from your phone via

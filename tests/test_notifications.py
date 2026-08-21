@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "demo"))
 
-from notifications import send_notification, NotificationResult
+from notifications import send_notification, NotificationResult, NotificationError, send_html_email
 
 
 @pytest.fixture(autouse=True)
@@ -79,6 +79,86 @@ class TestEmailChannel:
         # password still missing
         result = send_notification("T", "M", channel="email")
         assert result.ok is False
+
+
+class TestSendHtmlEmail:
+    def test_raises_without_credentials(self):
+        with pytest.raises(NotificationError, match="HERMES_SMTP_HOST"):
+            send_html_email("Subject", "<p>body</p>")
+
+    def test_raises_with_partial_credentials(self, monkeypatch):
+        monkeypatch.setenv("HERMES_SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("HERMES_SMTP_USER", "user@example.com")
+        with pytest.raises(NotificationError):
+            send_html_email("Subject", "<p>body</p>")
+
+    def test_successful_send_with_mocked_smtp(self, monkeypatch):
+        monkeypatch.setenv("HERMES_SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("HERMES_SMTP_USER", "user@example.com")
+        monkeypatch.setenv("HERMES_SMTP_PASSWORD", "secret")
+        monkeypatch.setenv("HERMES_SMTP_TO", "recipient@example.com")
+
+        sent = {}
+
+        class FakeSMTP:
+            def __init__(self, host, port, timeout=10):
+                sent["host"] = host
+                sent["port"] = port
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def starttls(self):
+                sent["starttls"] = True
+
+            def login(self, user, password):
+                sent["login"] = (user, password)
+
+            def sendmail(self, from_addr, to_addrs, msg_str):
+                sent["from"] = from_addr
+                sent["to"] = to_addrs
+                sent["msg"] = msg_str
+
+        import notifications
+        monkeypatch.setattr(notifications.smtplib, "SMTP", FakeSMTP)
+
+        result = send_html_email("Weekly Summary", "<h1>Report</h1>", "Plain fallback")
+        assert result.ok is True
+        assert result.channel == "email"
+        assert sent["to"] == ["recipient@example.com"]
+        assert sent["login"] == ("user@example.com", "secret")
+        assert "Weekly Summary" in sent["msg"]
+        assert "multipart/alternative" in sent["msg"]
+        assert "Content-Type: text/html" in sent["msg"]
+        assert "Content-Type: text/plain" in sent["msg"]
+        # bodies are base64-encoded by MIMEText for utf-8 - verify via decode
+        import base64
+        assert base64.b64encode("<h1>Report</h1>".encode()).decode() in sent["msg"]
+        assert base64.b64encode("Plain fallback".encode()).decode() in sent["msg"]
+
+    def test_smtp_failure_raises_notification_error(self, monkeypatch):
+        monkeypatch.setenv("HERMES_SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("HERMES_SMTP_USER", "user@example.com")
+        monkeypatch.setenv("HERMES_SMTP_PASSWORD", "secret")
+
+        class FailingSMTP:
+            def __init__(self, host, port, timeout=10):
+                pass
+
+            def __enter__(self):
+                raise OSError("connection refused")
+
+            def __exit__(self, *a):
+                return False
+
+        import notifications
+        monkeypatch.setattr(notifications.smtplib, "SMTP", FailingSMTP)
+
+        with pytest.raises(NotificationError, match="email send failed"):
+            send_html_email("Subject", "<p>body</p>")
 
 
 class TestUnknownChannel:

@@ -37,6 +37,7 @@ import smtplib
 import urllib.request
 import urllib.error
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from dataclasses import dataclass
 from typing import Optional
 
@@ -152,6 +153,47 @@ _SENDERS = {
     "telegram": _send_telegram,
     "email": _send_email,
 }
+
+
+def send_html_email(subject: str, html_body: str, plain_body: Optional[str] = None,
+                     host: Optional[str] = None, port: Optional[int] = None,
+                     user: Optional[str] = None, password: Optional[str] = None,
+                     to: Optional[str] = None) -> NotificationResult:
+    """Sends a richer HTML email (used by weekly_email.py for the
+    dashboard report) alongside a plain-text fallback for clients that
+    don't render HTML. Same HERMES_SMTP_* env vars as _send_email/the
+    'email' notification channel - this is a separate function rather
+    than extending _send_email because the notification channels are
+    plain-text by design (a short briefing/alert), while this is
+    specifically for sending a full HTML report."""
+    host = host or _env("HERMES_SMTP_HOST")
+    port = port or int(_env("HERMES_SMTP_PORT", "587"))
+    user = user or _env("HERMES_SMTP_USER")
+    password = password or _env("HERMES_SMTP_PASSWORD")
+    to = to or _env("HERMES_SMTP_TO", user)
+
+    if not host or not user or not password or not to:
+        raise NotificationError(
+            "HERMES_SMTP_HOST, HERMES_SMTP_USER, HERMES_SMTP_PASSWORD and a "
+            "recipient (HERMES_SMTP_TO or HERMES_SMTP_USER) must all be set"
+        )
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = user
+    msg["To"] = to
+    if plain_body:
+        msg.attach(MIMEText(plain_body, "plain", "utf-8"))
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    try:
+        with smtplib.SMTP(host, port, timeout=10) as server:
+            server.starttls()
+            server.login(user, password)
+            server.sendmail(user, [to], msg.as_string())
+    except (smtplib.SMTPException, OSError) as e:
+        raise NotificationError(f"email send failed: {e}") from e
+    return NotificationResult(channel="email", ok=True)
 
 
 # ---------------------------------------------------------------------------

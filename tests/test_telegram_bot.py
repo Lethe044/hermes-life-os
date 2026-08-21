@@ -26,6 +26,123 @@ def telegram_bot(tmp_path, monkeypatch):
     return tb
 
 
+class TestExtractVoice:
+    def test_extracts_chat_id_and_file_id(self, telegram_bot):
+        update = {"update_id": 1, "message": {"chat": {"id": 555}, "voice": {"file_id": "AB123", "duration": 5}}}
+        assert telegram_bot.extract_voice(update) == ("555", "AB123")
+
+    def test_none_when_no_voice_key(self, telegram_bot):
+        update = {"update_id": 1, "message": {"chat": {"id": 555}, "text": "hi"}}
+        assert telegram_bot.extract_voice(update) is None
+
+    def test_none_when_no_chat_id(self, telegram_bot):
+        update = {"update_id": 1, "message": {"voice": {"file_id": "AB123"}}}
+        assert telegram_bot.extract_voice(update) is None
+
+    def test_none_when_voice_missing_file_id(self, telegram_bot):
+        update = {"update_id": 1, "message": {"chat": {"id": 555}, "voice": {"duration": 5}}}
+        assert telegram_bot.extract_voice(update) is None
+
+    def test_none_when_no_message_key(self, telegram_bot):
+        assert telegram_bot.extract_voice({"update_id": 1}) is None
+
+
+class TestGetFilePath:
+    def test_returns_file_path_on_success(self, telegram_bot, monkeypatch):
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self):
+                return json.dumps({"ok": True, "result": {"file_path": "voice/file_0.oga"}}).encode()
+
+        monkeypatch.setattr(telegram_bot.urllib.request, "urlopen", lambda url, timeout=15: FakeResponse())
+        result = telegram_bot.get_file_path("token", "AB123")
+        assert result == "voice/file_0.oga"
+
+    def test_raises_on_not_ok_response(self, telegram_bot, monkeypatch):
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self):
+                return json.dumps({"ok": False, "description": "file not found"}).encode()
+
+        monkeypatch.setattr(telegram_bot.urllib.request, "urlopen", lambda url, timeout=15: FakeResponse())
+        with pytest.raises(telegram_bot.TelegramError):
+            telegram_bot.get_file_path("token", "bad-id")
+
+    def test_raises_telegram_error_on_network_failure(self, telegram_bot, monkeypatch):
+        def raise_url_error(*a, **k):
+            raise urllib.error.URLError("connection refused")
+
+        monkeypatch.setattr(telegram_bot.urllib.request, "urlopen", raise_url_error)
+        with pytest.raises(telegram_bot.TelegramError):
+            telegram_bot.get_file_path("token", "AB123")
+
+
+class TestDownloadVoiceFile:
+    def test_calls_get_file_path_then_downloads(self, telegram_bot, monkeypatch, tmp_path):
+        monkeypatch.setattr(telegram_bot, "get_file_path", lambda token, file_id: "voice/file_0.oga")
+        downloaded = {}
+        monkeypatch.setattr(telegram_bot.urllib.request, "urlretrieve",
+                            lambda url, dest: downloaded.update(url=url, dest=dest))
+
+        dest = str(tmp_path / "out.ogg")
+        telegram_bot.download_voice_file("token", "AB123", dest)
+        assert downloaded["dest"] == dest
+        assert "voice/file_0.oga" in downloaded["url"]
+
+    def test_raises_telegram_error_on_download_failure(self, telegram_bot, monkeypatch, tmp_path):
+        monkeypatch.setattr(telegram_bot, "get_file_path", lambda token, file_id: "voice/file_0.oga")
+
+        def raise_url_error(*a, **k):
+            raise urllib.error.URLError("connection refused")
+
+        monkeypatch.setattr(telegram_bot.urllib.request, "urlretrieve", raise_url_error)
+        with pytest.raises(telegram_bot.TelegramError):
+            telegram_bot.download_voice_file("token", "AB123", str(tmp_path / "out.ogg"))
+
+
+class TestTranscribeVoiceMessage:
+    def test_downloads_transcribes_and_cleans_up(self, telegram_bot, monkeypatch):
+        downloaded_paths = []
+
+        def fake_download(token, file_id, dest_path):
+            downloaded_paths.append(dest_path)
+            Path(dest_path).write_bytes(b"fake audio")
+
+        monkeypatch.setattr(telegram_bot, "download_voice_file", fake_download)
+        monkeypatch.setattr(telegram_bot, "transcribe_audio", lambda path: "hello world")
+
+        result = telegram_bot._transcribe_voice_message("token", "AB123")
+        assert result == "hello world"
+        assert not Path(downloaded_paths[0]).exists()  # temp file cleaned up
+
+    def test_temp_file_cleaned_up_even_on_transcription_failure(self, telegram_bot, monkeypatch):
+        downloaded_paths = []
+
+        def fake_download(token, file_id, dest_path):
+            downloaded_paths.append(dest_path)
+            Path(dest_path).write_bytes(b"fake audio")
+
+        def broken_transcribe(path):
+            raise telegram_bot.TranscriptionError("model not installed")
+
+        monkeypatch.setattr(telegram_bot, "download_voice_file", fake_download)
+        monkeypatch.setattr(telegram_bot, "transcribe_audio", broken_transcribe)
+
+        with pytest.raises(telegram_bot.TranscriptionError):
+            telegram_bot._transcribe_voice_message("token", "AB123")
+        assert not Path(downloaded_paths[0]).exists()
+
+    def test_download_failure_propagates_and_cleans_up(self, telegram_bot, monkeypatch):
+        def broken_download(token, file_id, dest_path):
+            raise telegram_bot.TelegramError("download failed")
+
+        monkeypatch.setattr(telegram_bot, "download_voice_file", broken_download)
+        with pytest.raises(telegram_bot.TelegramError):
+            telegram_bot._transcribe_voice_message("token", "AB123")
+
+
 class TestExtractMessage:
     def test_extracts_chat_id_and_text(self, telegram_bot):
         update = {"update_id": 1, "message": {"chat": {"id": 555}, "text": "hello"}}
@@ -181,6 +298,74 @@ class TestRunBotLoop:
         telegram_bot.run_bot("token", "555", client=None, model="x", max_iterations=1)
         assert len(sent) == 1
         assert "LLM exploded" in sent[0]
+
+    def test_voice_message_transcribed_and_replied_with_heard_prefix(self, telegram_bot, monkeypatch):
+        updates = [{"update_id": 1, "message": {"chat": {"id": 555}, "voice": {"file_id": "AB123"}}}]
+        monkeypatch.setattr(telegram_bot, "get_updates", lambda *a, **k: updates)
+        monkeypatch.setattr(telegram_bot, "_transcribe_voice_message", lambda token, file_id: "how am I doing")
+        monkeypatch.setattr(telegram_bot, "generate_reply", lambda client, model, text: f"Reply to: {text}")
+        sent = []
+        monkeypatch.setattr(telegram_bot, "send_message", lambda token, chat_id, text: sent.append((chat_id, text)))
+
+        telegram_bot.run_bot("token", "555", client=None, model="x", max_iterations=1)
+        assert len(sent) == 1
+        chat_id, reply = sent[0]
+        assert chat_id == "555"
+        assert "how am I doing" in reply  # the heard transcript
+        assert "Reply to: how am I doing" in reply  # the actual answer
+
+    def test_voice_message_from_unauthorized_chat_ignored(self, telegram_bot, monkeypatch):
+        updates = [{"update_id": 1, "message": {"chat": {"id": 999}, "voice": {"file_id": "AB123"}}}]
+        monkeypatch.setattr(telegram_bot, "get_updates", lambda *a, **k: updates)
+        sent = []
+        monkeypatch.setattr(telegram_bot, "send_message", lambda *a, **k: sent.append(a))
+        monkeypatch.setattr(telegram_bot, "_transcribe_voice_message",
+                            lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not be called")))
+
+        telegram_bot.run_bot("token", "555", client=None, model="x", max_iterations=1)
+        assert sent == []
+
+    def test_voice_transcription_failure_sends_clear_error(self, telegram_bot, monkeypatch):
+        updates = [{"update_id": 1, "message": {"chat": {"id": 555}, "voice": {"file_id": "AB123"}}}]
+        monkeypatch.setattr(telegram_bot, "get_updates", lambda *a, **k: updates)
+
+        def broken_transcribe(token, file_id):
+            raise telegram_bot.TranscriptionError("faster-whisper not installed")
+
+        monkeypatch.setattr(telegram_bot, "_transcribe_voice_message", broken_transcribe)
+        sent = []
+        monkeypatch.setattr(telegram_bot, "send_message", lambda token, chat_id, text: sent.append(text))
+        monkeypatch.setattr(telegram_bot, "generate_reply",
+                            lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not be called")))
+
+        telegram_bot.run_bot("token", "555", client=None, model="x", max_iterations=1)
+        assert len(sent) == 1
+        assert "faster-whisper not installed" in sent[0]
+
+    def test_empty_transcription_sends_no_speech_detected_message(self, telegram_bot, monkeypatch):
+        updates = [{"update_id": 1, "message": {"chat": {"id": 555}, "voice": {"file_id": "AB123"}}}]
+        monkeypatch.setattr(telegram_bot, "get_updates", lambda *a, **k: updates)
+        monkeypatch.setattr(telegram_bot, "_transcribe_voice_message", lambda token, file_id: "")
+        sent = []
+        monkeypatch.setattr(telegram_bot, "send_message", lambda token, chat_id, text: sent.append(text))
+        monkeypatch.setattr(telegram_bot, "generate_reply",
+                            lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not be called")))
+
+        telegram_bot.run_bot("token", "555", client=None, model="x", max_iterations=1)
+        assert len(sent) == 1
+        assert "couldn't make out any speech" in sent[0].lower()
+
+    def test_text_message_reply_has_no_heard_prefix(self, telegram_bot, monkeypatch):
+        """Sanity check that the voice-only 'Heard:' prefix never leaks
+        into normal text-message replies."""
+        updates = [{"update_id": 1, "message": {"chat": {"id": 555}, "text": "hi"}}]
+        monkeypatch.setattr(telegram_bot, "get_updates", lambda *a, **k: updates)
+        monkeypatch.setattr(telegram_bot, "generate_reply", lambda *a, **k: "plain reply")
+        sent = []
+        monkeypatch.setattr(telegram_bot, "send_message", lambda token, chat_id, text: sent.append(text))
+
+        telegram_bot.run_bot("token", "555", client=None, model="x", max_iterations=1)
+        assert sent == ["plain reply"]
 
     def test_get_updates_error_does_not_crash_the_loop(self, telegram_bot, monkeypatch):
         def broken_get_updates(*a, **k):

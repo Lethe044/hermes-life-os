@@ -18,6 +18,14 @@ Only messages from TELEGRAM_CHAT_ID are ever processed - anyone else
 who messages the bot (e.g. if your bot's username leaks) is silently
 ignored, so your personal health data stays private.
 
+Voice notes are supported too: send one and it's downloaded and
+transcribed locally via voice_transcribe.py (a free Whisper model, no
+cloud API) before being processed exactly like a typed message. The
+reply is prefixed with what Hermes heard, so you can catch a bad
+transcription. Requires `pip install faster-whisper` (or
+`pip install "hermes-life-os[voice]"`) - without it, voice notes get a
+clear "couldn't process" reply instead of silently failing.
+
 Replies use run_life_os()'s reply_text field - the model's actual
 natural-language answer (plus any briefing content it delivered),
 extracted directly rather than parsing the rendered terminal output.
@@ -43,6 +51,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -53,6 +62,7 @@ from typing import Any, Dict, List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import storage
+from voice_transcribe import transcribe_audio, TranscriptionError
 
 TELEGRAM_API = "https://api.telegram.org"
 TELEGRAM_MAX_MESSAGE_LENGTH = 4096
@@ -150,7 +160,8 @@ def send_message(bot_token: str, chat_id: str, text: str) -> None:
 def extract_message(update: Dict[str, Any]) -> Optional[Tuple[str, str]]:
     """Pulls (chat_id, text) out of one Telegram update dict, or None if
     it isn't a plain text message (photos, stickers, edits, etc. are
-    intentionally ignored - text-only for now)."""
+    intentionally ignored). Voice messages are handled separately by
+    extract_voice() - see run_bot()."""
     message = update.get("message")
     if not isinstance(message, dict):
         return None
@@ -160,6 +171,50 @@ def extract_message(update: Dict[str, Any]) -> Optional[Tuple[str, str]]:
     if chat_id is None or not text:
         return None
     return str(chat_id), text
+
+
+def extract_voice(update: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    """Pulls (chat_id, file_id) out of one Telegram update dict if it's
+    a voice message, else None."""
+    message = update.get("message")
+    if not isinstance(message, dict):
+        return None
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
+    voice = message.get("voice")
+    if chat_id is None or not isinstance(voice, dict):
+        return None
+    file_id = voice.get("file_id")
+    if not file_id:
+        return None
+    return str(chat_id), file_id
+
+
+def get_file_path(bot_token: str, file_id: str) -> str:
+    """Resolves a Telegram file_id to the path used to actually
+    download it (a separate API call - Telegram doesn't hand you a
+    direct download URL up front)."""
+    url = f"{TELEGRAM_API}/bot{bot_token}/getFile?file_id={file_id}"
+    try:
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.URLError as e:
+        raise TelegramError(f"getFile failed: {e}") from e
+    if not body.get("ok"):
+        raise TelegramError(f"getFile returned an error: {body}")
+    return body["result"]["file_path"]
+
+
+def download_voice_file(bot_token: str, file_id: str, dest_path: str) -> None:
+    """Downloads a voice note to `dest_path` (Telegram voice notes are
+    .ogg/Opus - the caller should use a matching suffix, e.g. via
+    tempfile.NamedTemporaryFile(suffix='.ogg'))."""
+    file_path = get_file_path(bot_token, file_id)
+    url = f"{TELEGRAM_API}/file/bot{bot_token}/{file_path}"
+    try:
+        urllib.request.urlretrieve(url, dest_path)
+    except urllib.error.URLError as e:
+        raise TelegramError(f"Voice file download failed: {e}") from e
 
 
 def is_authorized(chat_id: str, allowed_chat_id: str) -> bool:
@@ -183,6 +238,24 @@ def generate_reply(client, model: str, user_text: str) -> str:
         "I processed that, but didn't have a specific reply to send back - "
         "try asking again or rephrasing."
     )
+
+
+def _transcribe_voice_message(bot_token: str, file_id: str) -> str:
+    """Downloads a Telegram voice note and transcribes it locally via
+    voice_transcribe.py (faster-whisper). Raises TelegramError (download
+    failed) or TranscriptionError (faster-whisper missing/failed) - the
+    caller decides how to surface that to the user. The temp file is
+    always cleaned up, even on failure."""
+    with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        download_voice_file(bot_token, file_id, tmp_path)
+        return transcribe_audio(tmp_path)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 def run_bot(bot_token: str, allowed_chat_id: str, client, model: str,
@@ -213,17 +286,47 @@ def run_bot(bot_token: str, allowed_chat_id: str, client, model: str,
 
         for update in updates:
             offset = update["update_id"] + 1
+
             parsed = extract_message(update)
-            if parsed is None:
-                continue
-            chat_id, text = parsed
-            if not is_authorized(chat_id, allowed_chat_id):
-                continue  # silently ignore anyone who isn't you
+            is_voice = False
+
+            if parsed is not None:
+                chat_id, text = parsed
+                if not is_authorized(chat_id, allowed_chat_id):
+                    continue  # silently ignore anyone who isn't you
+            else:
+                voice = extract_voice(update)
+                if voice is None:
+                    continue  # not a text or voice message - ignore
+                chat_id, file_id = voice
+                if not is_authorized(chat_id, allowed_chat_id):
+                    continue
+
+                try:
+                    text = _transcribe_voice_message(bot_token, file_id)
+                except (TelegramError, TranscriptionError) as e:
+                    try:
+                        send_message(bot_token, chat_id, f"Couldn't process that voice note: {e}")
+                    except TelegramError:
+                        pass
+                    continue
+
+                if not text:
+                    try:
+                        send_message(bot_token, chat_id,
+                                     "I couldn't make out any speech in that voice note.")
+                    except TelegramError:
+                        pass
+                    continue
+                is_voice = True
 
             try:
                 reply = generate_reply(client, model, text)
             except Exception as e:
                 reply = f"Something went wrong processing that: {e}"
+
+            if is_voice:
+                reply = f'\U0001F3A4 Heard: "{text}"\n\n{reply}'
 
             try:
                 send_message(bot_token, chat_id, reply)
