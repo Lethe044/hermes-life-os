@@ -1,7 +1,12 @@
-"""Tests for demo/voice_transcribe.py. faster-whisper isn't installed
-in this environment, so the 'not installed' error path is exercised
-for real; the actual transcription/segment-joining logic is tested
-against a mocked model object."""
+"""Tests for demo/voice_transcribe.py. The 'package not installed'
+error path is forced deterministically via sys.modules (setting
+'faster_whisper' to None makes Python raise ImportError for it) rather
+than relying on the package actually being absent from the test
+environment - CI installs the [all] extra, which includes
+faster-whisper, so relying on ambient absence is not reliable there.
+The actual transcription/segment-joining logic is tested against a
+mocked model object, independent of whether the real package or a
+network connection is available."""
 
 from __future__ import annotations
 
@@ -26,23 +31,26 @@ def voice_transcribe():
 
 
 class TestGetModelNotInstalled:
-    def test_raises_clear_error_when_package_missing(self, voice_transcribe):
-        # faster-whisper is genuinely not installed in this test environment
+    def test_raises_clear_error_when_package_missing(self, voice_transcribe, monkeypatch):
+        monkeypatch.setitem(sys.modules, "faster_whisper", None)
         with pytest.raises(voice_transcribe.TranscriptionError, match="faster-whisper"):
             voice_transcribe._get_model("base")
 
-    def test_transcribe_audio_raises_same_error(self, voice_transcribe):
+    def test_transcribe_audio_raises_same_error(self, voice_transcribe, monkeypatch):
+        monkeypatch.setitem(sys.modules, "faster_whisper", None)
         with pytest.raises(voice_transcribe.TranscriptionError, match="faster-whisper"):
             voice_transcribe.transcribe_audio("/tmp/fake.ogg")
 
 
 class TestModelSizeResolution:
     def test_uses_env_var_when_no_explicit_size(self, voice_transcribe, monkeypatch):
+        monkeypatch.setitem(sys.modules, "faster_whisper", None)
         monkeypatch.setenv("WHISPER_MODEL", "small")
         with pytest.raises(voice_transcribe.TranscriptionError):
             voice_transcribe._get_model(None)
 
     def test_defaults_to_base_without_env_var(self, voice_transcribe, monkeypatch):
+        monkeypatch.setitem(sys.modules, "faster_whisper", None)
         monkeypatch.delenv("WHISPER_MODEL", raising=False)
         with pytest.raises(voice_transcribe.TranscriptionError):
             voice_transcribe._get_model(None)
