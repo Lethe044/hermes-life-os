@@ -54,6 +54,7 @@ hermes-life-os-calendar = "hermes_life_os.calendar_import:main"
 hermes-life-os-telegram = "hermes_life_os.telegram_bot:main"
 hermes-life-os-oura = "hermes_life_os.oura_import:main"
 hermes-life-os-weekly-email = "hermes_life_os.weekly_email:main"
+hermes-life-os-backup = "hermes_life_os.backup:main"
 
 [tool.setuptools]
 # The package's real source lives in demo/ (kept as-is so existing docs,

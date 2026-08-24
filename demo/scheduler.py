@@ -43,6 +43,7 @@ DEFAULT_SCHEDULE_DEF = [
     ("18:00", "evening", None),
     ("08:00", "weekly", ["Monday"]),
     ("20:00", "nudge_check", None),
+    ("20:30", "backup", None),
 ]
 
 

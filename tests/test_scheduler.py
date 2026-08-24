@@ -19,14 +19,19 @@ class TestScheduleEntry:
 
 
 class TestDefaultSchedule:
-    def test_has_five_entries(self):
+    def test_has_six_entries(self):
         sched = default_schedule()
-        assert len(sched) == 5
+        assert len(sched) == 6
 
     def test_modes_match_daily_rhythm(self):
         sched = default_schedule()
         modes = {e.mode for e in sched}
-        assert modes == {"morning", "checkin", "evening", "weekly", "nudge_check"}
+        assert modes == {"morning", "checkin", "evening", "weekly", "nudge_check", "backup"}
+
+    def test_backup_is_after_nudge_check(self):
+        sched = default_schedule()
+        backup = next(e for e in sched if e.mode == "backup")
+        assert backup.time_str == "20:30"
 
     def test_weekly_is_monday_only(self):
         sched = default_schedule()

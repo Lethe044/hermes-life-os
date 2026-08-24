@@ -11,6 +11,7 @@ implementing the "Daily Rhythm" cron table from skills/life-os/SKILL.md:
     18:00           evening reflection
     Monday 08:00    weekly review
     20:00           proactive nudge check (LLM-free, silent if nothing stands out)
+    20:30           automatic backup (LLM-free, silent on success)
 
 Usage:
     Set one provider's key (or run a local Ollama server - no key needed):
@@ -53,6 +54,18 @@ def make_runner(client, model: str):
             # notable", which run_scheduler() treats as "don't notify"
             nudges = generate_nudges()
             return "\n".join(nudges) if nudges else ""
+
+        if mode == "backup":
+            # deterministic, no LLM call - silent on success (empty
+            # string means "don't notify"), only speaks up on failure
+            # so a broken backup can't go unnoticed indefinitely.
+            from backup import run_backup
+
+            try:
+                out_path = run_backup()
+                return "" if out_path else "Backup failed: no path returned."
+            except Exception as exc:  # noqa: BLE001 - surface any failure via notifier
+                return f"Backup failed: {exc}"
 
         seed_demo_memory()
         scenario = DEMO_SCENARIOS.get(mode)
