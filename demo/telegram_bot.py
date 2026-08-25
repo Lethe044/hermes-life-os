@@ -26,6 +26,15 @@ transcription. Requires `pip install faster-whisper` (or
 `pip install "hermes-life-os[voice]"`) - without it, voice notes get a
 clear "couldn't process" reply instead of silently failing.
 
+Photos are supported too: send a picture of a meal and Hermes uses a
+vision-capable LLM to identify what's in it and log it automatically
+(no separate transcription step - the image goes straight to the
+model). This needs a vision-capable model: OpenAI/Anthropic's default
+models already support vision; on Ollama you must pull a vision model
+yourself (e.g. `ollama pull llava`) and set it explicitly
+(`set HERMES_MODEL=llava` or `--model llava`), since Ollama's default
+text-only models (like llama3.1) will simply ignore the image.
+
 Replies use run_life_os()'s reply_text field - the model's actual
 natural-language answer (plus any briefing content it delivered),
 extracted directly rather than parsing the rendered terminal output.
@@ -46,6 +55,7 @@ transient block doesn't make things worse.
 from __future__ import annotations
 
 import argparse
+import base64
 import io
 import json
 import os
@@ -190,6 +200,26 @@ def extract_voice(update: Dict[str, Any]) -> Optional[Tuple[str, str]]:
     return str(chat_id), file_id
 
 
+def extract_photo(update: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    """Pulls (chat_id, file_id) out of one Telegram update dict if it's
+    a photo message, else None. Telegram sends each photo as multiple
+    sizes in a `photo` list (smallest to largest) - this picks the
+    largest for the best chance of the vision model reading it well."""
+    message = update.get("message")
+    if not isinstance(message, dict):
+        return None
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
+    sizes = message.get("photo")
+    if chat_id is None or not isinstance(sizes, list) or not sizes:
+        return None
+    largest = max(sizes, key=lambda s: s.get("file_size", 0) or 0)
+    file_id = largest.get("file_id")
+    if not file_id:
+        return None
+    return str(chat_id), file_id
+
+
 def get_file_path(bot_token: str, file_id: str) -> str:
     """Resolves a Telegram file_id to the path used to actually
     download it (a separate API call - Telegram doesn't hand you a
@@ -217,23 +247,71 @@ def download_voice_file(bot_token: str, file_id: str, dest_path: str) -> None:
         raise TelegramError(f"Voice file download failed: {e}") from e
 
 
+def download_telegram_file(bot_token: str, file_id: str, dest_path: str) -> None:
+    """Downloads any Telegram file (photos, voice notes, etc.) to
+    `dest_path` - the general-purpose version of download_voice_file()."""
+    file_path = get_file_path(bot_token, file_id)
+    url = f"{TELEGRAM_API}/file/bot{bot_token}/{file_path}"
+    try:
+        urllib.request.urlretrieve(url, dest_path)
+    except urllib.error.URLError as e:
+        raise TelegramError(f"File download failed: {e}") from e
+
+
+_IMAGE_MEDIA_TYPES = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif",
+}
+
+
+def _download_photo_as_data_uri(bot_token: str, file_id: str) -> str:
+    """Downloads a Telegram photo and returns it as a base64 data URI
+    (e.g. "data:image/jpeg;base64,..."), ready to hand to
+    run_life_os(image_data_uri=...). The temp file is always cleaned
+    up, even on failure."""
+    file_path = get_file_path(bot_token, file_id)
+    suffix = Path(file_path).suffix.lower() or ".jpg"
+    media_type = _IMAGE_MEDIA_TYPES.get(suffix, "image/jpeg")
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        download_telegram_file(bot_token, file_id, tmp_path)
+        raw = Path(tmp_path).read_bytes()
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+    encoded = base64.b64encode(raw).decode("ascii")
+    return f"data:{media_type};base64,{encoded}"
+
+
 def is_authorized(chat_id: str, allowed_chat_id: str) -> bool:
     return str(chat_id) == str(allowed_chat_id)
 
 
-def generate_reply(client, model: str, user_text: str) -> str:
+def generate_reply(client, model: str, user_text: str, image_data_uri: str = "") -> str:
     """Runs one message through the same tool-calling pipeline as
     --mode chat (run_life_os), returning its reply_text field - the
     model's actual natural-language answer, plus any briefing content
     it delivered along the way. The terminal this process runs in still
     shows the normal rich-formatted output (panels, tables, tool-call
     trace) exactly as --mode chat does; only the *returned* text (what
-    gets sent to Telegram) is plain and reply-focused."""
+    gets sent to Telegram) is plain and reply-focused.
+
+    Pass image_data_uri (a base64 data URI) to attach a photo - used
+    for photo-based meal logging. Requires a vision-capable model; see
+    this module's docstring."""
     from demo_life_os import run_life_os, seed_demo_memory
 
     seed_demo_memory()
-    scenario = {"title": "Telegram", "prompt": user_text}
-    result = run_life_os(scenario, client, model, max_turns=10, user_message=user_text)
+    prompt = user_text or (
+        "Here's a photo of my meal - please identify what I ate and log it."
+    )
+    scenario = {"title": "Telegram", "prompt": prompt}
+    result = run_life_os(scenario, client, model, max_turns=10,
+                          user_message=prompt, image_data_uri=image_data_uri)
     return result.get("reply_text", "").strip() or (
         "I processed that, but didn't have a specific reply to send back - "
         "try asking again or rephrasing."
@@ -289,6 +367,8 @@ def run_bot(bot_token: str, allowed_chat_id: str, client, model: str,
 
             parsed = extract_message(update)
             is_voice = False
+            is_photo = False
+            image_data_uri = ""
 
             if parsed is not None:
                 chat_id, text = parsed
@@ -296,37 +376,61 @@ def run_bot(bot_token: str, allowed_chat_id: str, client, model: str,
                     continue  # silently ignore anyone who isn't you
             else:
                 voice = extract_voice(update)
-                if voice is None:
-                    continue  # not a text or voice message - ignore
-                chat_id, file_id = voice
-                if not is_authorized(chat_id, allowed_chat_id):
-                    continue
+                if voice is not None:
+                    chat_id, file_id = voice
+                    if not is_authorized(chat_id, allowed_chat_id):
+                        continue
 
-                try:
-                    text = _transcribe_voice_message(bot_token, file_id)
-                except (TelegramError, TranscriptionError) as e:
                     try:
-                        send_message(bot_token, chat_id, f"Couldn't process that voice note: {e}")
-                    except TelegramError:
-                        pass
-                    continue
+                        text = _transcribe_voice_message(bot_token, file_id)
+                    except (TelegramError, TranscriptionError) as e:
+                        try:
+                            send_message(bot_token, chat_id, f"Couldn't process that voice note: {e}")
+                        except TelegramError:
+                            pass
+                        continue
 
-                if not text:
+                    if not text:
+                        try:
+                            send_message(bot_token, chat_id,
+                                         "I couldn't make out any speech in that voice note.")
+                        except TelegramError:
+                            pass
+                        continue
+                    is_voice = True
+                else:
+                    photo = extract_photo(update)
+                    if photo is None:
+                        continue  # not a text, voice, or photo message - ignore
+                    chat_id, file_id = photo
+                    if not is_authorized(chat_id, allowed_chat_id):
+                        continue
+
                     try:
-                        send_message(bot_token, chat_id,
-                                     "I couldn't make out any speech in that voice note.")
-                    except TelegramError:
-                        pass
-                    continue
-                is_voice = True
+                        image_data_uri = _download_photo_as_data_uri(bot_token, file_id)
+                    except TelegramError as e:
+                        try:
+                            send_message(bot_token, chat_id, f"Couldn't process that photo: {e}")
+                        except TelegramError:
+                            pass
+                        continue
+
+                    caption = update.get("message", {}).get("caption") or ""
+                    text = caption
+                    is_photo = True
 
             try:
-                reply = generate_reply(client, model, text)
+                if is_photo:
+                    reply = generate_reply(client, model, text, image_data_uri=image_data_uri)
+                else:
+                    reply = generate_reply(client, model, text)
             except Exception as e:
                 reply = f"Something went wrong processing that: {e}"
 
             if is_voice:
                 reply = f'\U0001F3A4 Heard: "{text}"\n\n{reply}'
+            elif is_photo:
+                reply = f'\U0001F4F7 {reply}'
 
             try:
                 send_message(bot_token, chat_id, reply)

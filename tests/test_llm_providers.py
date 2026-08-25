@@ -153,6 +153,58 @@ class TestMessageConversion:
 
 
 # ---------------------------------------------------------------------------
+# OpenAI vision content-array -> Anthropic image block (photo meal logging)
+# ---------------------------------------------------------------------------
+
+class TestUserContentConversion:
+    def test_plain_string_passes_through(self):
+        assert lp._openai_user_content_to_anthropic("hello") == "hello"
+
+    def test_none_becomes_empty_string(self):
+        assert lp._openai_user_content_to_anthropic(None) == ""
+
+    def test_text_and_image_content_array_converted(self):
+        content = [
+            {"type": "text", "text": "What did I eat?"},
+            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,QUJD"}},
+        ]
+        blocks = lp._openai_user_content_to_anthropic(content)
+        assert blocks[0] == {"type": "text", "text": "What did I eat?"}
+        assert blocks[1] == {
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": "QUJD"},
+        }
+
+    def test_png_media_type_preserved(self):
+        content = [{"type": "image_url", "image_url": {"url": "data:image/png;base64,XYZ"}}]
+        blocks = lp._openai_user_content_to_anthropic(content)
+        assert blocks[0]["source"]["media_type"] == "image/png"
+
+    def test_non_data_uri_image_is_dropped_not_raised(self):
+        """A remote http(s) image URL can't be embedded inline for
+        Anthropic - drop it rather than sending a malformed block."""
+        content = [
+            {"type": "text", "text": "check this"},
+            {"type": "image_url", "image_url": {"url": "https://example.com/pic.jpg"}},
+        ]
+        blocks = lp._openai_user_content_to_anthropic(content)
+        assert blocks == [{"type": "text", "text": "check this"}]
+
+    def test_full_pipeline_user_message_with_image(self):
+        messages = [
+            {"role": "user", "content": [
+                {"type": "text", "text": "log this meal"},
+                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,QUJD"}},
+            ]},
+        ]
+        _, out = lp._openai_messages_to_anthropic(messages)
+        assert out[0]["role"] == "user"
+        assert out[0]["content"][0] == {"type": "text", "text": "log this meal"}
+        assert out[0]["content"][1]["type"] == "image"
+        assert out[0]["content"][1]["source"]["data"] == "QUJD"
+
+
+# ---------------------------------------------------------------------------
 # Anthropic response -> OpenAI-shaped message (the reverse direction)
 # ---------------------------------------------------------------------------
 

@@ -202,7 +202,7 @@ class TestGenerateReply:
     def test_calls_run_life_os_and_returns_reply_text(self, telegram_bot, monkeypatch):
         import demo_life_os
 
-        def fake_run_life_os(scenario, client, model, max_turns=10, user_message=""):
+        def fake_run_life_os(scenario, client, model, max_turns=10, user_message="", image_data_uri=""):
             return {"reply_text": "Hermes says hi"}
 
         monkeypatch.setattr(demo_life_os, "run_life_os", fake_run_life_os)
@@ -226,6 +226,131 @@ class TestGenerateReply:
 
         result = telegram_bot.generate_reply(client=None, model="x", user_text="hello")
         assert "didn't have a specific reply" in result
+
+
+class TestExtractPhoto:
+    def test_extracts_largest_photo_by_file_size(self, telegram_bot):
+        update = {"update_id": 1, "message": {"chat": {"id": 555}, "photo": [
+            {"file_id": "small", "file_size": 1000},
+            {"file_id": "large", "file_size": 50000},
+            {"file_id": "medium", "file_size": 10000},
+        ]}}
+        assert telegram_bot.extract_photo(update) == ("555", "large")
+
+    def test_handles_missing_file_size(self, telegram_bot):
+        update = {"update_id": 1, "message": {"chat": {"id": 555}, "photo": [
+            {"file_id": "only"},
+        ]}}
+        assert telegram_bot.extract_photo(update) == ("555", "only")
+
+    def test_none_when_no_photo_key(self, telegram_bot):
+        update = {"update_id": 1, "message": {"chat": {"id": 555}, "text": "hi"}}
+        assert telegram_bot.extract_photo(update) is None
+
+    def test_none_when_empty_photo_list(self, telegram_bot):
+        update = {"update_id": 1, "message": {"chat": {"id": 555}, "photo": []}}
+        assert telegram_bot.extract_photo(update) is None
+
+    def test_none_when_no_chat_id(self, telegram_bot):
+        update = {"update_id": 1, "message": {"photo": [{"file_id": "x", "file_size": 1}]}}
+        assert telegram_bot.extract_photo(update) is None
+
+    def test_none_when_no_message_key(self, telegram_bot):
+        assert telegram_bot.extract_photo({"update_id": 1}) is None
+
+
+class TestDownloadPhotoAsDataUri:
+    def test_returns_valid_base64_data_uri(self, telegram_bot, monkeypatch):
+        monkeypatch.setattr(telegram_bot, "get_file_path", lambda token, file_id: "photos/file_0.jpg")
+
+        def fake_download(token, file_id, dest_path):
+            Path(dest_path).write_bytes(b"\xff\xd8\xff\xe0fakejpegdata")
+
+        monkeypatch.setattr(telegram_bot, "download_telegram_file", fake_download)
+
+        result = telegram_bot._download_photo_as_data_uri("token", "AB123")
+        assert result.startswith("data:image/jpeg;base64,")
+
+        import base64
+        b64_part = result.split(",", 1)[1]
+        assert base64.b64decode(b64_part) == b"\xff\xd8\xff\xe0fakejpegdata"
+
+    def test_infers_media_type_from_extension(self, telegram_bot, monkeypatch):
+        monkeypatch.setattr(telegram_bot, "get_file_path", lambda token, file_id: "photos/file_0.png")
+        monkeypatch.setattr(telegram_bot, "download_telegram_file",
+                            lambda token, file_id, dest_path: Path(dest_path).write_bytes(b"pngdata"))
+
+        result = telegram_bot._download_photo_as_data_uri("token", "AB123")
+        assert result.startswith("data:image/png;base64,")
+
+    def test_temp_file_cleaned_up(self, telegram_bot, monkeypatch):
+        monkeypatch.setattr(telegram_bot, "get_file_path", lambda token, file_id: "photos/file_0.jpg")
+        captured_paths = []
+
+        def fake_download(token, file_id, dest_path):
+            captured_paths.append(dest_path)
+            Path(dest_path).write_bytes(b"data")
+
+        monkeypatch.setattr(telegram_bot, "download_telegram_file", fake_download)
+        telegram_bot._download_photo_as_data_uri("token", "AB123")
+        assert not Path(captured_paths[0]).exists()
+
+    def test_temp_file_cleaned_up_even_on_download_failure(self, telegram_bot, monkeypatch):
+        monkeypatch.setattr(telegram_bot, "get_file_path", lambda token, file_id: "photos/file_0.jpg")
+
+        def broken_download(token, file_id, dest_path):
+            raise telegram_bot.TelegramError("download failed")
+
+        monkeypatch.setattr(telegram_bot, "download_telegram_file", broken_download)
+        with pytest.raises(telegram_bot.TelegramError):
+            telegram_bot._download_photo_as_data_uri("token", "AB123")
+
+
+class TestGenerateReplyWithImage:
+    def test_passes_image_data_uri_through_to_run_life_os(self, telegram_bot, monkeypatch):
+        import demo_life_os
+        captured = {}
+
+        def fake_run_life_os(scenario, client, model, max_turns=10, user_message="", image_data_uri=""):
+            captured["image_data_uri"] = image_data_uri
+            return {"reply_text": "Logged: chicken salad"}
+
+        monkeypatch.setattr(demo_life_os, "run_life_os", fake_run_life_os)
+        monkeypatch.setattr(demo_life_os, "seed_demo_memory", lambda: None)
+
+        result = telegram_bot.generate_reply(client=None, model="x", user_text="",
+                                              image_data_uri="data:image/jpeg;base64,abc")
+        assert result == "Logged: chicken salad"
+        assert captured["image_data_uri"] == "data:image/jpeg;base64,abc"
+
+    def test_empty_caption_uses_default_prompt(self, telegram_bot, monkeypatch):
+        import demo_life_os
+        captured = {}
+
+        def fake_run_life_os(scenario, client, model, max_turns=10, user_message="", image_data_uri=""):
+            captured["prompt"] = user_message
+            return {"reply_text": "ok"}
+
+        monkeypatch.setattr(demo_life_os, "run_life_os", fake_run_life_os)
+        monkeypatch.setattr(demo_life_os, "seed_demo_memory", lambda: None)
+
+        telegram_bot.generate_reply(client=None, model="x", user_text="", image_data_uri="data:...")
+        assert "photo" in captured["prompt"].lower()
+
+    def test_caption_used_as_prompt_when_present(self, telegram_bot, monkeypatch):
+        import demo_life_os
+        captured = {}
+
+        def fake_run_life_os(scenario, client, model, max_turns=10, user_message="", image_data_uri=""):
+            captured["prompt"] = user_message
+            return {"reply_text": "ok"}
+
+        monkeypatch.setattr(demo_life_os, "run_life_os", fake_run_life_os)
+        monkeypatch.setattr(demo_life_os, "seed_demo_memory", lambda: None)
+
+        telegram_bot.generate_reply(client=None, model="x", user_text="that's a big burrito",
+                                     image_data_uri="data:...")
+        assert captured["prompt"] == "that's a big burrito"
 
 
 class TestSendMessage:
@@ -366,6 +491,78 @@ class TestRunBotLoop:
 
         telegram_bot.run_bot("token", "555", client=None, model="x", max_iterations=1)
         assert sent == ["plain reply"]
+
+    def test_photo_message_downloaded_and_replied_with_camera_prefix(self, telegram_bot, monkeypatch):
+        updates = [{"update_id": 1, "message": {"chat": {"id": 555},
+                    "photo": [{"file_id": "AB123", "file_size": 5000}]}}]
+        monkeypatch.setattr(telegram_bot, "get_updates", lambda *a, **k: updates)
+        monkeypatch.setattr(telegram_bot, "_download_photo_as_data_uri",
+                            lambda token, file_id: "data:image/jpeg;base64,fake")
+        captured = {}
+
+        def fake_generate_reply(client, model, text, image_data_uri=""):
+            captured["text"] = text
+            captured["image_data_uri"] = image_data_uri
+            return "Logged: grilled chicken and rice"
+
+        monkeypatch.setattr(telegram_bot, "generate_reply", fake_generate_reply)
+        sent = []
+        monkeypatch.setattr(telegram_bot, "send_message", lambda token, chat_id, text: sent.append((chat_id, text)))
+
+        telegram_bot.run_bot("token", "555", client=None, model="x", max_iterations=1)
+        assert len(sent) == 1
+        chat_id, reply = sent[0]
+        assert chat_id == "555"
+        assert "Logged: grilled chicken and rice" in reply
+        assert captured["image_data_uri"] == "data:image/jpeg;base64,fake"
+
+    def test_photo_with_caption_passes_caption_as_text(self, telegram_bot, monkeypatch):
+        updates = [{"update_id": 1, "message": {"chat": {"id": 555}, "caption": "my lunch",
+                    "photo": [{"file_id": "AB123", "file_size": 5000}]}}]
+        monkeypatch.setattr(telegram_bot, "get_updates", lambda *a, **k: updates)
+        monkeypatch.setattr(telegram_bot, "_download_photo_as_data_uri",
+                            lambda token, file_id: "data:image/jpeg;base64,fake")
+        captured = {}
+
+        def fake_generate_reply(client, model, text, image_data_uri=""):
+            captured["text"] = text
+            return "ok"
+
+        monkeypatch.setattr(telegram_bot, "generate_reply", fake_generate_reply)
+        monkeypatch.setattr(telegram_bot, "send_message", lambda *a, **k: None)
+
+        telegram_bot.run_bot("token", "555", client=None, model="x", max_iterations=1)
+        assert captured["text"] == "my lunch"
+
+    def test_photo_from_unauthorized_chat_ignored(self, telegram_bot, monkeypatch):
+        updates = [{"update_id": 1, "message": {"chat": {"id": 999},
+                    "photo": [{"file_id": "AB123", "file_size": 5000}]}}]
+        monkeypatch.setattr(telegram_bot, "get_updates", lambda *a, **k: updates)
+        sent = []
+        monkeypatch.setattr(telegram_bot, "send_message", lambda *a, **k: sent.append(a))
+        monkeypatch.setattr(telegram_bot, "_download_photo_as_data_uri",
+                            lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not be called")))
+
+        telegram_bot.run_bot("token", "555", client=None, model="x", max_iterations=1)
+        assert sent == []
+
+    def test_photo_download_failure_sends_clear_error(self, telegram_bot, monkeypatch):
+        updates = [{"update_id": 1, "message": {"chat": {"id": 555},
+                    "photo": [{"file_id": "AB123", "file_size": 5000}]}}]
+        monkeypatch.setattr(telegram_bot, "get_updates", lambda *a, **k: updates)
+
+        def broken_download(token, file_id):
+            raise telegram_bot.TelegramError("network down")
+
+        monkeypatch.setattr(telegram_bot, "_download_photo_as_data_uri", broken_download)
+        sent = []
+        monkeypatch.setattr(telegram_bot, "send_message", lambda token, chat_id, text: sent.append(text))
+        monkeypatch.setattr(telegram_bot, "generate_reply",
+                            lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not be called")))
+
+        telegram_bot.run_bot("token", "555", client=None, model="x", max_iterations=1)
+        assert len(sent) == 1
+        assert "network down" in sent[0]
 
     def test_get_updates_error_does_not_crash_the_loop(self, telegram_bot, monkeypatch):
         def broken_get_updates(*a, **k):

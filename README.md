@@ -222,6 +222,20 @@ the passphrase, that data is unrecoverable by design. Requires
 `pip install "hermes-life-os[encryption]"` (or `pip install cryptography`
 if running from source).
 
+**Changing your passphrase:** use `hermes-life-os-rekey` rather than
+just setting a new `LIFE_OS_ENCRYPTION_KEY` - the latter would leave
+your existing files encrypted under the *old* key, unreadable. The
+re-key tool decrypts everything with the old key, rotates the salt, and
+re-encrypts everything with the new one in one step (it also works to
+enable encryption for the first time, or disable it entirely):
+
+```bash
+hermes-life-os-backup                                    # back up first
+hermes-life-os-rekey --old-key "old pass" --new-key "new pass"
+hermes-life-os-rekey --new-key "new pass"                # enable for the first time
+hermes-life-os-rekey --disable                           # decrypt everything back to plaintext
+```
+
 ## Project Structure
 
 ```mermaid
@@ -437,6 +451,27 @@ on CPU-only machines (several minutes per reply). Any cloud provider
 (Anthropic/OpenAI/OpenRouter) is both faster and more reliable if you
 have API access.
 
+## Discord Bot
+
+```bash
+pip install "hermes-life-os[discord]"   # or: pip install discord.py
+set DISCORD_BOT_TOKEN=...      # from the Discord Developer Portal
+set DISCORD_USER_ID=...        # your own numeric Discord user id
+hermes-life-os-discord
+```
+
+The Discord counterpart to the Telegram bot above - same idea (talk to
+Hermes, log meals from a photo, send a voice message), different
+platform. Uses discord.py's own event-driven client under the hood
+(rather than the Telegram bot's hand-rolled long-polling loop), so it
+works in a DM or in any server channel the bot can see. Only messages
+from `DISCORD_USER_ID` are ever processed - everyone else is silently
+ignored. See `demo/discord_bot.py`'s docstring for the exact setup
+steps (creating a bot application, enabling the Message Content
+intent, and finding your user id). The same vision-model requirement
+for photo meal logging applies here - see the Photo Meal Logging
+section below.
+
 ## Semantic Memory Search
 
 `recall` searches by exact keyword; ask Hermes something like "have I
@@ -503,6 +538,29 @@ speed vs. accuracy - `tiny` is fastest, `small`/`medium` are more
 accurate but slower on CPU-only machines. Without `faster-whisper`
 installed, voice notes get a clear "couldn't process" reply instead of
 silently failing.
+
+## Photo Meal Logging (Telegram &amp; Discord)
+
+Send either bot a photo of your meal (with an optional caption) and a
+vision-capable LLM identifies what's in it and logs it - no separate
+step needed. OpenAI's and Anthropic's default models already support
+vision. On Ollama, pull a vision-capable model yourself
+(`ollama pull llava`) and point Hermes at it explicitly
+(`set HERMES_MODEL=llava` or `--model llava`) - Ollama's default
+text-only models (like `llama3.1`) will simply ignore the image.
+
+## Automatic Backups
+
+Hermes takes a timestamped local backup of your data every day at
+20:30 (right after the evening nudge check), keeping the 7 most recent
+by default and pruning older ones. Backups live alongside your other
+data (`<profile dir>/backups/`) and are plain JSON - the same format
+`hermes-life-os-export --json` produces. Run it manually anytime:
+
+```bash
+hermes-life-os-backup            # keep the default 7
+hermes-life-os-backup --keep 14  # keep the 14 most recent
+```
 
 ## What's New
 

@@ -168,6 +168,52 @@ def _openai_tools_to_anthropic(tools: Optional[List[Dict[str, Any]]]) -> List[Di
     return out
 
 
+def _openai_user_content_to_anthropic(content: Any) -> Any:
+    """
+    Convert an OpenAI-style user message `content` field to Anthropic's
+    content-block format.
+
+    OpenAI/Ollama/OpenRouter accept a plain string, or (for vision) a
+    list of content parts:
+        [{"type": "text", "text": "..."},
+         {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,XXXX"}}]
+
+    Anthropic's Messages API wants the same idea but shaped differently:
+        [{"type": "text", "text": "..."},
+         {"type": "image", "source": {"type": "base64",
+                                       "media_type": "image/jpeg",
+                                       "data": "XXXX"}}]
+
+    Plain strings pass through unchanged (Anthropic accepts a bare
+    string for `content` too).
+    """
+    if isinstance(content, str) or content is None:
+        return content or ""
+
+    blocks: List[Dict[str, Any]] = []
+    for part in content:
+        part_type = part.get("type")
+        if part_type == "text":
+            blocks.append({"type": "text", "text": part.get("text", "")})
+        elif part_type == "image_url":
+            url = part.get("image_url", {}).get("url", "")
+            # Expected shape: "data:<media_type>;base64,<data>"
+            if url.startswith("data:") and ";base64," in url:
+                header, data = url.split(";base64,", 1)
+                media_type = header[len("data:"):] or "image/jpeg"
+            else:
+                # Not a data URI we can embed inline - drop rather than
+                # send Anthropic something it will reject outright.
+                continue
+            blocks.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": media_type, "data": data},
+            })
+        # Unknown part types are skipped rather than raising, so a
+        # provider-specific content part never breaks the Anthropic path.
+    return blocks
+
+
 def _openai_messages_to_anthropic(messages: List[Dict[str, Any]]):
     """
     Split an OpenAI-format message list into (system_text, anthropic_messages).
@@ -204,7 +250,7 @@ def _openai_messages_to_anthropic(messages: List[Dict[str, Any]]):
         flush_tool_results()
 
         if role == "user":
-            out.append({"role": "user", "content": m.get("content", "") or ""})
+            out.append({"role": "user", "content": _openai_user_content_to_anthropic(m.get("content"))})
 
         elif role == "assistant":
             blocks: List[Dict[str, Any]] = []

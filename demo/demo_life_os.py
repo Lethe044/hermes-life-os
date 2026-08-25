@@ -337,13 +337,29 @@ def _looks_like_raw_tool_call(text: str) -> bool:
 
 
 def run_life_os(scenario: Dict[str, Any], client, model: str = DEFAULT_MODEL,
-                max_turns: int = 25, user_message: str = "") -> Dict[str, Any]:
+                max_turns: int = 25, user_message: str = "",
+                image_data_uri: str = "") -> Dict[str, Any]:
 
     prompt = user_message if user_message else scenario["prompt"]
 
+    if image_data_uri:
+        # Vision content-array format (OpenAI-compatible; the Anthropic
+        # adapter in llm_providers.py converts this to Anthropic's own
+        # image block format transparently).
+        header, _, b64data = image_data_uri.partition(";base64,")
+        media_type = header[len("data:"):] if header.startswith("data:") else "image/jpeg"
+        first_content: Any = [
+            {"type": "text", "text": prompt or "What did I eat? Please log this meal."},
+            {"type": "image_url", "image_url": {
+                "url": f"data:{media_type};base64,{b64data}" if b64data else image_data_uri,
+            }},
+        ]
+    else:
+        first_content = prompt
+
     messages = [
         {"role": "system", "content": SYSTEM},
-        {"role": "user",   "content": prompt},
+        {"role": "user",   "content": first_content},
     ]
 
     turn = 0

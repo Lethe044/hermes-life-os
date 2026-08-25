@@ -36,7 +36,8 @@ anthropic = ["anthropic>=0.34.0"]
 dashboard = ["matplotlib>=3.7.0"]
 encryption = ["cryptography>=42.0.0"]
 voice = ["faster-whisper>=1.0.0"]
-all = ["anthropic>=0.34.0", "matplotlib>=3.7.0", "cryptography>=42.0.0", "faster-whisper>=1.0.0"]
+discord = ["discord.py>=2.3.0"]
+all = ["anthropic>=0.34.0", "matplotlib>=3.7.0", "cryptography>=42.0.0", "faster-whisper>=1.0.0", "discord.py>=2.3.0"]
 dev = ["pytest>=7.0.0"]
 
 [project.urls]
@@ -55,6 +56,8 @@ hermes-life-os-telegram = "hermes_life_os.telegram_bot:main"
 hermes-life-os-oura = "hermes_life_os.oura_import:main"
 hermes-life-os-weekly-email = "hermes_life_os.weekly_email:main"
 hermes-life-os-backup = "hermes_life_os.backup:main"
+hermes-life-os-discord = "hermes_life_os.discord_bot:main"
+hermes-life-os-rekey = "hermes_life_os.rekey:main"
 
 [tool.setuptools]
 # The package's real source lives in demo/ (kept as-is so existing docs,

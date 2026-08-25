@@ -114,5 +114,62 @@ class TestRunLifeOsReplyText:
         assert "reply_text" in result
 
 
+class TestRunLifeOsImageInput:
+    def test_image_data_uri_builds_vision_content_array(self, demo_life_os):
+        captured = {}
+
+        class CapturingClient:
+            def __init__(self):
+                self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+            def _create(self, model, messages, tools, tool_choice, max_tokens):
+                captured["messages"] = messages
+                return _text_response("Logged: chicken salad")
+
+        result = demo_life_os.run_life_os(
+            {"title": "Test", "prompt": ""}, CapturingClient(), "fake-model",
+            max_turns=5, user_message="what did I eat?",
+            image_data_uri="data:image/jpeg;base64,QUJD",
+        )
+        user_msg = captured["messages"][1]
+        assert user_msg["role"] == "user"
+        assert isinstance(user_msg["content"], list)
+        text_part = next(p for p in user_msg["content"] if p["type"] == "text")
+        image_part = next(p for p in user_msg["content"] if p["type"] == "image_url")
+        assert text_part["text"] == "what did I eat?"
+        assert image_part["image_url"]["url"] == "data:image/jpeg;base64,QUJD"
+        assert result["reply_text"] == "Logged: chicken salad"
+
+    def test_empty_prompt_with_image_uses_default_text(self, demo_life_os):
+        captured = {}
+
+        class CapturingClient:
+            def __init__(self):
+                self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+            def _create(self, model, messages, tools, tool_choice, max_tokens):
+                captured["messages"] = messages
+                return _text_response("ok")
+
+        demo_life_os.run_life_os(
+            {"title": "Test", "prompt": ""}, CapturingClient(), "fake-model",
+            max_turns=5, user_message="",
+            image_data_uri="data:image/jpeg;base64,QUJD",
+        )
+        user_msg = captured["messages"][1]
+        text_part = next(p for p in user_msg["content"] if p["type"] == "text")
+        assert text_part["text"]  # non-empty default prompt
+
+    def test_no_image_keeps_plain_string_content(self, demo_life_os):
+        client = FakeClient([_text_response("ok")])
+        # Reuses the pre-existing plain-string path (no image_data_uri arg) -
+        # this is a regression guard, not new behavior.
+        result = demo_life_os.run_life_os(
+            {"title": "Test", "prompt": "hi"}, client, "fake-model",
+            max_turns=5, user_message="hi",
+        )
+        assert result["reply_text"] == "ok"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
