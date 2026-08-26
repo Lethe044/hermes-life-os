@@ -214,5 +214,92 @@ class TestMainCli:
         assert exc_info.value.code == 1
 
 
+class TestMultiUser:
+    """A second, independent app instance with no shared LIFE_OS_API_KEY
+    at all - purely users.json-driven, the way a household/team would
+    run it."""
+
+    @pytest.fixture()
+    def multi_user_client(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        for mod in ("storage", "users", "tools", "local_api"):
+            if mod in sys.modules:
+                del sys.modules[mod]
+        import local_api
+        importlib.reload(local_api)
+        local_api.storage.set_active_profile(None)
+
+        _alex_record, alex_key = local_api.users_mod.add_user("alex", profile="alex")
+        _sam_record, sam_key = local_api.users_mod.add_user("sam", profile="sam")
+
+        app = local_api.build_app(api_key=None, default_profile="default")
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            yield c, alex_key, sam_key
+
+    def test_no_key_still_rejected(self, multi_user_client):
+        client, _alex_key, _sam_key = multi_user_client
+        resp = client.get("/api/tools")
+        assert resp.status_code == 401
+
+    def test_each_user_resolves_to_their_own_profile(self, multi_user_client):
+        client, alex_key, sam_key = multi_user_client
+        resp = client.get("/api/health", headers={"X-API-Key": alex_key})
+        assert resp.get_json()["profile"] == "alex"
+        assert resp.get_json()["user"] == "alex"
+
+        resp = client.get("/api/health", headers={"X-API-Key": sam_key})
+        assert resp.get_json()["profile"] == "sam"
+        assert resp.get_json()["user"] == "sam"
+
+    def test_users_data_does_not_leak_across_profiles(self, multi_user_client):
+        client, alex_key, sam_key = multi_user_client
+        client.post("/api/tools/remember", headers={"X-API-Key": alex_key},
+                    json={"type": "note", "content": "alex-only-secret-entry"})
+
+        resp = client.get("/api/memory/search?q=alex-only-secret-entry",
+                          headers={"X-API-Key": sam_key})
+        assert resp.get_json() == []
+
+        resp = client.get("/api/memory/search?q=alex-only-secret-entry",
+                          headers={"X-API-Key": alex_key})
+        assert len(resp.get_json()) >= 1
+
+    def test_unregistered_key_rejected(self, multi_user_client):
+        client, _alex_key, _sam_key = multi_user_client
+        resp = client.get("/api/tools", headers={"X-API-Key": "not-a-real-key"})
+        assert resp.status_code == 401
+
+    def test_health_falls_back_to_default_profile_without_key(self, multi_user_client):
+        client, _alex_key, _sam_key = multi_user_client
+        resp = client.get("/api/health")
+        assert resp.status_code == 200
+        assert resp.get_json()["profile"] == "default"
+        assert "user" not in resp.get_json()
+
+    def test_shared_key_and_per_user_keys_can_coexist(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        for mod in ("storage", "users", "tools", "local_api"):
+            if mod in sys.modules:
+                del sys.modules[mod]
+        import local_api
+        importlib.reload(local_api)
+        local_api.storage.set_active_profile(None)
+
+        _record, alex_key = local_api.users_mod.add_user("alex", profile="alex")
+        app = local_api.build_app(api_key="shared-secret", default_profile="default")
+        app.config["TESTING"] = True
+        with app.test_client() as c:
+            resp = c.get("/api/health", headers={"X-API-Key": "shared-secret"})
+            assert resp.get_json()["profile"] == "default"
+            assert "user" not in resp.get_json()
+
+            resp = c.get("/api/health", headers={"X-API-Key": alex_key})
+            assert resp.get_json()["profile"] == "alex"
+            assert resp.get_json()["user"] == "alex"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

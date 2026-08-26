@@ -34,6 +34,7 @@ from storage import (
     edit_memory_entry, delete_memory_entry, get_memory_window, get_all_memory,
     get_memory_by_date_range,
 )
+import plugins as _plugins
 from patterns import detect_patterns
 from analytics import (
     compute_goal_progress, compare_periods, compare_before_after,
@@ -656,6 +657,16 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             result += f"\nRecurring symbols this month: {', '.join(recurring)}"
         return result
 
+    # ── plugins (see demo/plugins.py) ───────────────────────────────────────
+    # Anything not matched by a built-in tool above falls through to any
+    # installed plugins before finally reporting "Unknown tool". This also
+    # fixes a previously unreachable fallback: the old final
+    # `return f"Unknown tool: {name}"` sat after an earlier `return`
+    # inside the log_dream branch, so it could never actually run.
+    else:
+        plugin_result = _plugins.dispatch_plugin_tool(name, inp, PLUGIN_DISPATCHERS)
+        if plugin_result is not None:
+            return plugin_result
         return f"Unknown tool: {name}"
 
 # ---------------------------------------------------------------------------
@@ -889,3 +900,32 @@ TOOLS = [
             "vividness": {"type": "integer","description": "How vivid was it 1-10"},
         }, "required": ["content"]}}},
 ]
+
+# ---------------------------------------------------------------------------
+# Plugins - merged into TOOLS at import time. See demo/plugins.py for the
+# plugin API and docs/PLUGINS.md for a walkthrough. A broken plugin is
+# skipped (never crashes startup) and reported in PLUGIN_LOAD_ERRORS, which
+# demo_life_os.py surfaces once at startup.
+# ---------------------------------------------------------------------------
+_BUILT_IN_TOOL_NAMES = {t["function"]["name"] for t in TOOLS}
+PLUGIN_TOOLS, PLUGIN_DISPATCHERS, PLUGIN_LOAD_ERRORS = _plugins.load_plugins(
+    built_in_names=_BUILT_IN_TOOL_NAMES
+)
+TOOLS = TOOLS + PLUGIN_TOOLS
+
+
+def reload_plugins() -> None:
+    """Re-scans the plugins directory and rebuilds TOOLS/PLUGIN_DISPATCHERS
+    in place - mainly for tests and for long-running processes (bots, the
+    local API, the scheduler) that want to pick up a newly-dropped plugin
+    file without a full restart. Safe to call at any time; a failed reload
+    leaves the previous plugin set in place... actually, to keep this
+    simple and predictable it always fully replaces the plugin set (even
+    with zero plugins) so `python demo/plugins.py` output and the running
+    process never disagree about what's currently loaded."""
+    global TOOLS, PLUGIN_TOOLS, PLUGIN_DISPATCHERS, PLUGIN_LOAD_ERRORS
+    core_tools = [t for t in TOOLS if t["function"]["name"] in _BUILT_IN_TOOL_NAMES]
+    PLUGIN_TOOLS, PLUGIN_DISPATCHERS, PLUGIN_LOAD_ERRORS = _plugins.load_plugins(
+        built_in_names=_BUILT_IN_TOOL_NAMES
+    )
+    TOOLS = core_tools + PLUGIN_TOOLS
