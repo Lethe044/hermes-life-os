@@ -742,6 +742,47 @@ hermes-life-os-backup --keep 14  # keep the 14 most recent
   modes, plus the same photo-based meal logging as the other bots.
 - 74 new tests - suite grew from 567 to 641.
 
+**v1.15.0 - Local REST API, Live Web Dashboard, WhatsApp Bot, Predictive Correlations**
+- New `hermes-life-os-api` local REST API (`demo/local_api.py`, Flask):
+  `GET /api/tools`, `POST /api/tools/<name>`, `GET /api/memory/recent`,
+  `GET /api/memory/search` - lets a Shortcut, browser extension, or any
+  other client call Hermes' tools over HTTP. Binds to localhost by
+  default and requires `LIFE_OS_API_KEY` on every request; refuses to
+  start without it.
+- New live web dashboard (`demo/web_dashboard.py`,
+  `hermes-life-os-web`) - the same charts/correlations/retrospective as
+  the static PNG report, but as an always-current local web page that
+  refreshes without regenerating a file.
+- New WhatsApp bot (`demo/whatsapp_bot.py`, `hermes-life-os-whatsapp`),
+  via Twilio's WhatsApp API - the third chat platform alongside
+  Telegram and Discord, with the same text/photo-meal-logging feature
+  set. Unlike the polling/websocket-based bots, this is a webhook
+  server, so every incoming request's Twilio signature is verified
+  before processing.
+- New lagged/predictive correlations (`compute_lagged_correlations()`
+  in `demo/analytics.py`): shifts one metric 1-2 days forward before
+  correlating, so results can say "a higher X on one day tends to be
+  followed by a higher/lower Y N days later" instead of only reporting
+  same-day co-movement. Feeds every existing insight surface (chat,
+  `detect_patterns`, both dashboards, the weekly email) plus a new
+  dedicated `get_correlation_insights` tool for on-demand deep dives.
+
+**v1.14.0 - Automatic Backups, Photo Meal Logging, Discord Bot, Encryption Re-key**
+- Automatic daily local backups of all data, kept on a rolling window,
+  restorable via `hermes-life-os-backup`.
+- Photo-based meal logging: send the Telegram or Discord bot a photo of
+  a meal (with an optional caption) and a vision-capable LLM identifies
+  and logs it - no separate step needed.
+- New Discord bot (`demo/discord_bot.py`, `hermes-life-os-discord`) -
+  the second chat platform alongside Telegram, using discord.py's
+  event-driven client rather than a hand-rolled polling loop, so it
+  works in a DM or any server channel the bot can see.
+- New `hermes-life-os-rekey` tool: safely rotates
+  `LIFE_OS_ENCRYPTION_KEY` (decrypts with the old key, rotates the
+  salt, re-encrypts with the new one in one step) - also works to
+  enable or fully disable encryption after the fact, which simply
+  setting a new key directly could not do safely.
+
 **v1.13.0 - Weekly Email Summary, Voice Notes**
 - New `hermes-life-os-weekly-email` CLI: emails the same self-contained
   dashboard report (charts, correlations, retrospective, habits) that
