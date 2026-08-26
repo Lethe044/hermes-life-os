@@ -13,7 +13,10 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from storage import get_recent_memory, load_habits
-from analytics import compute_correlations, format_correlation_insights
+from analytics import (
+    compute_correlations, format_correlation_insights,
+    compute_lagged_correlations_multi, format_lagged_insights,
+)
 
 # ---------------------------------------------------------------------------
 # Pattern detection
@@ -112,6 +115,13 @@ def detect_patterns() -> Dict[str, Any]:
     correlations = compute_correlations(recent)
     patterns["correlation_details"] = correlations
     patterns["correlations"].extend(format_correlation_insights(correlations))
+
+    # Lagged correlations - does metric A today predict metric B
+    # tomorrow (or the day after)? A forward-looking complement to the
+    # same-day correlations above.
+    lagged_correlations = compute_lagged_correlations_multi(recent)
+    patterns["lagged_correlation_details"] = lagged_correlations
+    patterns["correlations"].extend(format_lagged_insights(lagged_correlations))
 
     # Dream patterns
     dream_entries = [r for r in recent if r.get("type") == "dream"]

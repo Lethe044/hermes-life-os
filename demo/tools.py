@@ -38,6 +38,8 @@ from patterns import detect_patterns
 from analytics import (
     compute_goal_progress, compare_periods, compare_before_after,
     detect_anomalies, daily_averages, TRACKABLE_METRICS,
+    compute_correlations, format_correlation_insights,
+    compute_lagged_correlations_multi, format_lagged_insights,
 )
 
 console = Console(width=min(110, shutil.get_terminal_size().columns))
@@ -460,6 +462,34 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             parts.append(f"Insight: {insight}")
         return "\n".join(parts) if parts else "Not enough data yet for pattern detection."
 
+    # ── get_correlation_insights ────────────────────────────────────────────
+    elif name == "get_correlation_insights":
+        window = inp.get("days", 30)
+        entries = get_recent_memory(days=window)
+
+        same_day = compute_correlations(entries)
+        lagged = compute_lagged_correlations_multi(entries)
+
+        if not same_day and not lagged:
+            return (f"No strong correlations found in the last {window} days yet - "
+                    f"this usually just means not enough overlapping days of data across "
+                    f"metrics. Keep logging and check back in a week or two.")
+
+        parts = [f"Correlation analysis over the last {window} days "
+                 f"({len(entries)} entries):"]
+
+        if same_day:
+            parts.append("\nSame-day relationships:")
+            for insight in format_correlation_insights(same_day, limit=5):
+                parts.append(f"  - {insight}")
+
+        if lagged:
+            parts.append("\nForward-looking (lagged) patterns:")
+            for insight in format_lagged_insights(lagged, limit=5):
+                parts.append(f"  - {insight}")
+
+        return "\n".join(parts)
+
     # ── get_health_dashboard ──────────────────────────────────────────────────
     elif name == "get_health_dashboard":
         today      = time.strftime("%Y-%m-%d")
@@ -812,6 +842,16 @@ TOOLS = [
     {"type": "function", "function": {"name": "detect_patterns",
         "description": "Analyze all memory for trends across mood, energy, sleep, nutrition, stress, habits.",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_correlation_insights",
+        "description": "Deep-dive statistical correlation analysis (same-day AND lagged/predictive) "
+                        "across tracked metrics (mood, energy, stress, sleep, hydration, etc.) over a "
+                        "given window. Use this when the user explicitly asks about patterns, "
+                        "correlations, or 'what predicts my mood/energy/sleep' - it's more detailed "
+                        "than detect_patterns, which only summarizes the last 14 days at a high level.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "How many days of history to analyze. Default 30."},
+        }, "required": []}}},
 
     {"type": "function", "function": {"name": "get_health_dashboard",
         "description": "Get a full health dashboard for today.",

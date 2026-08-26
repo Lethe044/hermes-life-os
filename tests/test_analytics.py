@@ -10,6 +10,9 @@ from analytics import (
     daily_averages,
     compute_correlations,
     format_correlation_insights,
+    compute_lagged_correlations,
+    compute_lagged_correlations_multi,
+    format_lagged_insights,
     compute_goal_progress,
     compare_periods,
     compare_before_after,
@@ -134,6 +137,145 @@ class TestComputeCorrelations:
         corrs = compute_correlations(entries, min_abs_r=0.0)
         rs = [abs(c["r"]) for c in corrs]
         assert rs == sorted(rs, reverse=True)
+
+
+class TestComputeLaggedCorrelations:
+    def _leading_lagging_entries(self, leading_type, leading_field, leading_vals,
+                                 lagging_type, lagging_field, lagging_vals, start_day=1, lag_days=1):
+        """Builds entries where leading_vals[i] is logged on day D and
+        lagging_vals[i] is logged on day D + lag_days - a clean
+        artificial predictive relationship for testing."""
+        entries = []
+        for i, (lead, lag) in enumerate(zip(leading_vals, lagging_vals)):
+            lead_date = f"2026-07-{start_day + i:02d}"
+            lag_date = f"2026-07-{start_day + i + lag_days:02d}"
+            entries.append(_entry(leading_type, f"{lead_date}T08:00:00Z", **{leading_field: lead}))
+            entries.append(_entry(lagging_type, f"{lag_date}T22:00:00Z", **{lagging_field: lag}))
+        return entries
+
+    def test_detects_strong_lagged_positive_correlation(self):
+        entries = self._leading_lagging_entries(
+            "sleep", "hours", [4.5, 5, 4, 6, 4.5, 7, 8],
+            "mood", "score", [3, 4, 3, 5, 4, 7, 8],
+            lag_days=1,
+        )
+        results = compute_lagged_correlations(entries, lag_days=1)
+        sleep_to_mood = next((r for r in results if r["metric_a"] == "sleep" and r["metric_b"] == "mood"), None)
+        assert sleep_to_mood is not None
+        assert sleep_to_mood["lag_days"] == 1
+        assert sleep_to_mood["direction"] == "positive"
+        assert sleep_to_mood["strength"] == "strong"
+        assert sleep_to_mood["n_days"] == 7
+
+    def test_no_data_returns_empty(self):
+        assert compute_lagged_correlations([]) == []
+
+    def test_below_min_days_excluded(self):
+        entries = self._leading_lagging_entries(
+            "sleep", "hours", [4, 8],
+            "mood", "score", [3, 8],
+        )
+        assert compute_lagged_correlations(entries) == []
+
+    def test_self_lag_is_skipped(self):
+        """A metric correlated with its own later value (momentum) is
+        not a cross-metric insight and must never be returned."""
+        entries = self._leading_lagging_entries(
+            "mood", "score", [3, 4, 3, 5, 4, 7, 8],
+            "mood", "score", [4, 5, 4, 6, 5, 8, 9],
+        )
+        results = compute_lagged_correlations(entries, lag_days=1, min_abs_r=0.0)
+        assert all(r["metric_a"] != r["metric_b"] for r in results)
+
+    def test_missing_target_day_excludes_that_pair(self):
+        """A day whose calendar-correct lag target has no data for the
+        lagging metric must simply be excluded, not silently paired
+        with some other (wrong) day."""
+        entries = [
+            _entry("sleep", "2026-07-01T08:00:00Z", hours=4),
+            _entry("mood",  "2026-07-02T22:00:00Z", score=3),
+            _entry("sleep", "2026-07-02T08:00:00Z", hours=8),
+            # no mood entry for 2026-07-03 - sleep@07-02's lag-1 target is missing
+            _entry("sleep", "2026-07-04T08:00:00Z", hours=6),
+            _entry("mood",  "2026-07-05T22:00:00Z", score=9),
+        ]
+        results = compute_lagged_correlations(entries, lag_days=1, min_days=1, min_abs_r=0.0)
+        sleep_mood = next((r for r in results if r["metric_a"] == "sleep" and r["metric_b"] == "mood"), None)
+        assert sleep_mood is not None
+        # Only 07-01->07-02 and 07-04->07-05 are valid pairs; 07-02's
+        # dangling target (07-03, no mood data) must be excluded.
+        assert sleep_mood["n_days"] == 2
+
+    def test_different_lag_windows_give_different_results(self):
+        entries = self._leading_lagging_entries(
+            "sleep", "hours", [4.5, 5, 4, 6, 4.5, 7, 8],
+            "mood", "score", [3, 4, 3, 5, 4, 7, 8],
+            lag_days=2,
+        )
+        lag1 = compute_lagged_correlations(entries, lag_days=1, min_abs_r=0.0)
+        lag2 = compute_lagged_correlations(entries, lag_days=2, min_abs_r=0.0)
+        # The lag-2 correlation should be detectable; lag-1 shouldn't
+        # find the same clean signal since it's misaligned.
+        lag2_match = next((r for r in lag2 if r["metric_a"] == "sleep" and r["metric_b"] == "mood"), None)
+        assert lag2_match is not None
+        assert lag2_match["strength"] == "strong"
+
+
+class TestComputeLaggedCorrelationsMulti:
+    def test_merges_multiple_lag_windows(self):
+        entries = TestComputeLaggedCorrelations()._leading_lagging_entries(
+            "sleep", "hours", [4.5, 5, 4, 6, 4.5, 7, 8],
+            "mood", "score", [3, 4, 3, 5, 4, 7, 8],
+            lag_days=1,
+        )
+        results = compute_lagged_correlations_multi(entries, lags=(1, 2))
+        assert any(r["lag_days"] == 1 for r in results)
+
+    def test_sorted_by_strength_desc(self):
+        entries = TestComputeLaggedCorrelations()._leading_lagging_entries(
+            "sleep", "hours", [4.5, 5, 4, 6, 4.5, 7, 8],
+            "mood", "score", [3, 4, 3, 5, 4, 7, 8],
+            lag_days=1,
+        )
+        results = compute_lagged_correlations_multi(entries, lags=(1, 2), min_abs_r=0.0)
+        rs = [abs(r["r"]) for r in results]
+        assert rs == sorted(rs, reverse=True)
+
+    def test_empty_input(self):
+        assert compute_lagged_correlations_multi([]) == []
+
+
+class TestFormatLaggedInsights:
+    def test_formats_readable_forward_looking_string(self):
+        lagged = [{
+            "metric_a": "sleep", "metric_b": "mood", "lag_days": 1,
+            "r": 0.82, "n_days": 6, "strength": "strong", "direction": "positive",
+        }]
+        out = format_lagged_insights(lagged)
+        assert len(out) == 1
+        assert "sleep" in out[0] and "mood" in out[0]
+        assert "1 day" in out[0]
+        assert "0.82" in out[0]
+
+    def test_pluralizes_multi_day_lags(self):
+        lagged = [{
+            "metric_a": "stress", "metric_b": "sleep", "lag_days": 2,
+            "r": -0.6, "n_days": 5, "strength": "moderate", "direction": "negative",
+        }]
+        out = format_lagged_insights(lagged)
+        assert "2 days" in out[0]
+
+    def test_respects_limit(self):
+        lagged = [
+            {"metric_a": "a", "metric_b": "b", "lag_days": 1, "r": 0.9, "n_days": 5,
+             "strength": "strong", "direction": "positive"},
+            {"metric_a": "c", "metric_b": "d", "lag_days": 1, "r": 0.8, "n_days": 5,
+             "strength": "strong", "direction": "positive"},
+        ]
+        assert len(format_lagged_insights(lagged, limit=1)) == 1
+
+    def test_empty_input(self):
+        assert format_lagged_insights([]) == []
 
 
 class TestFormatInsights:

@@ -14,7 +14,7 @@ requirement.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
@@ -209,6 +209,115 @@ def format_correlation_insights(correlations: List[Dict[str, Any]], limit: int =
             f"{c['strength'].capitalize()} correlation detected: {c['metric_a']} and "
             f"{c['metric_b']} {rel} (r={c['r']}, based on {c['n_days']} days). "
             f"{c['note'].capitalize()}."
+        )
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Lagged (predictive) correlations - does metric A on one day predict
+# metric B on a LATER day? Same-day correlation can't distinguish
+# "poor sleep made today's mood worse" from "being stressed made last
+# night's sleep worse" - lagging by calendar days at least points the
+# arrow of time forward, which is what turns a correlation into
+# something closer to an actionable prediction ("sleep well tonight,
+# tomorrow tends to go better").
+# ---------------------------------------------------------------------------
+
+def compute_lagged_correlations(
+    entries: List[Dict[str, Any]],
+    lag_days: int = 1,
+    min_days: int = 4,
+    min_abs_r: float = 0.35,
+) -> List[Dict[str, Any]]:
+    """
+    Correlates metric A's value on day D with metric B's value on day
+    D + lag_days, across every distinct ordered metric pair (A, B)
+    with A != B - self-lag (a metric predicting its own later value,
+    e.g. today's mood predicting tomorrow's mood) is skipped, since
+    that's momentum/autocorrelation rather than a cross-metric insight.
+
+    Uses actual calendar-date arithmetic (not positional index shifts),
+    so gaps from unlogged days are handled correctly - a pair only
+    counts if day D and day D+lag_days both actually have data.
+
+    Returns dicts shaped like compute_correlations()'s, plus
+    "lag_days", sorted by |r| descending. Only pairs with at least
+    min_days matched day-pairs and |r| >= min_abs_r are included.
+    """
+    daily = daily_averages(entries)
+    if not daily:
+        return []
+
+    metrics = sorted({m for day in daily.values() for m in day.keys()})
+    results: List[Dict[str, Any]] = []
+
+    for a in metrics:
+        for b in metrics:
+            if a == b:
+                continue
+            xs: List[float] = []
+            ys: List[float] = []
+            for d, values in daily.items():
+                if a not in values:
+                    continue
+                try:
+                    d_dt = datetime.strptime(d, "%Y-%m-%d")
+                except ValueError:
+                    continue
+                target_date = (d_dt + timedelta(days=lag_days)).strftime("%Y-%m-%d")
+                target_values = daily.get(target_date)
+                if target_values and b in target_values:
+                    xs.append(values[a])
+                    ys.append(target_values[b])
+
+            if len(xs) < min_days:
+                continue
+            r = pearson_correlation(xs, ys)
+            if r is None or abs(r) < min_abs_r:
+                continue
+
+            results.append({
+                "metric_a": a,
+                "metric_b": b,
+                "lag_days": lag_days,
+                "r": round(r, 3),
+                "n_days": len(xs),
+                "strength": _strength_label(r),
+                "direction": "positive" if r > 0 else "negative",
+            })
+
+    results.sort(key=lambda item: abs(item["r"]), reverse=True)
+    return results
+
+
+def compute_lagged_correlations_multi(
+    entries: List[Dict[str, Any]],
+    lags: Tuple[int, ...] = (1, 2),
+    min_days: int = 4,
+    min_abs_r: float = 0.35,
+) -> List[Dict[str, Any]]:
+    """Runs compute_lagged_correlations() across several lag windows
+    (default: 1 and 2 days) and merges the results, strongest first."""
+    results: List[Dict[str, Any]] = []
+    for lag in lags:
+        results.extend(compute_lagged_correlations(entries, lag_days=lag,
+                                                    min_days=min_days, min_abs_r=min_abs_r))
+    results.sort(key=lambda item: abs(item["r"]), reverse=True)
+    return results
+
+
+def format_lagged_insights(lagged: List[Dict[str, Any]], limit: int = 3) -> List[str]:
+    """Turn compute_lagged_correlations()/_multi() output into
+    human-readable, forward-looking insight strings."""
+    out = []
+    for c in lagged[:limit]:
+        day_word = "day" if c["lag_days"] == 1 else "days"
+        direction_phrase = "tends to be followed by a higher" if c["direction"] == "positive" \
+            else "tends to be followed by a lower"
+        out.append(
+            f"{c['strength'].capitalize()} lagged pattern: a higher {c['metric_a']} "
+            f"{direction_phrase} {c['metric_b']} {c['lag_days']} {day_word} later "
+            f"(r={c['r']}, based on {c['n_days']} matched day-pairs)."
         )
     return out
 

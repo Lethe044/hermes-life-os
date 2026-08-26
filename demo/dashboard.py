@@ -39,7 +39,10 @@ except ImportError:
 
 import storage
 from storage import get_recent_memory, load_habits, get_memory_window
-from analytics import daily_averages, compute_correlations, format_correlation_insights, compare_periods
+from analytics import (
+    daily_averages, compute_correlations, format_correlation_insights, compare_periods,
+    compute_lagged_correlations_multi, format_lagged_insights,
+)
 from patterns import detect_patterns
 
 METRIC_LABELS = {
@@ -104,6 +107,10 @@ def build_dashboard_data(days: int, compare_days: int = 7) -> Dict:
 
     correlations = compute_correlations(entries)
     insights = format_correlation_insights(correlations)
+
+    lagged_correlations = compute_lagged_correlations_multi(entries)
+    insights = insights + format_lagged_insights(lagged_correlations)
+
     patterns = detect_patterns()
     habits = load_habits()
 
@@ -115,6 +122,7 @@ def build_dashboard_data(days: int, compare_days: int = 7) -> Dict:
         "dates": ordered_dates,
         "per_metric": per_metric,
         "correlations": correlations,
+        "lagged_correlations": lagged_correlations,
         "insights": insights,
         "patterns": patterns,
         "habits": habits,

@@ -149,7 +149,56 @@ class TestDetectPatternsTool:
         assert "Mood trend" in result
 
 
-class TestHealthDashboard:
+class TestGetCorrelationInsightsTool:
+    def _recent_date(self, days_ago: int) -> str:
+        from datetime import datetime, timedelta
+        return (datetime.utcnow() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
+
+    def _log_sleep_mood_pairs(self, tools, sleep_vals, mood_vals, start_days_ago=20):
+        for i, (s, m) in enumerate(zip(sleep_vals, mood_vals)):
+            date = self._recent_date(start_days_ago - i)
+            tools.dispatch_tool("remember", {
+                "type": "sleep", "hours": s, "timestamp": f"{date}T08:00:00Z",
+            })
+            tools.dispatch_tool("remember", {
+                "type": "mood", "score": m, "timestamp": f"{date}T22:00:00Z",
+            })
+
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_correlation_insights", {})
+        assert "No strong correlations found" in result
+
+    def test_detects_same_day_correlation(self, tools):
+        self._log_sleep_mood_pairs(
+            tools, [4.5, 5, 4, 6, 4.5, 7, 8], [3, 4, 3, 5, 4, 7, 8],
+        )
+        result = tools.dispatch_tool("get_correlation_insights", {})
+        assert "Same-day relationships" in result
+        assert "sleep" in result and "mood" in result
+
+    def test_detects_lagged_correlation(self, tools):
+        # sleep on day D, mood on day D+1 - a clean lag-1 predictive signal
+        sleep_vals = [4.5, 5, 4, 6, 4.5, 7, 8]
+        mood_vals = [3, 4, 3, 5, 4, 7, 8]
+        start_days_ago = 20
+        for i, s in enumerate(sleep_vals):
+            date = self._recent_date(start_days_ago - i)
+            tools.dispatch_tool("remember", {"type": "sleep", "hours": s, "timestamp": f"{date}T08:00:00Z"})
+        for i, m in enumerate(mood_vals):
+            date = self._recent_date(start_days_ago - 1 - i)
+            tools.dispatch_tool("remember", {"type": "mood", "score": m, "timestamp": f"{date}T22:00:00Z"})
+        result = tools.dispatch_tool("get_correlation_insights", {})
+        assert "Forward-looking (lagged) patterns" in result
+
+    def test_respects_custom_days_window(self, tools):
+        self._log_sleep_mood_pairs(
+            tools, [4.5, 5, 4, 6, 4.5, 7, 8], [3, 4, 3, 5, 4, 7, 8],
+        )
+        result = tools.dispatch_tool("get_correlation_insights", {"days": 30})
+        assert "last 30 days" in result
+
+
+
     def test_returns_valid_json(self, tools):
         result = tools.dispatch_tool("get_health_dashboard", {})
         data = json.loads(result)

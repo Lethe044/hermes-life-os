@@ -88,6 +88,20 @@ values from memory. A pair is only surfaced when there's enough data
 (weak/moderate/strong), and the number of days behind it - no external
 dependencies required (pure Python stdlib).
 
+**Lagged (predictive) correlations:** same-day correlation can't tell you
+whether poor sleep caused today's low mood, or whether being stressed
+already caused last night's poor sleep - it just says the two move
+together. `compute_lagged_correlations()` shifts one metric forward by
+1-2 calendar days (correctly handling gaps from unlogged days) before
+correlating, which at least points the arrow of time forward: "a higher
+X on one day tends to be followed by a higher/lower Y N days later."
+Both same-day and lagged results feed every surface that already shows
+insights (chat replies, `detect_patterns`, the static and live
+dashboards, the weekly email) automatically, plus a dedicated
+`get_correlation_insights` tool for a deeper, on-demand analysis over
+a custom day range - just ask "what patterns have you noticed in my
+data?" or "what predicts my mood?".
+
 ## Reward Function
 
 ```mermaid
@@ -343,6 +357,23 @@ a stress increase shows red, a mood increase shows green.
 *Example output from 28 days of sample data - your own chart will reflect
 whatever you've actually logged.*
 
+## Live Web Dashboard
+
+```bash
+pip install "hermes-life-os[web]"   # or: pip install flask
+hermes-life-os-web
+# open http://127.0.0.1:8080
+```
+
+The interactive, always-current counterpart to the static HTML report
+above - same trends/correlations/retrospective/habit data, served as
+JSON and rendered client-side with Chart.js, so switching the day-range
+re-fetches and re-draws instantly instead of regenerating a file.
+Localhost-only by default and read-only (no API key needed, unlike the
+Local REST API below) - it only ever reads your own data for your own
+browser. See `demo/web_dashboard.py`'s docstring before changing
+`--host` beyond `127.0.0.1`.
+
 ## Goal Tracking
 
 Goals can track themselves from real data instead of needing manual
@@ -472,6 +503,54 @@ intent, and finding your user id). The same vision-model requirement
 for photo meal logging applies here - see the Photo Meal Logging
 section below.
 
+## WhatsApp Bot
+
+```bash
+pip install "hermes-life-os[whatsapp]"   # or: pip install flask twilio
+set TWILIO_ACCOUNT_SID=...
+set TWILIO_AUTH_TOKEN=...
+set WHATSAPP_ALLOWED_NUMBER=whatsapp:+1XXXXXXXXXX   # your own number, E.164
+hermes-life-os-whatsapp
+```
+
+The third chat platform, via Twilio's WhatsApp API. Unlike the
+Telegram bot (polling) and Discord bot (websocket client), this is a
+webhook server - Twilio pushes messages to it, so it needs to be
+reachable from the internet (`ngrok http 8766` works well for personal
+use with Twilio's free WhatsApp Sandbox). Same feature set as the
+other two: plain text, photo-based meal logging, and voice-note
+transcription. Every incoming request's Twilio signature is verified
+before anything is processed, on top of the same single-number
+authorization the other bots use. Full setup steps (sandbox join code,
+webhook URL) are in `demo/whatsapp_bot.py`'s docstring. The same
+vision-model requirement for photo meal logging applies here too - see
+the Photo Meal Logging section below.
+
+## Local REST API
+
+```bash
+pip install "hermes-life-os[api]"   # or: pip install flask
+set LIFE_OS_API_KEY=some-long-random-string
+hermes-life-os-api
+```
+
+A lightweight, localhost-only HTTP API for third-party integrations
+that don't want to (or can't) go through an LLM at all - Apple
+Shortcuts, Android Tasker, a browser extension, a home-screen widget,
+an Alfred/Raycast workflow, `curl` in a cron job, etc. Exposes the
+same tools the chat agent uses:
+
+```bash
+curl -H "X-API-Key: some-long-random-string" http://127.0.0.1:8765/api/tools
+curl -H "X-API-Key: some-long-random-string" -X POST \
+     -d '{"score": 8}' http://127.0.0.1:8765/api/tools/log_mood
+```
+
+Binds to `127.0.0.1` by default and refuses to start without
+`LIFE_OS_API_KEY` set - every request needs it as an `X-API-Key`
+header. See `demo/local_api.py`'s docstring for the full endpoint list
+and the security notes on exposing this beyond your own machine.
+
 ## Semantic Memory Search
 
 `recall` searches by exact keyword; ask Hermes something like "have I
@@ -539,13 +618,13 @@ accurate but slower on CPU-only machines. Without `faster-whisper`
 installed, voice notes get a clear "couldn't process" reply instead of
 silently failing.
 
-## Photo Meal Logging (Telegram &amp; Discord)
+## Photo Meal Logging (Telegram, Discord &amp; WhatsApp)
 
-Send either bot a photo of your meal (with an optional caption) and a
-vision-capable LLM identifies what's in it and logs it - no separate
-step needed. OpenAI's and Anthropic's default models already support
-vision. On Ollama, pull a vision-capable model yourself
-(`ollama pull llava`) and point Hermes at it explicitly
+Send any of the three bots a photo of your meal (with an optional
+caption) and a vision-capable LLM identifies what's in it and logs it
+- no separate step needed. OpenAI's and Anthropic's default models
+already support vision. On Ollama, pull a vision-capable model
+yourself (`ollama pull llava`) and point Hermes at it explicitly
 (`set HERMES_MODEL=llava` or `--model llava`) - Ollama's default
 text-only models (like `llama3.1`) will simply ignore the image.
 
