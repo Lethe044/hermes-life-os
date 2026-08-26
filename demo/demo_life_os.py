@@ -866,6 +866,13 @@ def main():
     model = args.model or default_model_for(provider)
     console.print(f"[dim]Provider: {provider}  Model: {model}[/]")
 
+    from tools import PLUGIN_DISPATCHERS, PLUGIN_LOAD_ERRORS
+    if PLUGIN_DISPATCHERS:
+        names = ", ".join(name for name, _fn in PLUGIN_DISPATCHERS)
+        console.print(f"[dim]Plugins loaded: {names}[/]")
+    for err in PLUGIN_LOAD_ERRORS:
+        console.print(f"[yellow]Plugin warning: {err}[/]")
+
     if args.fresh:
         for f in [storage.MEMORY_FILE, storage.PROFILE_FILE, storage.HABITS_FILE, storage.GOALS_FILE,
                   storage.NUTRITION_FILE, storage.SLEEP_FILE, storage.HYDRATION_FILE,

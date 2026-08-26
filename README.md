@@ -219,6 +219,51 @@ isolates that person's data under `~/.hermes/life-os/profiles/<name>/` -
 so a household can share one install without mixing anyone's mood/sleep/
 habit data. Omitting `--profile` always keeps working exactly as before.
 
+## Multi-User (real accounts for the local API & Slack bot)
+
+```bash
+python demo/users.py add alex --profile alex --role owner
+python demo/users.py add sam  --profile sam
+python demo/users.py list
+```
+
+Profiles isolate data; this registry is what turns a profile into a
+*person who can log in*. Each user gets their own API key (shown once,
+stored only as a salted PBKDF2 hash) that resolves to their own profile
+automatically - so a whole household or small team can share one running
+`hermes-life-os-api` server or one Slack bot, and everyone only ever
+sees their own data:
+
+```bash
+curl -H "X-API-Key: <alex's key>" http://127.0.0.1:8765/api/health
+# {"status": "ok", "profile": "alex", "user": "alex"}
+```
+
+Fully opt-in and non-breaking - a single `LIFE_OS_API_KEY`/`--profile`
+keeps working exactly as before if you never touch `users.py`. Full
+setup, including linking a user to their Slack account, in
+[docs/MULTI_USER.md](docs/MULTI_USER.md).
+
+## Plugin System (add your own tools, no fork required)
+
+```bash
+mkdir -p ~/.hermes/life-os/plugins
+cp demo/plugins_examples/dice.py ~/.hermes/life-os/plugins/
+python demo/demo_life_os.py --mode chat
+# "roll a d20 for me"
+```
+
+Drop a `.py` file defining a `TOOLS` list and a `dispatch(name, inp)`
+function into `~/.hermes/life-os/plugins/`, and Hermes' LLM agent can
+call it like any built-in tool - next start, no core code changes. A
+broken plugin is skipped and reported, never crashes the app; a plugin
+can't shadow a built-in tool name. `python demo/plugins.py` lists
+everything currently loaded. Two ready-to-copy examples ship in
+`demo/plugins_examples/` (a dependency-free dice/coin-flip tool, and a
+profile-aware screen-time tracker showing how to persist your own data).
+Full plugin API and a "share it with others" guide in
+[docs/PLUGINS.md](docs/PLUGINS.md).
+
 ## Encryption at Rest (optional)
 
 ```bash
@@ -271,6 +316,9 @@ graph LR
     D --> D6[scheduler.py<br/>Cron-style trigger engine]
     D --> D7[notifications.py<br/>console/webhook/Telegram/email]
     D --> D8[run_scheduler.py<br/>Production scheduler entry point]
+    D --> D9[plugins.py<br/>Community tool plugin loader]
+    D --> D10[users.py<br/>Multi-user registry]
+    D --> D11[slack_bot.py<br/>Slack Socket Mode bot]
     E --> E1[test_life_os_env.py]
     E --> E2[test_analytics.py]
     E --> E3[test_storage.py]
@@ -283,6 +331,9 @@ graph LR
     style D1 fill:#2980b9,color:#fff
     style D6 fill:#e67e22,color:#fff
     style D7 fill:#e67e22,color:#fff
+    style D9 fill:#c0392b,color:#fff
+    style D10 fill:#c0392b,color:#fff
+    style D11 fill:#c0392b,color:#fff
 ```
 
 `demo_life_os.py` used to be a single ~1600-line file. It's now a thin
@@ -526,6 +577,30 @@ webhook URL) are in `demo/whatsapp_bot.py`'s docstring. The same
 vision-model requirement for photo meal logging applies here too - see
 the Photo Meal Logging section below.
 
+## Slack Bot
+
+```bash
+pip install "hermes-life-os[slack]"   # or: pip install slack_bolt
+python demo/users.py add alex --profile alex
+python demo/users.py link alex slack U0123ABC   # your Slack member ID
+set SLACK_BOT_TOKEN=xoxb-...
+set SLACK_APP_TOKEN=xapp-...
+hermes-life-os-slack
+```
+
+The fourth chat platform, and the first one built multi-user from the
+start: DM the bot and it's automatically routed to *your* profile, so a
+whole household or team can share one bot process. Uses Socket Mode (a
+persistent websocket, via Slack's own `slack_bolt` framework) - same
+"no public server, no webhook" philosophy as the Telegram bot, just
+using Slack's officially supported connection handling instead of a
+hand-rolled polling loop. Works single-user too (`SLACK_ALLOWED_USER_ID`,
+same pattern as the Discord/Telegram bots) if you don't need the
+multi-user registry. Same photo-based meal logging support as the other
+bots. Full setup (creating the Slack app, required scopes, finding your
+member ID) in `demo/slack_bot.py`'s docstring and
+[docs/MULTI_USER.md](docs/MULTI_USER.md).
+
 ## Local REST API
 
 ```bash
@@ -618,9 +693,9 @@ accurate but slower on CPU-only machines. Without `faster-whisper`
 installed, voice notes get a clear "couldn't process" reply instead of
 silently failing.
 
-## Photo Meal Logging (Telegram, Discord &amp; WhatsApp)
+## Photo Meal Logging (Telegram, Discord, WhatsApp &amp; Slack)
 
-Send any of the three bots a photo of your meal (with an optional
+Send any of the four bots a photo of your meal (with an optional
 caption) and a vision-capable LLM identifies what's in it and logs it
 - no separate step needed. OpenAI's and Anthropic's default models
 already support vision. On Ollama, pull a vision-capable model
@@ -643,6 +718,29 @@ hermes-life-os-backup --keep 14  # keep the 14 most recent
 
 ## What's New
 
+**v1.16.0 - Plugin System, Multi-User Accounts, Slack Bot**
+- New plugin system (`demo/plugins.py`): drop a `.py` file into
+  `~/.hermes/life-os/plugins/` defining `TOOLS` + `dispatch()` and
+  Hermes' LLM agent can call it like any built-in tool - no fork, no
+  core code changes. A broken plugin is skipped and reported, never
+  crashes startup; plugins can't shadow built-in tool names. Ships with
+  two ready-to-copy examples (`demo/plugins_examples/`) and a full
+  guide at [docs/PLUGINS.md](docs/PLUGINS.md). Also fixes a
+  long-standing dead-code bug where `dispatch_tool`'s final "Unknown
+  tool" fallback could never actually be reached.
+- New multi-user registry (`demo/users.py`): named users, each with
+  their own salted-hash API key that resolves to their own profile
+  automatically. `hermes-life-os-api` and the new Slack bot are both
+  multi-user aware - one running server/bot can now serve a whole
+  household or team, each person only ever seeing their own data. Fully
+  opt-in; a single `LIFE_OS_API_KEY`/`--profile` keeps working exactly
+  as before. See [docs/MULTI_USER.md](docs/MULTI_USER.md).
+- New Slack bot (`demo/slack_bot.py`, `hermes-life-os-slack`): the
+  fourth chat platform, via Slack's Socket Mode (no public server/
+  webhook needed, same as the Telegram bot). Supports both single-user
+  (`SLACK_ALLOWED_USER_ID`) and multi-user (linked via `users.py`)
+  modes, plus the same photo-based meal logging as the other bots.
+- 74 new tests - suite grew from 567 to 641.
 
 **v1.13.0 - Weekly Email Summary, Voice Notes**
 - New `hermes-life-os-weekly-email` CLI: emails the same self-contained
