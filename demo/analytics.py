@@ -52,6 +52,15 @@ def _extract_metric(entry: Dict[str, Any]) -> Optional[Tuple[str, float]]:
     if t == "oura_readiness":
         val = entry.get("score")
         return ("readiness", float(val)) if val is not None else None
+    if t == "expense":
+        val = entry.get("amount")
+        return ("spending", float(val)) if val is not None else None
+    if t == "social":
+        val = entry.get("quality")
+        return ("social_quality", float(val)) if val is not None else None
+    if t == "substance" and entry.get("substance") == "caffeine":
+        val = entry.get("amount")
+        return ("caffeine", float(val)) if val is not None else None
     return None
 
 

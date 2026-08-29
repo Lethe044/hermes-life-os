@@ -66,6 +66,9 @@ flowchart TD
 | ✅ Habits | Streaks, best streaks, completion tracking |
 | 🎯 Goals | Progress percentages, milestones, notes |
 | 😊 Mood & Energy | Daily scores, trend detection, dip alerts |
+| 💰 Spending | Expenses by category, daily/period totals |
+| 🤝 Social | Time connecting with others, quality, trend |
+| ☕ Substances | Caffeine, alcohol, or anything else - amount, frequency |
 
 ## Pattern Detection
 
@@ -317,6 +320,9 @@ graph LR
     D --> D7[notifications.py<br/>console/webhook/Telegram/email]
     D --> D8[run_scheduler.py<br/>Production scheduler entry point]
     D --> D9[plugins.py<br/>Community tool plugin loader]
+    D --> D12[life_score.py<br/>Composite 0-100 wellbeing score]
+    D --> D13[achievements.py<br/>Streak &amp; milestone badges]
+    D --> D14[wrapped.py<br/>Shareable summary card]
     D --> D10[users.py<br/>Multi-user registry]
     D --> D11[slack_bot.py<br/>Slack Socket Mode bot]
     E --> E1[test_life_os_env.py]
@@ -716,7 +722,99 @@ hermes-life-os-backup            # keep the default 7
 hermes-life-os-backup --keep 14  # keep the 14 most recent
 ```
 
+## Spending, Social & Substance Tracking
+
+```
+"spent 12 on lunch"
+"hung out with my best friend for an hour, really good talk"
+"had 2 cups of coffee this morning"
+```
+
+Three more trackers alongside nutrition/sleep/fitness/mental, added
+because a "life OS" that only tracks the body misses a lot of what
+actually moves the needle day to day:
+
+- **Spending** - logs expenses by category, and (like every other
+  metric) feeds the correlation engine, so "do I spend more on stressed
+  days?" is an answerable question, not a guess.
+- **Social connection** - time spent with other people and how
+  connecting/fulfilling it felt (1-10) - loneliness and social
+  wellbeing are as real a signal as sleep or stress, just rarely
+  tracked anywhere.
+- **Substances** - caffeine, alcohol, or anything else worth watching,
+  with amount and unit left free-form. Caffeine specifically feeds the
+  correlation engine (e.g. against sleep quality); other substances are
+  logged and summarized even if not yet wired into correlations.
+
+Ask for a summary anytime: "how's my spending been this month?",
+"how much have I been socializing lately?", "how much caffeine have I
+had this week?".
+
+## Life Score & Achievements
+
+```
+"what's my life score today?"
+"show me my achievements"
+```
+
+**Life Score** blends whatever you've logged that day - mood, sleep,
+hydration, stress (inverted), energy, focus - into a single 0-100
+number with a plain-language label (Thriving / Doing well / Steady /
+Rough day / Tough day). Not a medical measure, just a transparent,
+at-a-glance way to answer "how am I doing overall" without mentally
+combining five numbers yourself - `demo/life_score.py`'s `components`
+field always shows exactly which metrics fed the score, so it's never
+a black box, and a day with only one thing logged still scores fairly
+(missing metrics are excluded, not treated as zero).
+
+**Achievements** (`demo/achievements.py`) are streak and milestone
+badges - a 7/30/100-day streak on any habit, a 7/30/100-day *overall*
+logging streak, and count-based badges ("first workout logged", "50
+mood check-ins"). Entirely read-only and recomputed fresh every time -
+there's no separate achievements database to drift out of sync with
+your actual logs, so editing or deleting an entry updates progress
+immediately.
+
+## Wrapped - a shareable summary card
+
+```bash
+hermes-life-os-wrapped                              # last 30 days -> hermes-wrapped.png
+hermes-life-os-wrapped --days 365 --out my-year.png --title "My 2026"
+hermes-life-os-wrapped --days 7                      # a "your week" card
+```
+
+A single shareable PNG card - your average Life Score, entries logged,
+days active, average mood/sleep, your best day, and badges earned - in
+the spirit of Spotify Wrapped or GitHub's yearly contribution recap.
+Entirely local: reads only from data already on disk, makes no LLM or
+network calls, and the image never leaves your machine unless you
+choose to share it. Needs matplotlib (already a core dependency, same
+as the dashboard).
+
 ## What's New
+
+**v1.17.0 - Spending/Social/Substance Tracking, Life Score, Achievements, Wrapped**
+- New trackers alongside nutrition/sleep/fitness/mental: **spending**
+  (`log_expense`, `get_spending_summary`), **social connection**
+  (`log_social_interaction`, `get_social_summary`), and **substances**
+  (`log_substance`, `get_substance_summary` - caffeine, alcohol, or
+  anything else). Spending and caffeine feed the correlation engine
+  like every other metric.
+- New **Life Score** (`demo/life_score.py`, `get_life_score` tool): a
+  single 0-100 composite blending whatever's logged that day (mood,
+  sleep, hydration, stress, energy, focus) into one at-a-glance
+  wellbeing number, with a transparent `components` breakdown - never a
+  black box, and never penalized for partial data.
+- New **Achievements** (`demo/achievements.py`, `get_achievements`
+  tool): streak badges (7/30/100 days, per-habit and overall) and
+  count-based milestone badges. Fully read-only and recomputed fresh
+  every call - no separate achievements state to fall out of sync with
+  your actual logs.
+- New **Wrapped** (`demo/wrapped.py`, `hermes-life-os-wrapped`): a
+  single shareable PNG summary card (average Life Score, entries
+  logged, best day, badges earned) in the spirit of Spotify Wrapped -
+  entirely local, no network calls.
+- 81 new tests - suite grew from 641 to 722.
 
 **v1.16.0 - Plugin System, Multi-User Accounts, Slack Bot**
 - New plugin system (`demo/plugins.py`): drop a `.py` file into

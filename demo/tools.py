@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime, timedelta
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from rich.console import Console
 from rich.panel import Panel
@@ -27,6 +27,9 @@ from storage import (
     load_fitness, save_fitness,
     load_focus, save_focus,
     load_mental, save_mental,
+    load_spending, save_spending,
+    load_social, save_social,
+    load_substance, save_substance,
     load_habits, save_habits,
     load_goals, save_goals,
     load_profile, save_profile,
@@ -261,6 +264,145 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         total_min   = sum(f.get("duration", 0) for f in today_focus)
         return (f"Focus session logged: {inp.get('duration_min',25)} min on '{inp.get('task','')}'\n"
                 f"Today's deep work: {total_min} minutes across {len(today_focus)} sessions")
+
+    # ── log_expense ───────────────────────────────────────────────────────────
+    elif name == "log_expense":
+        amount = float(inp.get("amount", 0))
+        entry = {
+            "date":     time.strftime("%Y-%m-%d"),
+            "amount":   amount,
+            "category": inp.get("category", "uncategorized"),
+            "notes":    inp.get("notes", ""),
+        }
+        spending = load_spending()
+        spending.append(entry)
+        save_spending(spending)
+        write_memory({"type": "expense", "content": f"{inp.get('category','uncategorized')}: {amount}",
+                      "amount": amount, "category": inp.get("category", "uncategorized")})
+        today_total = sum(s.get("amount", 0) for s in spending if s.get("date") == entry["date"])
+        return f"Expense logged: {amount} ({inp.get('category','uncategorized')})\nToday's total: {today_total}"
+
+    # ── get_spending_summary ─────────────────────────────────────────────────
+    elif name == "get_spending_summary":
+        days = inp.get("days", 30)
+        cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+        spending = [s for s in load_spending() if s.get("date", "") >= cutoff]
+        if not spending:
+            return f"No spending logged in the last {days} days."
+        total = sum(s.get("amount", 0) for s in spending)
+        by_category: Dict[str, float] = {}
+        for s in spending:
+            by_category[s.get("category", "uncategorized")] = (
+                by_category.get(s.get("category", "uncategorized"), 0) + s.get("amount", 0)
+            )
+        n_days = len({s["date"] for s in spending}) or 1
+        top_categories = sorted(by_category.items(), key=lambda x: -x[1])[:5]
+        lines = [f"Spending over last {days} days: {total:.2f} total, {total/n_days:.2f}/day average"]
+        lines.append("By category: " + ", ".join(f"{c}: {a:.2f}" for c, a in top_categories))
+        return "\n".join(lines)
+
+    # ── log_social_interaction ───────────────────────────────────────────────
+    elif name == "log_social_interaction":
+        quality = inp.get("quality", 5)
+        entry = {
+            "date":        time.strftime("%Y-%m-%d"),
+            "with_who":    inp.get("with_who", ""),
+            "quality":     quality,
+            "duration_min": inp.get("duration_min", 0),
+            "notes":       inp.get("notes", ""),
+        }
+        social = load_social()
+        social.append(entry)
+        save_social(social)
+        write_memory({"type": "social", "content": f"Time with {inp.get('with_who','')}",
+                      "quality": quality, "duration_min": inp.get("duration_min", 0)})
+        return f"Social time logged: {inp.get('with_who','')}, quality {quality}/10"
+
+    # ── get_social_summary ───────────────────────────────────────────────────
+    elif name == "get_social_summary":
+        days = inp.get("days", 30)
+        cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+        social = [s for s in load_social() if s.get("date", "") >= cutoff]
+        if not social:
+            return f"No social interactions logged in the last {days} days."
+        total_min = sum(s.get("duration_min", 0) for s in social)
+        avg_quality = sum(s.get("quality", 0) for s in social) / len(social)
+        half = len(social) // 2
+        trend = ""
+        if half >= 2:
+            first_half_avg = sum(s.get("quality", 0) for s in social[:half]) / half
+            second_half_avg = sum(s.get("quality", 0) for s in social[half:]) / (len(social) - half)
+            if second_half_avg - first_half_avg >= 1:
+                trend = " (trending up)"
+            elif first_half_avg - second_half_avg >= 1:
+                trend = " (trending down)"
+        return (f"Social connection over last {days} days: {len(social)} interaction(s), "
+                f"{total_min} total minutes, average quality {avg_quality:.1f}/10{trend}")
+
+    # ── log_substance ─────────────────────────────────────────────────────────
+    elif name == "log_substance":
+        substance = inp.get("substance", "").strip().lower()
+        amount = float(inp.get("amount", 0))
+        entry = {
+            "date":      time.strftime("%Y-%m-%d"),
+            "substance": substance,
+            "amount":    amount,
+            "unit":      inp.get("unit", ""),
+            "notes":     inp.get("notes", ""),
+        }
+        substances = load_substance()
+        substances.append(entry)
+        save_substance(substances)
+        write_memory({"type": "substance", "content": f"{substance}: {amount} {inp.get('unit','')}".strip(),
+                      "substance": substance, "amount": amount})
+        return f"Logged: {amount} {inp.get('unit','')} {substance}".strip()
+
+    # ── get_substance_summary ────────────────────────────────────────────────
+    elif name == "get_substance_summary":
+        days = inp.get("days", 30)
+        cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+        entries = [s for s in load_substance() if s.get("date", "") >= cutoff]
+        if not entries:
+            return f"No substance use logged in the last {days} days."
+        by_substance: Dict[str, List[float]] = {}
+        for e in entries:
+            by_substance.setdefault(e.get("substance", "unknown"), []).append(e.get("amount", 0))
+        n_days = len({e["date"] for e in entries}) or 1
+        lines = [f"Substance use over last {days} days ({n_days} logged day(s)):"]
+        for substance, amounts in sorted(by_substance.items()):
+            lines.append(f"  {substance}: {sum(amounts):.1f} total, {sum(amounts)/n_days:.1f}/day average")
+        return "\n".join(lines)
+
+    # ── get_life_score ────────────────────────────────────────────────────────
+    elif name == "get_life_score":
+        from life_score import compute_life_score, compute_life_score_trend
+        days = inp.get("days", 7)
+        today = compute_life_score()
+        trend = compute_life_score_trend(days)
+        if today is None:
+            return "Not enough data logged yet to compute a Life Score - log a mood, sleep, or a few other metrics first."
+        lines = [f"Today's Life Score: {today['score']}/100 ({today['label']})"]
+        lines.append("Contributing: " + ", ".join(f"{k}={v}" for k, v in today["components"].items()))
+        if trend:
+            lines.append(f"{len(trend)}-day trend: " + " -> ".join(str(t["score"]) for t in trend))
+        return "\n".join(lines)
+
+    # ── get_achievements ──────────────────────────────────────────────────────
+    elif name == "get_achievements":
+        from achievements import evaluate_achievements
+        result = evaluate_achievements()
+        earned = [a for a in result if a["earned"]]
+        in_progress = [a for a in result if not a["earned"] and a.get("progress", 0) > 0]
+        if not earned and not in_progress:
+            return "No achievements yet - start logging to earn your first badge!"
+        lines = []
+        if earned:
+            lines.append("Earned: " + ", ".join(f"{a['icon']} {a['name']}" for a in earned))
+        if in_progress:
+            top = sorted(in_progress, key=lambda a: -a.get("progress_pct", 0))[:3]
+            lines.append("Closest to earning: " + ", ".join(
+                f"{a['name']} ({a['progress_pct']:.0f}%)" for a in top))
+        return "\n".join(lines)
 
     # ── update_habit ──────────────────────────────────────────────────────────
     elif name == "update_habit":
@@ -786,6 +928,69 @@ TOOLS = [
             "distractions":  {"type": "integer", "description": "Number of interruptions"},
             "quality":       {"type": "integer", "description": "1-10"},
         }, "required": ["duration_min", "task"]}}},
+
+    {"type": "function", "function": {"name": "log_expense",
+        "description": "Log a spending/expense entry - for tracking money habits and their "
+                        "relationship to mood/stress (e.g. stress-spending patterns).",
+        "parameters": {"type": "object", "properties": {
+            "amount":   {"type": "number"},
+            "category": {"type": "string", "description": "e.g. food, entertainment, shopping, bills"},
+            "notes":    {"type": "string"},
+        }, "required": ["amount"]}}},
+
+    {"type": "function", "function": {"name": "get_spending_summary",
+        "description": "Get a spending summary (total, by category, daily average) over a recent window.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "log_social_interaction",
+        "description": "Log time spent connecting with other people - friends, family, partner, "
+                        "colleagues - and how it felt, for tracking social wellbeing.",
+        "parameters": {"type": "object", "properties": {
+            "with_who":     {"type": "string", "description": "e.g. 'best friend', 'family', 'coworkers'"},
+            "quality":      {"type": "integer", "description": "1-10, how connecting/fulfilling it felt"},
+            "duration_min": {"type": "integer"},
+            "notes":        {"type": "string"},
+        }, "required": ["with_who", "quality"]}}},
+
+    {"type": "function", "function": {"name": "get_social_summary",
+        "description": "Get a summary of social connection over a recent window - total time, "
+                        "average quality, and whether it's trending up or down.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "log_substance",
+        "description": "Log caffeine, alcohol, or another tracked substance - for spotting its "
+                        "relationship to sleep, mood, and energy.",
+        "parameters": {"type": "object", "properties": {
+            "substance": {"type": "string", "description": "e.g. caffeine, alcohol, nicotine"},
+            "amount":    {"type": "number", "description": "e.g. cups, drinks, mg - whatever unit makes sense"},
+            "unit":      {"type": "string", "description": "e.g. 'cups', 'drinks', 'mg'"},
+            "notes":     {"type": "string"},
+        }, "required": ["substance", "amount"]}}},
+
+    {"type": "function", "function": {"name": "get_substance_summary",
+        "description": "Get a summary of tracked substance use over a recent window, broken down "
+                        "by substance, with daily averages.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_life_score",
+        "description": "Get today's (or a recent day's) composite Life Score - a single 0-100 number "
+                        "blending mood, sleep, hydration, stress (inverted), energy, and focus into "
+                        "one at-a-glance health indicator, plus the trend over the last week.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Trend window in days. Default 7."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_achievements",
+        "description": "Get earned and in-progress achievement badges (logging streaks, milestones "
+                        "like '50 workouts logged') - use when the user asks about their streaks, "
+                        "badges, achievements, or progress/milestones.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
 
     {"type": "function", "function": {"name": "update_habit",
         "description": "Update habit streak.",

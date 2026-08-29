@@ -876,7 +876,9 @@ def main():
     if args.fresh:
         for f in [storage.MEMORY_FILE, storage.PROFILE_FILE, storage.HABITS_FILE, storage.GOALS_FILE,
                   storage.NUTRITION_FILE, storage.SLEEP_FILE, storage.HYDRATION_FILE,
-                  storage.FITNESS_FILE, storage.FOCUS_FILE, storage.MENTAL_FILE]:
+                  storage.FITNESS_FILE, storage.FOCUS_FILE, storage.MENTAL_FILE,
+                  storage.SPENDING_FILE, storage.SOCIAL_FILE, storage.SUBSTANCE_FILE,
+                  storage.ACHIEVEMENTS_FILE]:
             if f.exists():
                 f.unlink()
         console.print("[dim]All data cleared.[/]")

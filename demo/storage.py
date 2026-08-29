@@ -49,6 +49,10 @@ HYDRATION_FILE = HERMES_DIR / "hydration.json"
 FITNESS_FILE = HERMES_DIR / "fitness.json"
 FOCUS_FILE = HERMES_DIR / "focus.json"
 MENTAL_FILE = HERMES_DIR / "mental.json"
+SPENDING_FILE = HERMES_DIR / "spending.json"
+SOCIAL_FILE = HERMES_DIR / "social.json"
+SUBSTANCE_FILE = HERMES_DIR / "substance.json"
+ACHIEVEMENTS_FILE = HERMES_DIR / "achievements.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -72,7 +76,8 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     """
     global ACTIVE_PROFILE, HERMES_DIR, MEMORY_FILE, PROFILE_FILE, HABITS_FILE
     global GOALS_FILE, NUTRITION_FILE, SLEEP_FILE, HYDRATION_FILE, FITNESS_FILE
-    global FOCUS_FILE, MENTAL_FILE
+    global FOCUS_FILE, MENTAL_FILE, SPENDING_FILE, SOCIAL_FILE, SUBSTANCE_FILE
+    global ACHIEVEMENTS_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -86,6 +91,10 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     FITNESS_FILE = HERMES_DIR / "fitness.json"
     FOCUS_FILE = HERMES_DIR / "focus.json"
     MENTAL_FILE = HERMES_DIR / "mental.json"
+    SPENDING_FILE = HERMES_DIR / "spending.json"
+    SOCIAL_FILE = HERMES_DIR / "social.json"
+    SUBSTANCE_FILE = HERMES_DIR / "substance.json"
+    ACHIEVEMENTS_FILE = HERMES_DIR / "achievements.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -179,6 +188,14 @@ def load_focus() -> List:      return _load(FOCUS_FILE, [])
 def save_focus(f):             _save(FOCUS_FILE, f)
 def load_mental() -> List:     return _load(MENTAL_FILE, [])
 def save_mental(m):            _save(MENTAL_FILE, m)
+def load_spending() -> List:   return _load(SPENDING_FILE, [])
+def save_spending(s):          _save(SPENDING_FILE, s)
+def load_social() -> List:     return _load(SOCIAL_FILE, [])
+def save_social(s):            _save(SOCIAL_FILE, s)
+def load_substance() -> List:  return _load(SUBSTANCE_FILE, [])
+def save_substance(s):         _save(SUBSTANCE_FILE, s)
+def load_achievements() -> List: return _load(ACHIEVEMENTS_FILE, [])
+def save_achievements(a):        _save(ACHIEVEMENTS_FILE, a)
 
 # --- memory.jsonl: each line is independently encrypted, so the file
 # stays append-only and line-readable even under encryption. ---------
