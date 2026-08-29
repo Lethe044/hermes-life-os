@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -558,6 +558,104 @@ class TestSemanticRecallTool:
         result = tools.dispatch_tool("semantic_recall", {"query": "stress"})
         assert "overwhelmed at work" in result
         assert "similarity=" in result
+
+
+class TestExpenseTracking:
+    def test_log_expense_returns_amount_and_today_total(self, tools):
+        result = tools.dispatch_tool("log_expense", {"amount": 12.5, "category": "food"})
+        assert "12.5" in result
+        assert "food" in result
+
+    def test_log_expense_accumulates_today_total(self, tools):
+        tools.dispatch_tool("log_expense", {"amount": 10, "category": "food"})
+        result = tools.dispatch_tool("log_expense", {"amount": 5, "category": "food"})
+        assert "Today's total: 15" in result
+
+    def test_get_spending_summary_no_data(self, tools):
+        result = tools.dispatch_tool("get_spending_summary", {"days": 30})
+        assert "No spending" in result
+
+    def test_get_spending_summary_totals_and_categories(self, tools):
+        tools.dispatch_tool("log_expense", {"amount": 20, "category": "food"})
+        tools.dispatch_tool("log_expense", {"amount": 30, "category": "shopping"})
+        result = tools.dispatch_tool("get_spending_summary", {"days": 30})
+        assert "50.00 total" in result
+        assert "food: 20.00" in result
+        assert "shopping: 30.00" in result
+
+    def test_expense_persists_across_reload(self, tools):
+        tools.dispatch_tool("log_expense", {"amount": 7, "category": "coffee"})
+        from storage import load_spending
+        entries = load_spending()
+        assert len(entries) == 1
+        assert entries[0]["amount"] == 7
+
+
+class TestSocialTracking:
+    def test_log_social_interaction(self, tools):
+        result = tools.dispatch_tool("log_social_interaction", {
+            "with_who": "best friend", "quality": 9, "duration_min": 60,
+        })
+        assert "best friend" in result
+        assert "9/10" in result
+
+    def test_get_social_summary_no_data(self, tools):
+        result = tools.dispatch_tool("get_social_summary", {"days": 30})
+        assert "No social" in result
+
+    def test_get_social_summary_aggregates(self, tools):
+        tools.dispatch_tool("log_social_interaction", {"with_who": "family", "quality": 8, "duration_min": 30})
+        tools.dispatch_tool("log_social_interaction", {"with_who": "coworkers", "quality": 6, "duration_min": 45})
+        result = tools.dispatch_tool("get_social_summary", {"days": 30})
+        assert "2 interaction(s)" in result
+        assert "75 total minutes" in result
+        assert "average quality 7.0/10" in result
+
+
+class TestSubstanceTracking:
+    def test_log_substance(self, tools):
+        result = tools.dispatch_tool("log_substance", {"substance": "caffeine", "amount": 2, "unit": "cups"})
+        assert "caffeine" in result
+        assert "2" in result
+
+    def test_get_substance_summary_no_data(self, tools):
+        result = tools.dispatch_tool("get_substance_summary", {"days": 30})
+        assert "No substance use" in result
+
+    def test_get_substance_summary_breaks_down_by_substance(self, tools):
+        tools.dispatch_tool("log_substance", {"substance": "caffeine", "amount": 2, "unit": "cups"})
+        tools.dispatch_tool("log_substance", {"substance": "alcohol", "amount": 1, "unit": "drinks"})
+        result = tools.dispatch_tool("get_substance_summary", {"days": 30})
+        assert "caffeine:" in result
+        assert "alcohol:" in result
+
+    def test_substance_name_normalized_lowercase(self, tools):
+        tools.dispatch_tool("log_substance", {"substance": "Caffeine", "amount": 1, "unit": "cup"})
+        from storage import load_substance
+        assert load_substance()[0]["substance"] == "caffeine"
+
+
+class TestLifeScoreTool:
+    def test_no_data_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("get_life_score", {})
+        assert "Not enough data" in result
+
+    def test_with_data_returns_score(self, tools):
+        tools.dispatch_tool("remember", {"type": "mood", "content": "good day", "score": 8})
+        result = tools.dispatch_tool("get_life_score", {})
+        assert "Life Score:" in result
+        assert "/100" in result
+
+
+class TestAchievementsTool:
+    def test_no_data_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("get_achievements", {})
+        assert "No achievements yet" in result
+
+    def test_earns_first_workout_badge(self, tools):
+        tools.dispatch_tool("log_workout", {"activity": "run", "duration_min": 30})
+        result = tools.dispatch_tool("get_achievements", {})
+        assert "Getting Active" in result
 
 
 if __name__ == "__main__":
