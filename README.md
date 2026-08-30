@@ -69,6 +69,8 @@ flowchart TD
 | 💰 Spending | Expenses by category, daily/period totals |
 | 🤝 Social | Time connecting with others, quality, trend |
 | ☕ Substances | Caffeine, alcohol, or anything else - amount, frequency |
+| 📚 Reading | Sessions, minutes, pages, titles |
+| 💊 Medication | Dose taken/skipped, adherence % by medication |
 
 ## Pattern Detection
 
@@ -323,6 +325,7 @@ graph LR
     D --> D12[life_score.py<br/>Composite 0-100 wellbeing score]
     D --> D13[achievements.py<br/>Streak &amp; milestone badges]
     D --> D14[wrapped.py<br/>Shareable summary card]
+    D --> D15[recommendations.py<br/>Rule-based suggestion engine]
     D --> D10[users.py<br/>Multi-user registry]
     D --> D11[slack_bot.py<br/>Slack Socket Mode bot]
     E --> E1[test_life_os_env.py]
@@ -791,7 +794,60 @@ network calls, and the image never leaves your machine unless you
 choose to share it. Needs matplotlib (already a core dependency, same
 as the dashboard).
 
+## Reading & Medication Tracking
+
+```
+"read 25 pages of Atomic Habits for 20 minutes"
+"took my vitamin D"
+"skipped my omega-3 today"
+```
+
+- **Reading/learning** (`log_reading`, `get_reading_summary`) - session
+  count, total minutes, total pages over a window. Reading minutes also
+  feed the correlation engine.
+- **Medication/supplement adherence** (`log_medication`,
+  `get_medication_adherence`) - log a dose as taken or skipped, get an
+  adherence percentage per medication over a recent window. Simple by
+  design: no dosage/scheduling logic, no interaction warnings - just an
+  honest log of what was actually taken.
+
+## Recommendations
+
+```
+"what should I focus on today?"
+"any suggestions based on my data?"
+```
+
+`demo/recommendations.py` turns patterns already visible in your own
+data into concrete, actionable nudges - entirely local, rule-based, no
+LLM or network call involved, so every suggestion can be traced back to
+the exact numbers behind it:
+
+- **Threshold nudges** - e.g. average sleep under 6.5h or stress over
+  7/10 recently.
+- **Correlation-derived insights** - reuses the same correlation engine
+  behind `get_correlation_insights`, just phrased as a suggestion.
+- **Near-milestone streaks** - "2 days from a 30-day streak on
+  'meditate' - keep it going!"
+
+Not medical or therapeutic advice - a reflection of your own patterns,
+phrased as a nudge, nothing more.
+
 ## What's New
+
+**v1.18.0 - Reading & Medication Tracking, Recommendations**
+- New trackers: **reading/learning** (`log_reading`,
+  `get_reading_summary` - sessions, minutes, pages; reading minutes
+  feed the correlation engine) and **medication/supplement adherence**
+  (`log_medication`, `get_medication_adherence` - taken/skipped dose
+  logging with an adherence % per medication).
+- New **Recommendations** (`demo/recommendations.py`,
+  `get_recommendations` tool): a fully local, rule-based suggestion
+  engine combining threshold nudges (low sleep, high stress),
+  correlation-derived insights (reusing the existing correlation
+  engine), and near-milestone habit streaks into concrete, traceable
+  suggestions - no LLM or network call involved.
+- 26 new tests - suite grew from 722 to 748.
 
 **v1.17.0 - Spending/Social/Substance Tracking, Life Score, Achievements, Wrapped**
 - New trackers alongside nutrition/sleep/fitness/mental: **spending**

@@ -61,6 +61,9 @@ def _extract_metric(entry: Dict[str, Any]) -> Optional[Tuple[str, float]]:
     if t == "substance" and entry.get("substance") == "caffeine":
         val = entry.get("amount")
         return ("caffeine", float(val)) if val is not None else None
+    if t == "reading":
+        val = entry.get("minutes")
+        return ("reading_min", float(val)) if val is not None else None
     return None
 
 

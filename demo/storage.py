@@ -53,6 +53,8 @@ SPENDING_FILE = HERMES_DIR / "spending.json"
 SOCIAL_FILE = HERMES_DIR / "social.json"
 SUBSTANCE_FILE = HERMES_DIR / "substance.json"
 ACHIEVEMENTS_FILE = HERMES_DIR / "achievements.json"
+READING_FILE = HERMES_DIR / "reading.json"
+MEDICATION_FILE = HERMES_DIR / "medication.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -77,7 +79,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     global ACTIVE_PROFILE, HERMES_DIR, MEMORY_FILE, PROFILE_FILE, HABITS_FILE
     global GOALS_FILE, NUTRITION_FILE, SLEEP_FILE, HYDRATION_FILE, FITNESS_FILE
     global FOCUS_FILE, MENTAL_FILE, SPENDING_FILE, SOCIAL_FILE, SUBSTANCE_FILE
-    global ACHIEVEMENTS_FILE
+    global ACHIEVEMENTS_FILE, READING_FILE, MEDICATION_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -95,6 +97,8 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     SOCIAL_FILE = HERMES_DIR / "social.json"
     SUBSTANCE_FILE = HERMES_DIR / "substance.json"
     ACHIEVEMENTS_FILE = HERMES_DIR / "achievements.json"
+    READING_FILE = HERMES_DIR / "reading.json"
+    MEDICATION_FILE = HERMES_DIR / "medication.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -196,6 +200,10 @@ def load_substance() -> List:  return _load(SUBSTANCE_FILE, [])
 def save_substance(s):         _save(SUBSTANCE_FILE, s)
 def load_achievements() -> List: return _load(ACHIEVEMENTS_FILE, [])
 def save_achievements(a):        _save(ACHIEVEMENTS_FILE, a)
+def load_reading() -> List:      return _load(READING_FILE, [])
+def save_reading(r):             _save(READING_FILE, r)
+def load_medication() -> List:   return _load(MEDICATION_FILE, [])
+def save_medication(m):          _save(MEDICATION_FILE, m)
 
 # --- memory.jsonl: each line is independently encrypted, so the file
 # stays append-only and line-readable even under encryption. ---------
