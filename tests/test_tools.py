@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -656,6 +656,69 @@ class TestAchievementsTool:
         tools.dispatch_tool("log_workout", {"activity": "run", "duration_min": 30})
         result = tools.dispatch_tool("get_achievements", {})
         assert "Getting Active" in result
+
+
+class TestReadingTracking:
+    def test_log_reading_minimal(self, tools):
+        result = tools.dispatch_tool("log_reading", {"title": "Deep Work"})
+        assert "Deep Work" in result
+
+    def test_log_reading_with_minutes(self, tools):
+        result = tools.dispatch_tool("log_reading", {"title": "Atomic Habits", "minutes": 25})
+        assert "25 min" in result
+
+    def test_get_reading_summary_no_data(self, tools):
+        result = tools.dispatch_tool("get_reading_summary", {"days": 30})
+        assert "No reading" in result
+
+    def test_get_reading_summary_aggregates(self, tools):
+        tools.dispatch_tool("log_reading", {"title": "Book A", "minutes": 20, "pages": 15})
+        tools.dispatch_tool("log_reading", {"title": "Book B", "minutes": 10, "pages": 5})
+        result = tools.dispatch_tool("get_reading_summary", {"days": 30})
+        assert "2 session(s)" in result
+        assert "30 total minutes" in result
+        assert "20 total pages" in result
+
+
+class TestMedicationTracking:
+    def test_log_medication_taken_default(self, tools):
+        result = tools.dispatch_tool("log_medication", {"name": "Vitamin D"})
+        assert "Vitamin D" in result
+        assert "taken" in result.lower()
+
+    def test_log_medication_skipped(self, tools):
+        result = tools.dispatch_tool("log_medication", {"name": "Vitamin D", "taken": False})
+        assert "SKIPPED" in result
+
+    def test_get_medication_adherence_no_data(self, tools):
+        result = tools.dispatch_tool("get_medication_adherence", {"days": 30})
+        assert "No medication" in result
+
+    def test_get_medication_adherence_calculates_percentage(self, tools):
+        tools.dispatch_tool("log_medication", {"name": "Omega-3", "taken": True})
+        tools.dispatch_tool("log_medication", {"name": "Omega-3", "taken": True})
+        tools.dispatch_tool("log_medication", {"name": "Omega-3", "taken": False})
+        result = tools.dispatch_tool("get_medication_adherence", {"days": 30})
+        assert "Omega-3: 67%" in result
+
+    def test_multiple_medications_broken_down_separately(self, tools):
+        tools.dispatch_tool("log_medication", {"name": "A", "taken": True})
+        tools.dispatch_tool("log_medication", {"name": "B", "taken": False})
+        result = tools.dispatch_tool("get_medication_adherence", {"days": 30})
+        assert "A: 100%" in result
+        assert "B: 0%" in result
+
+
+class TestRecommendationsTool:
+    def test_no_data_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("get_recommendations", {})
+        assert "No specific suggestions" in result
+
+    def test_low_sleep_triggers_suggestion(self, tools):
+        for _ in range(5):
+            tools.dispatch_tool("log_sleep", {"hours": 4, "quality": 5})
+        result = tools.dispatch_tool("get_recommendations", {})
+        assert "sleep" in result.lower()
 
 
 if __name__ == "__main__":

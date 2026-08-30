@@ -30,6 +30,8 @@ from storage import (
     load_spending, save_spending,
     load_social, save_social,
     load_substance, save_substance,
+    load_reading, save_reading,
+    load_medication, save_medication,
     load_habits, save_habits,
     load_goals, save_goals,
     load_profile, save_profile,
@@ -373,7 +375,74 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             lines.append(f"  {substance}: {sum(amounts):.1f} total, {sum(amounts)/n_days:.1f}/day average")
         return "\n".join(lines)
 
-    # ── get_life_score ────────────────────────────────────────────────────────
+    # ── log_reading ───────────────────────────────────────────────────────────
+    elif name == "log_reading":
+        entry = {
+            "date":    time.strftime("%Y-%m-%d"),
+            "title":   inp.get("title", ""),
+            "minutes": inp.get("minutes", 0),
+            "pages":   inp.get("pages", 0),
+            "notes":   inp.get("notes", ""),
+        }
+        reading = load_reading()
+        reading.append(entry)
+        save_reading(reading)
+        write_memory({"type": "reading", "content": inp.get("title", ""),
+                      "minutes": inp.get("minutes", 0), "pages": inp.get("pages", 0)})
+        return f"Reading logged: '{inp.get('title','')}'" + (
+            f" ({inp.get('minutes')} min)" if inp.get("minutes") else "")
+
+    # ── get_reading_summary ──────────────────────────────────────────────────
+    elif name == "get_reading_summary":
+        days = inp.get("days", 30)
+        cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+        entries = [r for r in load_reading() if r.get("date", "") >= cutoff]
+        if not entries:
+            return f"No reading logged in the last {days} days."
+        total_min = sum(r.get("minutes", 0) for r in entries)
+        total_pages = sum(r.get("pages", 0) for r in entries)
+        return (f"Reading over last {days} days: {len(entries)} session(s), "
+                f"{total_min} total minutes, {total_pages} total pages")
+
+    # ── log_medication ───────────────────────────────────────────────────────
+    elif name == "log_medication":
+        taken = inp.get("taken", True)
+        entry = {
+            "date":  time.strftime("%Y-%m-%d"),
+            "name":  inp.get("name", ""),
+            "taken": taken,
+            "notes": inp.get("notes", ""),
+        }
+        meds = load_medication()
+        meds.append(entry)
+        save_medication(meds)
+        status = "taken" if taken else "SKIPPED"
+        return f"{inp.get('name','')}: {status}"
+
+    # ── get_medication_adherence ─────────────────────────────────────────────
+    elif name == "get_medication_adherence":
+        days = inp.get("days", 30)
+        cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+        entries = [m for m in load_medication() if m.get("date", "") >= cutoff]
+        if not entries:
+            return f"No medication/supplement logs in the last {days} days."
+        by_med: Dict[str, List[bool]] = {}
+        for e in entries:
+            by_med.setdefault(e.get("name", "unknown"), []).append(bool(e.get("taken", True)))
+        lines = [f"Adherence over last {days} days:"]
+        for med, taken_list in sorted(by_med.items()):
+            pct = 100 * sum(taken_list) / len(taken_list)
+            lines.append(f"  {med}: {pct:.0f}% ({sum(taken_list)}/{len(taken_list)} doses)")
+        return "\n".join(lines)
+
+    # ── get_recommendations ──────────────────────────────────────────────────
+    elif name == "get_recommendations":
+        from recommendations import get_recommendations as _get_recommendations
+        days = inp.get("days", 14)
+        suggestions = _get_recommendations(days)
+        if not suggestions:
+            return "No specific suggestions right now - not enough recent data, or everything looks steady."
+        return "\n".join(f"- {s['message']}" for s in suggestions)
     elif name == "get_life_score":
         from life_score import compute_life_score, compute_life_score_trend
         days = inp.get("days", 7)
@@ -991,6 +1060,46 @@ TOOLS = [
                         "like '50 workouts logged') - use when the user asks about their streaks, "
                         "badges, achievements, or progress/milestones.",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "log_reading",
+        "description": "Log a reading/learning session - book, article, course, etc.",
+        "parameters": {"type": "object", "properties": {
+            "title":       {"type": "string", "description": "What was read/studied."},
+            "minutes":     {"type": "integer"},
+            "pages":       {"type": "integer"},
+            "notes":       {"type": "string"},
+        }, "required": ["title"]}}},
+
+    {"type": "function", "function": {"name": "get_reading_summary",
+        "description": "Get a reading/learning summary over a recent window - total time, pages, "
+                        "and sessions.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "log_medication",
+        "description": "Log that a medication or supplement dose was taken (or skipped).",
+        "parameters": {"type": "object", "properties": {
+            "name":   {"type": "string"},
+            "taken":  {"type": "boolean", "description": "Default true - set false to log a skipped/missed dose."},
+            "notes":  {"type": "string"},
+        }, "required": ["name"]}}},
+
+    {"type": "function", "function": {"name": "get_medication_adherence",
+        "description": "Get medication/supplement adherence (% of logged doses actually taken) over "
+                        "a recent window, broken down by medication.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_recommendations",
+        "description": "Get personalized, data-driven suggestions based on recent tracked patterns - "
+                        "e.g. low-sleep or high-stress nudges, correlation-based insights, and "
+                        "near-milestone habit streaks. Use when the user asks what they should do, "
+                        "for advice, or for suggestions/recommendations based on their data.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 14."},
+        }, "required": []}}},
 
     {"type": "function", "function": {"name": "update_habit",
         "description": "Update habit streak.",

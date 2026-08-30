@@ -878,7 +878,7 @@ def main():
                   storage.NUTRITION_FILE, storage.SLEEP_FILE, storage.HYDRATION_FILE,
                   storage.FITNESS_FILE, storage.FOCUS_FILE, storage.MENTAL_FILE,
                   storage.SPENDING_FILE, storage.SOCIAL_FILE, storage.SUBSTANCE_FILE,
-                  storage.ACHIEVEMENTS_FILE]:
+                  storage.ACHIEVEMENTS_FILE, storage.READING_FILE, storage.MEDICATION_FILE]:
             if f.exists():
                 f.unlink()
         console.print("[dim]All data cleared.[/]")
