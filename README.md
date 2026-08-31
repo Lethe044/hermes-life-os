@@ -327,6 +327,8 @@ graph LR
     D --> D14[wrapped.py<br/>Shareable summary card]
     D --> D15[recommendations.py<br/>Rule-based suggestion engine]
     D --> D16[weather.py<br/>Open-Meteo weather correlation]
+    D --> D17[life_review.py<br/>Quarterly/yearly retrospective report]
+    D --> D18[leaderboard.py<br/>Opt-in household/team leaderboard]
     D --> D10[users.py<br/>Multi-user registry]
     D --> D11[slack_bot.py<br/>Slack Socket Mode bot]
     E --> E1[test_life_os_env.py]
@@ -653,6 +655,39 @@ correlation engine does. This is the only tracker that makes a network
 call (every other one is 100% local), and it only ever does so when
 explicitly asked, sending nothing but the place name you provide.
 
+## Life Review - the flagship retrospective report
+
+```bash
+hermes-life-os-review --days 90              # a quarter -> hermes-life-review.html
+hermes-life-os-review --days 365 --out my-year-review.html
+```
+
+The "big" report - ties together everything else Hermes tracks into
+one self-contained HTML page: your Life Score trend chart, best/toughest
+day, a period-over-period retrospective (this quarter vs. the one
+before), every correlation detected (same-day and lagged), achievements
+earned, and habit streaks. Same "no server, no JS build step" approach
+as the dashboard, just built for a much longer lookback window - a
+quarter or a year, rather than 30 days. Doesn't include weather
+correlation automatically, since that's the one feature that touches
+the network - ask for it separately if wanted.
+
+## Leaderboard - opt-in household/team comparison
+
+```
+"join the leaderboard"
+"show me the leaderboard"
+```
+
+Builds on the multi-user system (see [docs/MULTI_USER.md](docs/MULTI_USER.md)):
+a friendly, opt-in ranking across every profile on the install, by
+average Life Score, current logging streak, and achievements earned.
+**Nobody is included by default** - a profile only appears after
+explicitly opting in (`join_leaderboard`, or `python demo/leaderboard.py
+join`), and leaving again takes effect immediately. Only those three
+numbers are ever shared across profiles - no journal content, no raw
+logged entries, and nothing ever leaves the machine.
+
 ## Semantic Memory Search
 
 `recall` searches by exact keyword; ask Hermes something like "have I
@@ -852,6 +887,22 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.20.0 - Life Review Report, Household Leaderboard**
+- New **Life Review** (`demo/life_review.py`, `hermes-life-os-review`):
+  the flagship retrospective report - Life Score trend chart,
+  best/toughest day, a period-over-period comparison, every correlation
+  detected, achievements earned, and habit streaks, all in one
+  self-contained HTML page built for a quarter- or year-long lookback
+  window. Reuses the same chart-rendering approach as the dashboard for
+  visual consistency.
+- New **Leaderboard** (`demo/leaderboard.py`, `join_leaderboard` /
+  `leave_leaderboard` / `get_leaderboard` tools): an opt-in, cross-profile
+  ranking by average Life Score, logging streak, and achievements
+  earned, built on top of the multi-user system. Nobody is included by
+  default; opting out takes effect immediately; only those three
+  numbers are ever shared across profiles.
+- 33 new tests - suite grew from 768 to 805.
 
 **v1.19.0 - Weather Correlation, Quick-Logging Guide**
 - New **Weather Correlation** (`demo/weather.py`, `get_weather_correlation`

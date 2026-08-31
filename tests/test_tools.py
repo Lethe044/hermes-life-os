@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -763,6 +763,27 @@ class TestWeatherCorrelationTool:
         monkeypatch.setattr(weather, "compute_weather_correlation", fake_compute)
         result = tools.dispatch_tool("get_weather_correlation", {"location": "Istanbul"})
         assert "No significant weather correlations" in result
+
+
+class TestLeaderboardTools:
+    def test_join_leaderboard(self, tools):
+        result = tools.dispatch_tool("join_leaderboard", {})
+        assert "Joined the leaderboard" in result
+
+    def test_leave_leaderboard(self, tools):
+        tools.dispatch_tool("join_leaderboard", {})
+        result = tools.dispatch_tool("leave_leaderboard", {})
+        assert "Left the leaderboard" in result
+
+    def test_get_leaderboard_empty(self, tools):
+        result = tools.dispatch_tool("get_leaderboard", {})
+        assert "No one has joined" in result
+
+    def test_get_leaderboard_after_joining(self, tools):
+        tools.dispatch_tool("join_leaderboard", {})
+        tools.dispatch_tool("remember", {"type": "mood", "content": "good", "score": 7})
+        result = tools.dispatch_tool("get_leaderboard", {})
+        assert "Life Score" in result
 
 
 if __name__ == "__main__":

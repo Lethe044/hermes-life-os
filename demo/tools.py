@@ -460,6 +460,23 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             return (f"No significant weather correlations found for {result['location'].get('name', location)} "
                      f"over the last {days} days (either not enough overlapping data, or no strong pattern).")
         return "\n".join(insights)
+
+    # ── join_leaderboard / leave_leaderboard / get_leaderboard ──────────────
+    elif name == "join_leaderboard":
+        from leaderboard import set_opt_in
+        set_opt_in(True)
+        return "Joined the leaderboard - your Life Score, streak, and achievement count are now visible to other opted-in profiles on this install."
+
+    elif name == "leave_leaderboard":
+        from leaderboard import set_opt_in
+        set_opt_in(False)
+        return "Left the leaderboard."
+
+    elif name == "get_leaderboard":
+        from leaderboard import get_leaderboard as _get_leaderboard, format_leaderboard
+        days = inp.get("days", 7)
+        entries = _get_leaderboard(days)
+        return format_leaderboard(entries)
     elif name == "get_life_score":
         from life_score import compute_life_score, compute_life_score_trend
         days = inp.get("days", 7)
@@ -1127,6 +1144,24 @@ TOOLS = [
             "location": {"type": "string", "description": "City/place name, e.g. 'Istanbul' or 'Austin, TX'."},
             "days":     {"type": "integer", "description": "Lookback window. Default 30."},
         }, "required": ["location"]}}},
+
+    {"type": "function", "function": {"name": "join_leaderboard",
+        "description": "Opt the current profile into the household/team leaderboard (shares only "
+                        "Life Score, logging streak, and achievement count with other profiles on "
+                        "this install - nothing else). Use when the user asks to join, enable, or "
+                        "opt into the leaderboard.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "leave_leaderboard",
+        "description": "Opt the current profile out of the household/team leaderboard.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_leaderboard",
+        "description": "Show the household/team leaderboard - ranked by average Life Score, with "
+                        "logging streak and achievement count, for every profile that has opted in.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window for Life Score. Default 7."},
+        }, "required": []}}},
 
     {"type": "function", "function": {"name": "update_habit",
         "description": "Update habit streak.",
