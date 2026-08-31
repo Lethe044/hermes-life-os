@@ -326,6 +326,7 @@ graph LR
     D --> D13[achievements.py<br/>Streak &amp; milestone badges]
     D --> D14[wrapped.py<br/>Shareable summary card]
     D --> D15[recommendations.py<br/>Rule-based suggestion engine]
+    D --> D16[weather.py<br/>Open-Meteo weather correlation]
     D --> D10[users.py<br/>Multi-user registry]
     D --> D11[slack_bot.py<br/>Slack Socket Mode bot]
     E --> E1[test_life_os_env.py]
@@ -633,7 +634,24 @@ curl -H "X-API-Key: some-long-random-string" -X POST \
 Binds to `127.0.0.1` by default and refuses to start without
 `LIFE_OS_API_KEY` set - every request needs it as an `X-API-Key`
 header. See `demo/local_api.py`'s docstring for the full endpoint list
-and the security notes on exposing this beyond your own machine.
+and the security notes on exposing this beyond your own machine. For a
+step-by-step Apple Shortcuts / Android / browser bookmarklet setup, see
+[docs/SHORTCUTS.md](docs/SHORTCUTS.md).
+
+## Weather Correlation
+
+```
+"does the weather affect my mood?"
+"any connection between rain and my energy levels?"
+```
+
+`demo/weather.py` fetches historical daily weather (temperature,
+precipitation) for a place you name, via Open-Meteo's free, keyless API
+(https://open-meteo.com) - no signup, no API key, no cost - and
+correlates it against your tracked metrics the same way the core
+correlation engine does. This is the only tracker that makes a network
+call (every other one is 100% local), and it only ever does so when
+explicitly asked, sending nothing but the place name you provide.
 
 ## Semantic Memory Search
 
@@ -834,6 +852,20 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.19.0 - Weather Correlation, Quick-Logging Guide**
+- New **Weather Correlation** (`demo/weather.py`, `get_weather_correlation`
+  tool): fetches historical daily weather via Open-Meteo's free, keyless
+  API and correlates temperature/precipitation against tracked metrics
+  using the same Pearson approach as the core correlation engine. The
+  only tracker that makes a network call - entirely on-demand, sends
+  nothing but the place name.
+- New [docs/SHORTCUTS.md](docs/SHORTCUTS.md): a step-by-step guide for
+  building one-tap Apple Shortcuts, Android (Tasker/HTTP Shortcuts), and
+  browser-bookmarklet quick-loggers on top of the existing local REST
+  API - no new app, no subscription.
+- 20 new tests (all HTTP calls mocked - no real network access
+  required to run the suite) - suite grew from 748 to 768.
 
 **v1.18.0 - Reading & Medication Tracking, Recommendations**
 - New trackers: **reading/learning** (`log_reading`,

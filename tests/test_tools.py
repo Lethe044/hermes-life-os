@@ -721,5 +721,49 @@ class TestRecommendationsTool:
         assert "sleep" in result.lower()
 
 
+class TestWeatherCorrelationTool:
+    def test_missing_location_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("get_weather_correlation", {})
+        assert "provide a location" in result.lower()
+
+    def test_geocode_failure_returns_error_message_not_exception(self, tools, monkeypatch):
+        import weather
+
+        def fake_geocode(location, timeout=10):
+            raise weather.WeatherError(f"No location found matching '{location}'.")
+
+        monkeypatch.setattr(weather, "geocode_location", fake_geocode)
+        result = tools.dispatch_tool("get_weather_correlation", {"location": "Nowhereville"})
+        assert "No location found" in result
+
+    def test_successful_correlation_formatted(self, tools, monkeypatch):
+        import weather
+
+        def fake_compute(location, days=30):
+            return {
+                "location": {"name": "Istanbul"},
+                "days": days,
+                "correlations": [{
+                    "weather_metric": "temp", "tracked_metric": "mood",
+                    "r": 0.6, "n_days": 10, "direction": "positive",
+                }],
+            }
+
+        monkeypatch.setattr(weather, "compute_weather_correlation", fake_compute)
+        result = tools.dispatch_tool("get_weather_correlation", {"location": "Istanbul"})
+        assert "Istanbul" in result
+        assert "mood" in result
+
+    def test_no_correlations_found_returns_helpful_message(self, tools, monkeypatch):
+        import weather
+
+        def fake_compute(location, days=30):
+            return {"location": {"name": "Istanbul"}, "days": days, "correlations": []}
+
+        monkeypatch.setattr(weather, "compute_weather_correlation", fake_compute)
+        result = tools.dispatch_tool("get_weather_correlation", {"location": "Istanbul"})
+        assert "No significant weather correlations" in result
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -443,6 +443,23 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         if not suggestions:
             return "No specific suggestions right now - not enough recent data, or everything looks steady."
         return "\n".join(f"- {s['message']}" for s in suggestions)
+
+    # ── get_weather_correlation ──────────────────────────────────────────────
+    elif name == "get_weather_correlation":
+        from weather import compute_weather_correlation, format_weather_insights, WeatherError
+        location = inp.get("location", "")
+        days = inp.get("days", 30)
+        if not location:
+            return "Please provide a location (city/place name) to check weather correlations."
+        try:
+            result = compute_weather_correlation(location, days=days)
+        except WeatherError as e:
+            return str(e)
+        insights = format_weather_insights(result)
+        if not insights:
+            return (f"No significant weather correlations found for {result['location'].get('name', location)} "
+                     f"over the last {days} days (either not enough overlapping data, or no strong pattern).")
+        return "\n".join(insights)
     elif name == "get_life_score":
         from life_score import compute_life_score, compute_life_score_trend
         days = inp.get("days", 7)
@@ -1100,6 +1117,16 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "days": {"type": "integer", "description": "Lookback window. Default 14."},
         }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_weather_correlation",
+        "description": "Fetch historical weather for a location (via a free, keyless weather API) "
+                        "and correlate temperature/precipitation against tracked metrics like mood, "
+                        "energy, and sleep. Requires internet access. Use when the user asks whether "
+                        "weather affects their mood/energy, or about seasonal patterns.",
+        "parameters": {"type": "object", "properties": {
+            "location": {"type": "string", "description": "City/place name, e.g. 'Istanbul' or 'Austin, TX'."},
+            "days":     {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": ["location"]}}},
 
     {"type": "function", "function": {"name": "update_habit",
         "description": "Update habit streak.",
