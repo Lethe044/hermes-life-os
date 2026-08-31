@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-life-os"
-version = "1.18.0"
+version = "1.19.0"
 description = "The personal OS that grows with you - mood, sleep, nutrition and habit tracking with pattern detection, built for Ollama/OpenAI/Anthropic/OpenRouter."
 readme = "README.md"
 license = { file = "LICENSE" }
