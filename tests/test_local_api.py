@@ -22,7 +22,7 @@ API_KEY = "test-api-key-12345"
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ("storage", "life_score", "achievements", "recommendations", "tools", "local_api"):
+    for mod in ("storage", "life_score", "achievements", "recommendations", "leaderboard", "tools", "local_api"):
         if mod in sys.modules:
             del sys.modules[mod]
     import local_api
@@ -223,7 +223,7 @@ class TestMultiUser:
     def multi_user_client(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        for mod in ("storage", "users", "life_score", "achievements", "recommendations", "tools", "local_api"):
+        for mod in ("storage", "users", "life_score", "achievements", "recommendations", "leaderboard", "tools", "local_api"):
             if mod in sys.modules:
                 del sys.modules[mod]
         import local_api
@@ -281,7 +281,7 @@ class TestMultiUser:
     def test_shared_key_and_per_user_keys_can_coexist(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        for mod in ("storage", "users", "life_score", "achievements", "recommendations", "tools", "local_api"):
+        for mod in ("storage", "users", "life_score", "achievements", "recommendations", "leaderboard", "tools", "local_api"):
             if mod in sys.modules:
                 del sys.modules[mod]
         import local_api
