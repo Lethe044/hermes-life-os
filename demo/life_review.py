@@ -25,7 +25,6 @@ via the get_weather_correlation tool if wanted.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import webbrowser
 from datetime import datetime
@@ -269,26 +268,145 @@ def render_html(data: Dict[str, Any]) -> str:
     )
 
 
+def render_pdf(data: Dict[str, Any], out_path: Path) -> Path:
+    """Renders a printable, multi-page PDF version of the same data
+    render_html() uses - a light background (unlike the dark HTML/
+    Wrapped theme), since PDFs are typically printed or read outside a
+    screen context. Page 1: title, Life Score, trend chart, best/
+    toughest day, retrospective. Page 2: correlations, achievements,
+    habits. Long lists are capped (not paginated further) to keep this
+    simple and predictable rather than open-ended."""
+    import textwrap
+    from matplotlib.backends.backend_pdf import PdfPages
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    ink = "#1a1d24"
+    accent = "#4a5fd6"
+    dim = "#6a6f78"
+
+    with PdfPages(out_path) as pdf:
+        fig = plt.figure(figsize=(8.5, 11), facecolor="white")
+        fig.text(0.5, 0.95, f"My {data['period_label']} with Hermes", ha="center",
+                  fontsize=22, weight="bold", color=ink)
+        fig.text(0.5, 0.925, f"Last {data['days']} days - {data['entry_count']} entries logged",
+                  ha="center", fontsize=10, color=dim)
+
+        score = data["avg_life_score"]
+        fig.text(0.5, 0.82, str(score) if score is not None else "N/A", ha="center",
+                  fontsize=56, weight="bold", color=accent)
+        fig.text(0.5, 0.775, "Average Life Score", ha="center", fontsize=11, color=dim)
+
+        if len(data["trend"]) >= 2:
+            ax = fig.add_axes([0.12, 0.60, 0.76, 0.13])
+            dates = [t["date"] for t in data["trend"]]
+            scores = [t["score"] for t in data["trend"]]
+            ax.plot(dates, scores, color=accent, linewidth=1.6)
+            ax.fill_between(dates, scores, alpha=0.12, color=accent)
+            ax.set_ylim(0, 100)
+            ax.tick_params(axis="x", rotation=45, labelsize=6)
+            ax.tick_params(axis="y", labelsize=7)
+            for spine in ("top", "right"):
+                ax.spines[spine].set_visible(False)
+
+        if data["best_day"] and data["worst_day"]:
+            fig.text(0.5, 0.535, f"Best day: {data['best_day']['date']} (score {data['best_day']['score']})",
+                      ha="center", fontsize=9, color=ink)
+            fig.text(0.5, 0.51, f"Toughest day: {data['worst_day']['date']} (score {data['worst_day']['score']})",
+                      ha="center", fontsize=9, color=ink)
+
+        y = 0.44
+        fig.text(0.08, y, f"Retrospective - last {data['compare_days']} days vs. the "
+                           f"{data['compare_days']} before", fontsize=11, weight="bold", color=ink)
+        y -= 0.03
+        if data["retrospective"]:
+            for metric, r in sorted(data["retrospective"].items())[:10]:
+                direction = "up" if r["delta"] > 0 else "down" if r["delta"] < 0 else "flat"
+                fig.text(0.10, y, f"- {metric}: {r['previous']:.1f} -> {r['current']:.1f} "
+                                   f"({direction} {abs(r['pct_change']):.0f}%)", fontsize=8.5, color=ink)
+                y -= 0.024
+        else:
+            fig.text(0.10, y, "Not enough data in both periods to compare yet.",
+                      fontsize=8.5, style="italic", color=dim)
+
+        fig.text(0.5, 0.02, "Generated locally by Hermes Life OS - no data leaves your machine.",
+                  ha="center", fontsize=7, color=dim)
+        pdf.savefig(fig)
+        plt.close(fig)
+
+        fig2 = plt.figure(figsize=(8.5, 11), facecolor="white")
+        fig2.text(0.5, 0.96, "Correlations, Achievements & Habits", ha="center",
+                   fontsize=18, weight="bold", color=ink)
+
+        y = 0.90
+        fig2.text(0.08, y, "Correlations Detected", fontsize=12, weight="bold", color=ink)
+        y -= 0.03
+        if data["insights"]:
+            for insight in data["insights"][:10]:
+                short = textwrap.shorten(insight, width=95, placeholder="...")
+                fig2.text(0.10, y, f"- {short}", fontsize=8.5, color=ink)
+                y -= 0.026
+        else:
+            fig2.text(0.10, y, "No strong correlations detected yet - keep logging.",
+                       fontsize=8.5, style="italic", color=dim)
+            y -= 0.026
+
+        y -= 0.02
+        fig2.text(0.08, y, "Achievements Earned", fontsize=12, weight="bold", color=ink)
+        y -= 0.03
+        if data["earned_badges"]:
+            for b in data["earned_badges"][:15]:
+                fig2.text(0.10, y, f"- {b['name']}", fontsize=8.5, color=ink)
+                y -= 0.024
+        else:
+            fig2.text(0.10, y, "No achievements earned yet this period.",
+                       fontsize=8.5, style="italic", color=dim)
+            y -= 0.024
+
+        y -= 0.02
+        fig2.text(0.08, y, "Habits", fontsize=12, weight="bold", color=ink)
+        y -= 0.03
+        if data["habits"]:
+            for h in data["habits"][:15]:
+                best = h.get("best_streak", h.get("streak", 0))
+                fig2.text(0.10, y, f"- {h.get('name', '')}: {best}-day best streak", fontsize=8.5, color=ink)
+                y -= 0.024
+        else:
+            fig2.text(0.10, y, "No habits tracked yet.", fontsize=8.5, style="italic", color=dim)
+
+        pdf.savefig(fig2)
+        plt.close(fig2)
+
+    return out_path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a Hermes Life OS Life Review report")
     parser.add_argument("--days", type=int, default=90, help="Period to review. Default 90 (a quarter).")
     parser.add_argument("--compare-days", type=int, default=None,
                         help="Retrospective comparison window. Default: same as --days.")
-    parser.add_argument("--out", default="hermes-life-review.html", help="Output HTML path.")
+    parser.add_argument("--out", default=None,
+                        help="Output path. Default: hermes-life-review.html (or .pdf with --format pdf).")
+    parser.add_argument("--format", choices=["html", "pdf"], default="html",
+                        help="Report format. HTML opens in a browser; PDF is print/share-friendly. Default: html.")
     parser.add_argument("--profile", default=None, help="Profile to review. Default: active/default.")
-    parser.add_argument("--no-open", action="store_true", help="Don't open the report in a browser.")
+    parser.add_argument("--no-open", action="store_true", help="Don't open the report after generating it.")
     args = parser.parse_args()
 
     storage.set_active_profile(args.profile)
 
     data = build_life_review_data(args.days, args.compare_days)
-    html = render_html(data)
+    out_path = Path(args.out) if args.out else Path(f"hermes-life-review.{args.format}")
 
-    out_path = Path(args.out)
-    out_path.write_text(html, encoding="utf-8")
+    if args.format == "pdf":
+        render_pdf(data, out_path)
+    else:
+        out_path.write_text(render_html(data), encoding="utf-8")
     print(f"Life Review saved to {out_path}")
 
     if not args.no_open:
+        # webbrowser.open() on a file:// URI delegates to the OS's default
+        # handler for that file type - works for PDFs too, not just HTML,
+        # on every platform Python's webbrowser module supports.
         webbrowser.open(out_path.as_uri())
 
 

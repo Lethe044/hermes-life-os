@@ -102,6 +102,47 @@ class TestRenderHtml:
         assert html
 
 
+class TestRenderPdf:
+    def test_renders_a_real_pdf_with_no_data(self, life_review, tmp_path):
+        data = life_review.build_life_review_data(90)
+        out = life_review.render_pdf(data, tmp_path / "review.pdf")
+        assert out.exists()
+        assert out.read_bytes().startswith(b"%PDF")
+
+    def test_renders_with_data(self, life_review, tmp_path):
+        import storage
+        for score in (5, 6, 7, 8):
+            storage.write_memory({"type": "mood", "content": "day", "score": score})
+        storage.write_memory({"type": "workout", "content": "run", "duration_min": 30})
+        data = life_review.build_life_review_data(90)
+        out = life_review.render_pdf(data, tmp_path / "review.pdf")
+        assert out.exists()
+        assert out.stat().st_size > 2000  # a real multi-page PDF, not an empty/corrupt file
+
+    def test_creates_parent_directories(self, life_review, tmp_path):
+        data = life_review.build_life_review_data(90)
+        nested = tmp_path / "a" / "b" / "review.pdf"
+        out = life_review.render_pdf(data, nested)
+        assert out.exists()
+
+    def test_no_missing_glyph_warnings(self, life_review, tmp_path):
+        import storage, warnings
+        storage.write_memory({"type": "workout", "content": "run", "duration_min": 20})
+        data = life_review.build_life_review_data(90)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            out = life_review.render_pdf(data, tmp_path / "review.pdf")
+        assert out.exists()
+
+    def test_handles_long_correlation_text_without_raising(self, life_review, tmp_path):
+        # format_correlation_insights() strings can be long - render_pdf()
+        # truncates via textwrap.shorten() rather than overflowing the page.
+        data = life_review.build_life_review_data(90)
+        data["insights"] = ["This is a very long correlation insight string " * 5]
+        out = life_review.render_pdf(data, tmp_path / "review.pdf")
+        assert out.exists()
+
+
 class TestMainCli:
     def test_generates_file_with_no_data(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HOME", str(tmp_path))
@@ -136,3 +177,35 @@ class TestMainCli:
             mp.setattr(lr.webbrowser, "open", lambda *a, **k: called.append(a))
             lr.main()
         assert called == []
+
+    def test_format_pdf_generates_a_pdf(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        for mod in ("storage", "analytics", "patterns", "life_score", "achievements",
+                    "dashboard", "life_review"):
+            if mod in sys.modules:
+                del sys.modules[mod]
+        import life_review as lr
+        importlib.reload(lr)
+
+        out_path = tmp_path / "review.pdf"
+        monkeypatch.setattr(sys, "argv", ["life_review.py", "--format", "pdf",
+                                           "--out", str(out_path), "--no-open"])
+        lr.main()
+        assert out_path.exists()
+        assert out_path.read_bytes().startswith(b"%PDF")
+
+    def test_default_out_path_matches_format(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.chdir(tmp_path)
+        for mod in ("storage", "analytics", "patterns", "life_score", "achievements",
+                    "dashboard", "life_review"):
+            if mod in sys.modules:
+                del sys.modules[mod]
+        import life_review as lr
+        importlib.reload(lr)
+
+        monkeypatch.setattr(sys, "argv", ["life_review.py", "--format", "pdf", "--no-open"])
+        lr.main()
+        assert (tmp_path / "hermes-life-review.pdf").exists()

@@ -329,6 +329,7 @@ graph LR
     D --> D16[weather.py<br/>Open-Meteo weather correlation]
     D --> D17[life_review.py<br/>Quarterly/yearly retrospective report]
     D --> D18[leaderboard.py<br/>Opt-in household/team leaderboard]
+    D --> D19[prompts.py<br/>Deterministic daily reflection prompts]
     D --> D10[users.py<br/>Multi-user registry]
     D --> D11[slack_bot.py<br/>Slack Socket Mode bot]
     E --> E1[test_life_os_env.py]
@@ -672,6 +673,23 @@ quarter or a year, rather than 30 days. Doesn't include weather
 correlation automatically, since that's the one feature that touches
 the network - ask for it separately if wanted.
 
+Need something printable or shareable outside a browser? `--format
+pdf` renders a two-page PDF version with the same data (Life Score,
+retrospective, correlations, achievements, habits) on a light,
+print-friendly background:
+
+```bash
+hermes-life-os-review --days 90 --format pdf --out my-quarter.pdf
+```
+
+`hermes-life-os-wrapped` supports the same trick even more simply -
+just name the output file `.pdf` instead of `.png` and it's picked up
+automatically:
+
+```bash
+hermes-life-os-wrapped --out hermes-wrapped.pdf
+```
+
 ## Leaderboard - opt-in household/team comparison
 
 ```
@@ -687,6 +705,38 @@ explicitly opting in (`join_leaderboard`, or `python demo/leaderboard.py
 join`), and leaving again takes effect immediately. Only those three
 numbers are ever shared across profiles - no journal content, no raw
 logged entries, and nothing ever leaves the machine.
+
+## Streak Freezes
+
+Habits (`update_habit`) now bank a **streak freeze** every 7 days of an
+active streak, up to 3 at once - a small forgiveness mechanic so one
+missed day doesn't erase weeks of consistency:
+
+```
+"I meditated" (7 days running) -> "Habit 'meditate': streak 7 days (best: 7) - earned a streak freeze! (1 available)"
+"I missed meditating today, use a freeze" -> "Habit 'meditate': streak protected with a freeze! Still at 7 days (best: 7). 0 freeze(s) left."
+```
+
+No freeze banked and a day's missed? The streak resets to 0, same as
+always - freezes are a bonus for consistency, not a way around ever
+having an off day.
+
+## On This Day & Daily Prompts
+
+```
+"what was I doing on this day last year?"
+"give me a reflection prompt"
+```
+
+Two small additions aimed at journaling depth, not just numbers:
+
+- **On This Day** (`get_on_this_day`) - a nostalgia lookup: finds
+  memory entries logged on today's month/day in previous years, most
+  recent first.
+- **Daily Prompt** (`get_daily_prompt`, `demo/prompts.py`) - a rotating
+  reflection question, deterministic by calendar date (same day always
+  returns the same prompt, and it changes daily) - no state to persist,
+  no randomness to make testing flaky.
 
 ## Semantic Memory Search
 
@@ -887,6 +937,31 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.21.0 - PDF Export, Streak Freezes, On This Day, Daily Prompts**
+- **PDF export** for the two biggest reports: `hermes-life-os-review
+  --format pdf` renders a two-page, print-friendly PDF version of the
+  Life Review (Life Score, retrospective, correlations, achievements,
+  habits); `hermes-life-os-wrapped --out card.pdf` picks up PDF
+  automatically from the file extension - no new flags needed.
+- **Streak freezes**: habits now bank one streak freeze every 7 days of
+  an active streak (capped at 3) - `update_habit` with
+  `completed=false, use_freeze=true` spends one to protect a streak
+  through a missed day instead of resetting it to 0.
+- New **On This Day** (`get_on_this_day`): a nostalgia lookup - finds
+  memory entries logged on today's month/day in previous years.
+- New **Daily Prompt** (`get_daily_prompt`, `demo/prompts.py`): a
+  rotating reflection question, deterministic by calendar date - same
+  day always returns the same prompt, changes daily, no state to
+  persist.
+- Also fixes a real Python variable-scoping bug found during testing:
+  a local `from storage import get_all_memory` inside one `dispatch_tool`
+  branch was shadowing the module-level import for the *entire*
+  function, breaking two unrelated tools (`get_correlation_insights`'s
+  semantic-recall path and `compare_periods`) whenever `get_on_this_day`
+  had been added to the same file. Caught by the full test suite before
+  release, not after.
+- 62 new tests - suite grew from 806 to 834.
 
 **v1.20.0 - Life Review Report, Household Leaderboard**
 - New **Life Review** (`demo/life_review.py`, `hermes-life-os-review`):

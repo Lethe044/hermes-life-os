@@ -157,7 +157,8 @@ def render_wrapped_image(stats: Dict, out_path: Path, title: Optional[str] = Non
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a shareable Hermes Life OS Wrapped card")
     parser.add_argument("--days", type=int, default=30, help="Period to summarize. Default 30.")
-    parser.add_argument("--out", default="hermes-wrapped.png", help="Output PNG path.")
+    parser.add_argument("--out", default="hermes-wrapped.png",
+                        help="Output path - .png (default) or .pdf, format is picked from the extension.")
     parser.add_argument("--title", default=None, help="Custom title. Default: 'My <Period> with Hermes'.")
     parser.add_argument("--profile", default=None, help="Profile to summarize. Default: active/default.")
     args = parser.parse_args()

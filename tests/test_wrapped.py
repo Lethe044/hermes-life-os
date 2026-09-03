@@ -120,6 +120,18 @@ class TestRenderWrappedImage:
         out = wrapped.render_wrapped_image(stats, nested)
         assert out.exists()
 
+    def test_pdf_output_via_file_extension(self, wrapped, tmp_path):
+        # matplotlib's savefig() picks the format from the file
+        # extension automatically - render_wrapped_image() needs no
+        # special-casing for this to work, but it's worth a dedicated
+        # regression test since it's an advertised, user-facing feature.
+        import storage
+        storage.write_memory({"type": "mood", "content": "day", "score": 6})
+        stats = wrapped.build_wrapped_stats(30)
+        out = wrapped.render_wrapped_image(stats, tmp_path / "card.pdf")
+        assert out.exists()
+        assert out.read_bytes().startswith(b"%PDF")
+
 
 class TestMainCli:
     def test_exits_cleanly_with_no_data(self, tmp_path, monkeypatch):
