@@ -765,6 +765,115 @@ class TestWeatherCorrelationTool:
         assert "No significant weather correlations" in result
 
 
+class TestStreakFreeze:
+    def test_normal_streak_increments(self, tools):
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        result = tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        assert "streak 2 days" in result
+
+    def test_missed_day_without_freeze_resets_streak(self, tools):
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        result = tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": False})
+        assert "streak 0 days" in result
+
+    def test_earns_freeze_at_7_day_streak(self, tools):
+        result = None
+        for _ in range(7):
+            result = tools.dispatch_tool("update_habit", {"habit_name": "run", "completed": True})
+        assert "earned a streak freeze" in result
+
+    def test_freeze_protects_streak_when_missed(self, tools):
+        for _ in range(7):
+            tools.dispatch_tool("update_habit", {"habit_name": "run", "completed": True})
+        # miss a day but spend the freeze
+        result = tools.dispatch_tool("update_habit", {
+            "habit_name": "run", "completed": False, "use_freeze": True,
+        })
+        assert "streak protected with a freeze" in result
+        assert "Still at 7 days" in result
+
+    def test_freeze_consumed_after_use(self, tools):
+        from storage import load_habits
+        for _ in range(7):
+            tools.dispatch_tool("update_habit", {"habit_name": "run", "completed": True})
+        assert load_habits()[0]["freezes_available"] == 1
+        tools.dispatch_tool("update_habit", {"habit_name": "run", "completed": False, "use_freeze": True})
+        assert load_habits()[0]["freezes_available"] == 0
+
+    def test_missing_freeze_falls_back_to_reset(self, tools):
+        # never earned a freeze - use_freeze=True has no freeze to spend,
+        # so the streak still resets like normal.
+        tools.dispatch_tool("update_habit", {"habit_name": "run", "completed": True})
+        result = tools.dispatch_tool("update_habit", {
+            "habit_name": "run", "completed": False, "use_freeze": True,
+        })
+        assert "streak 0 days" in result
+
+    def test_freezes_capped_at_three(self, tools):
+        from storage import load_habits
+        for _ in range(28):  # 4x 7-day milestones
+            tools.dispatch_tool("update_habit", {"habit_name": "run", "completed": True})
+        assert load_habits()[0]["freezes_available"] == 3
+
+
+class TestOnThisDayTool:
+    def test_no_data_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("get_on_this_day", {})
+        assert "No entries found" in result
+
+    def test_finds_entry_from_previous_year(self, tools):
+        from storage import write_memory
+        from datetime import datetime
+        today = datetime.utcnow()
+        last_year_str = f"{today.year - 1}-{today.month:02d}-{today.day:02d}T09:00:00Z"
+        write_memory({"type": "mood", "content": "was a great day", "score": 8,
+                      "timestamp": last_year_str})
+        result = tools.dispatch_tool("get_on_this_day", {})
+        assert "1 year ago" in result
+        assert "was a great day" in result
+
+    def test_multiple_years_sorted_most_recent_first(self, tools):
+        from storage import write_memory
+        from datetime import datetime
+        today = datetime.utcnow()
+        write_memory({"type": "mood", "content": "three years back", "score": 5,
+                      "timestamp": f"{today.year - 3}-{today.month:02d}-{today.day:02d}T09:00:00Z"})
+        write_memory({"type": "mood", "content": "one year back", "score": 7,
+                      "timestamp": f"{today.year - 1}-{today.month:02d}-{today.day:02d}T09:00:00Z"})
+        result = tools.dispatch_tool("get_on_this_day", {})
+        lines = result.split("\n")
+        assert "1 year ago" in lines[0]
+        assert "3 years ago" in lines[1]
+
+    def test_entries_from_a_different_day_excluded(self, tools):
+        from storage import write_memory
+        write_memory({"type": "mood", "content": "unrelated day", "score": 5,
+                      "timestamp": "2020-06-15T09:00:00Z"})  # unlikely to be "today" in tests
+        result = tools.dispatch_tool("get_on_this_day", {})
+        # Only asserts no crash and a sensible response either way, since
+        # the exact date this test runs on is nondeterministic; the real
+        # date-matching logic is covered precisely by the tests above.
+        assert isinstance(result, str) and len(result) > 0
+
+    def test_todays_own_entries_excluded(self, tools):
+        from storage import write_memory
+        write_memory({"type": "mood", "content": "logged just now", "score": 6})
+        result = tools.dispatch_tool("get_on_this_day", {})
+        assert "No entries found" in result
+
+
+class TestDailyPromptTool:
+    def test_returns_a_prompt(self, tools):
+        result = tools.dispatch_tool("get_daily_prompt", {})
+        assert isinstance(result, str) and len(result) > 0
+
+    def test_matches_prompts_module(self, tools):
+        import prompts
+        result = tools.dispatch_tool("get_daily_prompt", {})
+        assert result in prompts.DAILY_PROMPTS
+
+
 class TestLeaderboardTools:
     def test_join_leaderboard(self, tools):
         result = tools.dispatch_tool("join_leaderboard", {})

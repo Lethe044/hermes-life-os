@@ -462,6 +462,35 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         return "\n".join(insights)
 
     # ── join_leaderboard / leave_leaderboard / get_leaderboard ──────────────
+    # ── get_on_this_day ──────────────────────────────────────────────────────
+    elif name == "get_on_this_day":
+        today = datetime.utcnow()
+        matches = []
+        for e in get_all_memory():
+            ts = e.get("timestamp", "")
+            if len(ts) < 10:
+                continue
+            try:
+                entry_date = datetime.strptime(ts[:10], "%Y-%m-%d")
+            except ValueError:
+                continue
+            if entry_date.month == today.month and entry_date.day == today.day and entry_date.year != today.year:
+                matches.append((today.year - entry_date.year, entry_date, e))
+        if not matches:
+            return "No entries found from this day in a previous year."
+        matches.sort(key=lambda m: m[0])
+        lines = []
+        for years_ago, entry_date, e in matches[:10]:
+            year_word = "year" if years_ago == 1 else "years"
+            lines.append(f"{years_ago} {year_word} ago ({entry_date.strftime('%Y-%m-%d')}): "
+                         f"[{e.get('type', '')}] {e.get('content', '')}")
+        return "\n".join(lines)
+
+    # ── get_daily_prompt ─────────────────────────────────────────────────────
+    elif name == "get_daily_prompt":
+        from prompts import get_daily_prompt as _get_daily_prompt
+        return _get_daily_prompt()
+
     elif name == "join_leaderboard":
         from leaderboard import set_opt_in
         set_opt_in(True)
@@ -509,16 +538,30 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
 
     # ── update_habit ──────────────────────────────────────────────────────────
     elif name == "update_habit":
-        name_h    = inp.get("habit_name", "")
-        completed = inp.get("completed", True)
-        habits    = load_habits()
-        found     = False
+        name_h     = inp.get("habit_name", "")
+        completed  = inp.get("completed", True)
+        use_freeze = inp.get("use_freeze", False)
+        habits     = load_habits()
+        found      = False
+        freeze_used = False
+        freeze_earned = False
         for h in habits:
             if h["name"].lower() == name_h.lower():
                 if completed:
                     h["streak"]    = h.get("streak", 0) + 1
                     h["last_done"] = time.strftime("%Y-%m-%d")
                     h["best_streak"] = max(h.get("best_streak", 0), h["streak"])
+                    # Earn a streak freeze every 7 days of streak, capped at
+                    # 3 banked at once - a small forgiveness mechanic so one
+                    # missed day doesn't erase a long streak.
+                    if h["streak"] % 7 == 0 and h.get("freezes_available", 0) < 3:
+                        h["freezes_available"] = h.get("freezes_available", 0) + 1
+                        freeze_earned = True
+                elif use_freeze and h.get("freezes_available", 0) > 0:
+                    h["freezes_available"] -= 1
+                    h["last_done"] = time.strftime("%Y-%m-%d")
+                    freeze_used = True
+                    # streak is deliberately left unchanged
                 else:
                     h["streak"] = 0
                 found = True
@@ -529,11 +572,20 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                 "best_streak": 1 if completed else 0,
                 "last_done": time.strftime("%Y-%m-%d") if completed else None,
                 "created": time.strftime("%Y-%m-%d"),
+                "freezes_available": 0,
             })
         save_habits(habits)
-        streak = next((h["streak"] for h in habits if h["name"].lower() == name_h.lower()), 0)
-        best   = next((h.get("best_streak",0) for h in habits if h["name"].lower() == name_h.lower()), 0)
-        return f"Habit '{name_h}': streak {streak} days (best: {best})"
+        streak  = next((h["streak"] for h in habits if h["name"].lower() == name_h.lower()), 0)
+        best    = next((h.get("best_streak", 0) for h in habits if h["name"].lower() == name_h.lower()), 0)
+        freezes = next((h.get("freezes_available", 0) for h in habits if h["name"].lower() == name_h.lower()), 0)
+
+        if freeze_used:
+            return (f"Habit '{name_h}': streak protected with a freeze! Still at {streak} days "
+                     f"(best: {best}). {freezes} freeze(s) left.")
+        result = f"Habit '{name_h}': streak {streak} days (best: {best})"
+        if freeze_earned:
+            result += f" - earned a streak freeze! ({freezes} available)"
+        return result
 
     # ── update_goal ───────────────────────────────────────────────────────────
     elif name == "update_goal":
@@ -1145,6 +1197,18 @@ TOOLS = [
             "days":     {"type": "integer", "description": "Lookback window. Default 30."},
         }, "required": ["location"]}}},
 
+    {"type": "function", "function": {"name": "get_on_this_day",
+        "description": "Find memory entries logged on this same calendar day (month/day) in "
+                        "previous years - a nostalgia lookup. Use when the user asks what they "
+                        "were doing 'on this day', 'a year ago', 'last year around now', etc.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_daily_prompt",
+        "description": "Get today's reflection/journaling prompt - a rotating daily question meant "
+                        "to encourage deeper journaling beyond routine logging. Use when the user "
+                        "asks for a reflection prompt, journal prompt, or something to think about.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
     {"type": "function", "function": {"name": "join_leaderboard",
         "description": "Opt the current profile into the household/team leaderboard (shares only "
                         "Life Score, logging streak, and achievement count with other profiles on "
@@ -1164,10 +1228,14 @@ TOOLS = [
         }, "required": []}}},
 
     {"type": "function", "function": {"name": "update_habit",
-        "description": "Update habit streak.",
+        "description": "Update habit streak. Habits earn a 'streak freeze' every 7 days of streak "
+                        "(banked, up to 3) - if a day is missed, set completed=false and "
+                        "use_freeze=true to spend one and protect the streak instead of resetting it.",
         "parameters": {"type": "object", "properties": {
             "habit_name": {"type": "string"},
             "completed":  {"type": "boolean"},
+            "use_freeze": {"type": "boolean", "description": "Only relevant when completed=false - "
+                           "spend a banked streak freeze instead of resetting the streak to 0."},
         }, "required": ["habit_name", "completed"]}}},
 
     {"type": "function", "function": {"name": "update_goal",
