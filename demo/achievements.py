@@ -34,7 +34,7 @@ COUNT_BADGES = [
 ]
 
 
-def _consecutive_day_streak(dates: List[str]) -> int:
+def consecutive_day_streak(dates: List[str]) -> int:
     """Longest streak of consecutive calendar days ending today (or
     yesterday - a one-day grace period so a streak doesn't reset to 0
     just because today hasn't happened yet) from a list of YYYY-MM-DD
@@ -60,6 +60,11 @@ def _entry_type_counts(entries: List[Dict]) -> Dict[str, int]:
         t = e.get("type", "")
         counts[t] = counts.get(t, 0) + 1
     return counts
+
+
+# Backward-compatible alias - this was originally a private (leading
+# underscore) helper before heatmap.py started reusing it too.
+_consecutive_day_streak = consecutive_day_streak
 
 
 def _badge(id_: str, name: str, description: str, icon: str,
@@ -99,7 +104,7 @@ def evaluate_achievements() -> List[Dict]:
 
     entries = get_all_memory()
     dates = [e.get("timestamp", "")[:10] for e in entries if e.get("timestamp")]
-    current_streak = _consecutive_day_streak(dates)
+    current_streak = consecutive_day_streak(dates)
     for milestone in STREAK_MILESTONES:
         results.append(_badge(
             f"logging-streak-{milestone}",

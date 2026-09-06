@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -872,6 +872,39 @@ class TestDailyPromptTool:
         import prompts
         result = tools.dispatch_tool("get_daily_prompt", {})
         assert result in prompts.DAILY_PROMPTS
+
+
+class TestMoonCorrelationTool:
+    def test_no_data_still_returns_today_phase(self, tools):
+        result = tools.dispatch_tool("get_moon_correlation", {})
+        assert "Today:" in result
+
+    def test_days_param_respected(self, tools):
+        result = tools.dispatch_tool("get_moon_correlation", {"days": 30})
+        assert "Today:" in result
+
+
+class TestSleepDebtTools:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_sleep_debt", {})
+        assert "No sleep logged" in result
+
+    def test_with_data_reports_debt(self, tools):
+        tools.dispatch_tool("log_sleep", {"hours": 5, "quality": 5})
+        result = tools.dispatch_tool("get_sleep_debt", {})
+        assert "Sleep debt" in result or "No sleep debt" in result
+
+    def test_suggested_bedtime_requires_wake_time(self, tools):
+        result = tools.dispatch_tool("get_suggested_bedtime", {})
+        assert "provide a wake-up time" in result.lower()
+
+    def test_suggested_bedtime_returns_a_time(self, tools):
+        result = tools.dispatch_tool("get_suggested_bedtime", {"wake_time": "07:00"})
+        assert "Suggested bedtime" in result
+
+    def test_suggested_bedtime_invalid_format_handled(self, tools):
+        result = tools.dispatch_tool("get_suggested_bedtime", {"wake_time": "not-a-time"})
+        assert "24-hour" in result
 
 
 class TestLeaderboardTools:

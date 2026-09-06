@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "demo"))
 def demo_life_os(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ("storage", "life_score", "achievements", "recommendations", "leaderboard", "tools", "demo_life_os"):
+    for mod in ("storage", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "tools", "demo_life_os"):
         if mod in sys.modules:
             del sys.modules[mod]
     import demo_life_os as dlo

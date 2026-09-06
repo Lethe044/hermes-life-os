@@ -461,7 +461,40 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                      f"over the last {days} days (either not enough overlapping data, or no strong pattern).")
         return "\n".join(insights)
 
-    # ── join_leaderboard / leave_leaderboard / get_leaderboard ──────────────
+    # ── get_moon_correlation ─────────────────────────────────────────────────
+    elif name == "get_moon_correlation":
+        from moon import compute_moon_correlation, format_moon_insights
+        days = inp.get("days", 90)
+        result = compute_moon_correlation(days)
+        insights = format_moon_insights(result)
+        header = f"Today: {result['today_phase']} ({result['today_illumination_pct']}% illuminated)."
+        if not insights:
+            return (f"{header} No significant correlation found between moon phase and tracked "
+                     f"metrics over the last {days} days.")
+        return header + "\n" + "\n".join(insights)
+
+    # ── get_sleep_debt ───────────────────────────────────────────────────────
+    elif name == "get_sleep_debt":
+        from sleep_debt import compute_sleep_debt, format_sleep_debt_summary
+        days = inp.get("days", 14)
+        target_hours = inp.get("target_hours", 8.0)
+        result = compute_sleep_debt(days, target_hours)
+        return format_sleep_debt_summary(result)
+
+    # ── get_suggested_bedtime ────────────────────────────────────────────────
+    elif name == "get_suggested_bedtime":
+        from sleep_debt import compute_sleep_debt, suggested_bedtime
+        wake_time = inp.get("wake_time", "")
+        target_hours = inp.get("target_hours", 8.0)
+        if not wake_time:
+            return "Please provide a wake-up time (HH:MM) to suggest a bedtime."
+        try:
+            debt_result = compute_sleep_debt(14, target_hours)
+            bedtime = suggested_bedtime(wake_time, target_hours, debt_result["total_debt_hours"])
+        except ValueError:
+            return "Please provide the wake-up time in 24-hour HH:MM format, e.g. '07:00'."
+        return f"Suggested bedtime tonight: {bedtime} (targets {target_hours}h, waking at {wake_time})"
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -1196,6 +1229,33 @@ TOOLS = [
             "location": {"type": "string", "description": "City/place name, e.g. 'Istanbul' or 'Austin, TX'."},
             "days":     {"type": "integer", "description": "Lookback window. Default 30."},
         }, "required": ["location"]}}},
+
+    {"type": "function", "function": {"name": "get_moon_correlation",
+        "description": "Correlate lunar phase (computed locally, no network needed) against tracked "
+                        "metrics like mood, energy, and sleep. Use when the user jokingly or "
+                        "seriously asks if the moon/full moon affects their mood or sleep.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 90."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_sleep_debt",
+        "description": "Get cumulative sleep debt - the shortfall between a target sleep duration "
+                        "and what's actually been logged over a recent window. Use when the user "
+                        "asks about sleep debt, whether they're behind on sleep, or how much extra "
+                        "sleep they need.",
+        "parameters": {"type": "object", "properties": {
+            "days":         {"type": "integer", "description": "Lookback window. Default 14."},
+            "target_hours": {"type": "number", "description": "Target nightly sleep. Default 8."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_suggested_bedtime",
+        "description": "Suggest tonight's bedtime given a wake-up time, factoring in current sleep "
+                        "debt (nudged earlier, gradually). Use when the user asks what time they "
+                        "should go to bed, or for a bedtime recommendation.",
+        "parameters": {"type": "object", "properties": {
+            "wake_time":    {"type": "string", "description": "24h HH:MM, e.g. '07:00'."},
+            "target_hours": {"type": "number", "description": "Target nightly sleep. Default 8."},
+        }, "required": ["wake_time"]}}},
 
     {"type": "function", "function": {"name": "get_on_this_day",
         "description": "Find memory entries logged on this same calendar day (month/day) in "

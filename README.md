@@ -330,6 +330,10 @@ graph LR
     D --> D17[life_review.py<br/>Quarterly/yearly retrospective report]
     D --> D18[leaderboard.py<br/>Opt-in household/team leaderboard]
     D --> D19[prompts.py<br/>Deterministic daily reflection prompts]
+    D --> D20[moon.py<br/>Local moon phase correlation]
+    D --> D21[sleep_debt.py<br/>Sleep debt & bedtime suggestions]
+    D --> D22[heatmap.py<br/>GitHub-style SVG contribution heatmap]
+    D --> D23[focus_timer.py<br/>Terminal Pomodoro timer]
     D --> D10[users.py<br/>Multi-user registry]
     D --> D11[slack_bot.py<br/>Slack Socket Mode bot]
     E --> E1[test_life_os_env.py]
@@ -738,6 +742,76 @@ Two small additions aimed at journaling depth, not just numbers:
   returns the same prompt, and it changes daily) - no state to persist,
   no randomness to make testing flaky.
 
+## Contribution Heatmap
+
+```bash
+hermes-life-os-heatmap --days 365 --out heatmap.svg
+hermes-life-os-heatmap --days 90 --out heatmap.html    # wrapped with stats
+```
+
+A GitHub-style calendar heatmap of your logging activity - darker
+squares for more active days, same five-level palette as GitHub's own
+contribution graph. Pure SVG (no matplotlib needed), so it's fast and
+embeddable anywhere that accepts raw SVG or an `<img>` tag. `.html`
+output wraps it with active-day/streak stats above the grid.
+
+## Moon Phase Correlation
+
+```
+"does the full moon affect my mood?"
+```
+
+`demo/moon.py` correlates lunar phase against tracked metrics, purely
+via local astronomical calculation - unlike weather.py, this makes
+*zero* network calls; the phase is computed on-device from a known
+reference new moon date. Offered in the same evidence-based spirit as
+every correlation Hermes computes: not because lunar effects on mood
+are scientifically established (most rigorous research says they
+aren't), but because it's a fun, harmless pattern to check against your
+own data - if Hermes finds nothing, that itself is the honest answer.
+
+## Sleep Debt & Suggested Bedtime
+
+```
+"how much sleep debt do I have?"
+"what time should I go to bed if I'm waking up at 7?"
+```
+
+`demo/sleep_debt.py` sums the shortfall between a target sleep duration
+(default 8h) and what's actually logged over a recent window - only
+days with a logged sleep value count, so gaps in logging are never
+mistaken for debt. `get_suggested_bedtime` factors existing debt into
+tonight's recommended bedtime, nudged earlier gradually (a quarter of
+the debt per night, capped at 1h extra) rather than proposing something
+unrealistic in a single night.
+
+## Focus Timer
+
+```bash
+hermes-life-os-focus 25 --task "writing"
+hermes-life-os-focus 25 --task "deep work" --break 5
+```
+
+A terminal Pomodoro-style countdown that logs itself on completion, via
+the exact same `log_focus_session` path a chat-based request uses - so
+this isn't a separate timer app you also have to remember to log
+afterward. Ctrl+C during the countdown stops it early and does **not**
+log a session (an abandoned session isn't a completed one).
+
+## Markdown / Obsidian / Notion Export
+
+```bash
+hermes-life-os-export --markdown ./obsidian-vault/hermes
+hermes-life-os-export --markdown ./notes --days 90
+```
+
+Adds a third export format alongside JSON and CSV: one file per day
+(`YYYY-MM-DD.md`) with YAML frontmatter for that day's numeric metrics
+and a bulleted list of everything logged - filename convention matches
+Obsidian's Daily Notes plugin exactly, and Notion's markdown importer
+reads YAML frontmatter as page properties, so the same export folder
+drops into either tool with no conversion step.
+
 ## Semantic Memory Search
 
 `recall` searches by exact keyword; ask Hermes something like "have I
@@ -937,6 +1011,28 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.22.0 - Heatmap, Moon Correlation, Sleep Debt, Focus Timer, Markdown Export**
+- New **Contribution Heatmap** (`demo/heatmap.py`, `hermes-life-os-heatmap`):
+  a GitHub-style SVG calendar heatmap of logging activity - pure SVG,
+  no matplotlib, embeddable anywhere.
+- New **Moon Phase Correlation** (`demo/moon.py`, `get_moon_correlation`):
+  correlates lunar phase against tracked metrics via pure local
+  astronomical calculation - zero network calls, unlike weather.py.
+- New **Sleep Debt Calculator** (`demo/sleep_debt.py`, `get_sleep_debt`,
+  `get_suggested_bedtime`): cumulative shortfall against a target sleep
+  duration, plus a bedtime suggestion that pays down debt gradually.
+- New **Focus Timer** (`demo/focus_timer.py`, `hermes-life-os-focus`):
+  a terminal Pomodoro-style countdown that logs itself on completion
+  via the same path a chat-based focus session uses.
+- New **Markdown/Obsidian/Notion Export** (`data_export.py --markdown`):
+  one daily note per day with YAML frontmatter, matching Obsidian's
+  Daily Notes convention and readable by Notion's markdown importer.
+- Also promotes `achievements._consecutive_day_streak` to a public
+  `consecutive_day_streak` (backward-compatible alias kept) so
+  heatmap.py could reuse the exact same streak logic rather than
+  duplicating it.
+- 75 new tests - suite grew from 834 to 909.
 
 **v1.21.0 - PDF Export, Streak Freezes, On This Day, Daily Prompts**
 - **PDF export** for the two biggest reports: `hermes-life-os-review
