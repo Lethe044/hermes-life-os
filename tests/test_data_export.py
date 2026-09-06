@@ -93,6 +93,75 @@ class TestExportCsv:
         assert rows[0]["stress"] == ""  # not logged that day
 
 
+class TestExportMarkdown:
+    def test_no_data_writes_nothing(self, data_export, tmp_path):
+        out_dir = tmp_path / "vault"
+        count = data_export.export_markdown(str(out_dir))
+        assert count == 0
+        assert out_dir.exists()  # directory still created
+        assert list(out_dir.glob("*.md")) == []
+
+    def test_one_file_per_day(self, data_export, tmp_path):
+        _seed(data_export.storage, n_days=3)
+        out_dir = tmp_path / "vault"
+        count = data_export.export_markdown(str(out_dir))
+        assert count == 3
+        assert (out_dir / "2026-01-01.md").exists()
+        assert (out_dir / "2026-01-02.md").exists()
+        assert (out_dir / "2026-01-03.md").exists()
+
+    def test_frontmatter_contains_metrics(self, data_export, tmp_path):
+        _seed(data_export.storage, n_days=1)
+        out_dir = tmp_path / "vault"
+        data_export.export_markdown(str(out_dir))
+        content = (out_dir / "2026-01-01.md").read_text(encoding="utf-8")
+        assert content.startswith("---\n")
+        assert "mood:" in content
+        assert "sleep:" in content
+        assert "tags: hermes-life-os" in content
+
+    def test_body_lists_entries_with_type_and_content(self, data_export, tmp_path):
+        data_export.storage.write_memory({
+            "type": "mood", "content": "felt great", "score": 8,
+            "timestamp": "2026-02-01T09:00:00Z",
+        })
+        out_dir = tmp_path / "vault"
+        data_export.export_markdown(str(out_dir))
+        content = (out_dir / "2026-02-01.md").read_text(encoding="utf-8")
+        assert "# 2026-02-01" in content
+        assert "**mood**: felt great" in content
+
+    def test_days_limits_to_recent_window(self, data_export, tmp_path):
+        import time as time_module
+        # One very old entry (outside any reasonable "recent" window)
+        # plus a "now" entry - only the second should be included when
+        # `days` is passed.
+        data_export.storage.write_memory({
+            "type": "mood", "content": "ancient", "score": 5,
+            "timestamp": "2000-01-01T09:00:00Z",
+        })
+        data_export.storage.write_memory({"type": "mood", "content": "recent", "score": 7})
+
+        out_dir = tmp_path / "vault"
+        count = data_export.export_markdown(str(out_dir), days=7)
+        assert count == 1  # only today's entry
+
+    def test_creates_output_directory(self, data_export, tmp_path):
+        nested = tmp_path / "a" / "b" / "vault"
+        data_export.export_markdown(str(nested))
+        assert nested.exists()
+
+    def test_multiline_content_flattened_to_one_line(self, data_export, tmp_path):
+        data_export.storage.write_memory({
+            "type": "mood", "content": "line one\nline two", "score": 6,
+            "timestamp": "2026-03-01T09:00:00Z",
+        })
+        out_dir = tmp_path / "vault"
+        data_export.export_markdown(str(out_dir))
+        content = (out_dir / "2026-03-01.md").read_text(encoding="utf-8")
+        assert "line one line two" in content
+
+
 class TestExportImportRoundTrip:
     def test_exported_csv_is_reimportable(self, data_export, tmp_path):
         """The whole point of a symmetric CSV format: export, then feed
@@ -141,6 +210,13 @@ class TestMainCli:
         payload = json.loads(out.read_text(encoding="utf-8"))
         assert len(payload["memory"]) == 1
         assert payload["memory"][0]["score"] == 9
+
+    def test_markdown_flag_via_cli(self, data_export, tmp_path):
+        _seed(data_export.storage, n_days=2)
+        out_dir = tmp_path / "vault"
+        sys.argv = ["data_export.py", "--markdown", str(out_dir)]
+        data_export.main()
+        assert len(list(out_dir.glob("*.md"))) == 2
 
 
 if __name__ == "__main__":
