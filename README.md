@@ -785,6 +785,49 @@ tonight's recommended bedtime, nudged earlier gradually (a quarter of
 the debt per night, capped at 1h extra) rather than proposing something
 unrealistic in a single night.
 
+## Day-of-Week Insights
+
+```
+"what's my best day of the week?"
+"is my mood worse on Mondays?"
+```
+
+`demo/day_of_week.py` buckets already-logged mood, energy, stress,
+sleep, hydration, meeting-hours, and readiness by weekday, then reports
+which day averages best and worst for each metric - lower is treated
+as "best" for stress specifically, since a calmer day is the good
+outcome there. Purely local arithmetic over `daily_averages()`, no new
+tracking of its own; a metric needs at least two distinct weekdays
+logged before Hermes will call one "best" and another "worst".
+
+## Habit Milestones
+
+```
+"how close am I to a milestone on my habits?"
+```
+
+`demo/habit_milestones.py` looks at every habit with an active streak
+and counts down to its next round-number milestone (7, 14, 30, 50,
+100, 150, 200, 365, 500, 1000 days, doubling beyond that). This is a
+different lens than the near-milestone nudge already surfaced
+opportunistically by `recommendations.py` - `get_habit_milestones`
+gives the full countdown list for every active habit on demand, rather
+than waiting for one habit to get close enough to be worth a nudge.
+
+## Goal Deadlines
+
+```
+"update_goal('finish the report', deadline='2026-03-01')"
+"what goal deadlines am I about to miss?"
+```
+
+`update_goal` now accepts an optional `deadline` (`YYYY-MM-DD`).
+`demo/goal_deadlines.py` (`get_goal_deadlines`) lists every
+deadline-bearing goal sorted by urgency, with overdue goals surfaced
+first and how many days overdue they are - so a goal with a deadline
+never silently falls off the radar the way a plain progress percentage
+can.
+
 ## Focus Timer
 
 ```bash
@@ -1011,6 +1054,24 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.23.0 - Day-of-Week Insights, Habit Milestones, Goal Deadlines**
+- New **Day-of-Week Insights** (`demo/day_of_week.py`,
+  `get_day_of_week_insights`): buckets logged mood/energy/stress/sleep/
+  hydration/meeting-hours/readiness by weekday and reports which day
+  is best and worst for each metric, purely from data already logged -
+  no new tracking, no network call.
+- New **Habit Milestones** (`demo/habit_milestones.py`,
+  `get_habit_milestones`): counts down every active habit streak to
+  its next round-number milestone (7, 14, 30, 50, 100, 150, 200, 365,
+  500, 1000 days) in one on-demand list, complementing the existing
+  opportunistic near-milestone nudge in `recommendations.py`.
+- New **Goal Deadlines** (`demo/goal_deadlines.py`,
+  `get_goal_deadlines`): `update_goal` now accepts an optional
+  `deadline` (`YYYY-MM-DD`); `get_goal_deadlines` lists every
+  deadline-bearing goal sorted by urgency, overdue ones called out
+  first with how many days overdue.
+- 42 new tests - suite grew from 909 to 951.
 
 **v1.22.0 - Heatmap, Moon Correlation, Sleep Debt, Focus Timer, Markdown Export**
 - New **Contribution Heatmap** (`demo/heatmap.py`, `hermes-life-os-heatmap`):

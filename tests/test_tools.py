@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -135,6 +135,67 @@ class TestUpdateGoal:
         tools.dispatch_tool("update_goal", {"goal_name": "ship project", "progress": 30})
         result = tools.dispatch_tool("update_goal", {"goal_name": "ship project", "progress": 80})
         assert "80" in result
+
+    def test_deadline_set_on_new_goal(self, tools):
+        result = tools.dispatch_tool("update_goal", {
+            "goal_name": "ship project", "progress": 50, "deadline": "2030-01-01",
+        })
+        assert "2030-01-01" in result
+
+    def test_deadline_set_on_existing_goal(self, tools):
+        tools.dispatch_tool("update_goal", {"goal_name": "ship project", "progress": 30})
+        result = tools.dispatch_tool("update_goal", {
+            "goal_name": "ship project", "progress": 30, "deadline": "2030-06-15",
+        })
+        assert "2030-06-15" in result
+
+    def test_no_deadline_omits_suffix(self, tools):
+        result = tools.dispatch_tool("update_goal", {"goal_name": "ship project", "progress": 30})
+        assert "deadline" not in result
+
+
+class TestGetDayOfWeekInsightsTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_day_of_week_insights", {})
+        assert "Not enough logged days" in result
+
+    def test_with_two_different_weekdays_returns_insight(self, tools):
+        from datetime import datetime, timedelta
+        for offset in range(1, 30):
+            dt = datetime.utcnow() - timedelta(days=offset)
+            if dt.weekday() in (0, 3):
+                score = 9 if dt.weekday() == 0 else 2
+                tools.dispatch_tool("remember", {
+                    "type": "mood", "score": score,
+                    "timestamp": dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                })
+        result = tools.dispatch_tool("get_day_of_week_insights", {"metric": "mood"})
+        assert "Mood" in result
+
+
+class TestGetHabitMilestonesTool:
+    def test_no_habits_message(self, tools):
+        result = tools.dispatch_tool("get_habit_milestones", {})
+        assert "No active habit streaks" in result
+
+    def test_active_streak_shows_countdown(self, tools):
+        tools.dispatch_tool("update_habit", {"habit_name": "Meditate", "completed": True})
+        result = tools.dispatch_tool("get_habit_milestones", {})
+        assert "Meditate" in result
+        assert "milestone" in result
+
+
+class TestGetGoalDeadlinesTool:
+    def test_no_deadlines_message(self, tools):
+        result = tools.dispatch_tool("get_goal_deadlines", {})
+        assert "No goals have a deadline" in result
+
+    def test_goal_with_deadline_shows_up(self, tools):
+        tools.dispatch_tool("update_goal", {
+            "goal_name": "ship project", "progress": 40, "deadline": "2099-01-01",
+        })
+        result = tools.dispatch_tool("get_goal_deadlines", {})
+        assert "ship project" in result
 
 
 class TestDetectPatternsTool:

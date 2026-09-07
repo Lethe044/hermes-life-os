@@ -495,6 +495,30 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             return "Please provide the wake-up time in 24-hour HH:MM format, e.g. '07:00'."
         return f"Suggested bedtime tonight: {bedtime} (targets {target_hours}h, waking at {wake_time})"
 
+    # ── get_day_of_week_insights ─────────────────────────────────────────────
+    elif name == "get_day_of_week_insights":
+        from day_of_week import compute_day_of_week_patterns, format_day_of_week_insights
+        days = inp.get("days", 90)
+        metric = inp.get("metric")
+        result = compute_day_of_week_patterns(days, metric)
+        insights = format_day_of_week_insights(result)
+        if not insights:
+            return (f"Not enough logged days across different weekdays yet in the last "
+                     f"{days} days to spot a day-of-week pattern.")
+        return "\n".join(insights)
+
+    # ── get_habit_milestones ─────────────────────────────────────────────────
+    elif name == "get_habit_milestones":
+        from habit_milestones import compute_habit_milestones, format_habit_milestones
+        results = compute_habit_milestones()
+        return format_habit_milestones(results)
+
+    # ── get_goal_deadlines ────────────────────────────────────────────────────
+    elif name == "get_goal_deadlines":
+        from goal_deadlines import compute_goal_deadlines, format_goal_deadlines
+        results = compute_goal_deadlines()
+        return format_goal_deadlines(results)
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -629,6 +653,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         target    = inp.get("target")
         direction = inp.get("direction", "at_least")
         window_days = inp.get("window_days", 7)
+        deadline  = inp.get("deadline")
 
         goals     = load_goals()
         found     = False
@@ -642,6 +667,8 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                     g["window_days"] = window_days
                 if progress is not None and "metric" not in g:
                     g["progress"] = progress
+                if deadline:
+                    g["deadline"] = deadline
                 g["last_updated"] = time.strftime("%Y-%m-%d")
                 if note:
                     g["last_note"] = note
@@ -657,6 +684,8 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                 goal_ref["target"] = target
                 goal_ref["direction"] = direction
                 goal_ref["window_days"] = window_days
+            if deadline:
+                goal_ref["deadline"] = deadline
             goals.append(goal_ref)
 
         if goal_ref.get("metric"):
@@ -666,10 +695,11 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                 goal_ref["progress"] = computed
 
         save_goals(goals)
+        deadline_suffix = f" (deadline {goal_ref['deadline']})" if goal_ref.get("deadline") else ""
         if goal_ref.get("metric"):
             return (f"Goal '{goal_name}' now auto-tracks {goal_ref['metric']} "
-                    f"({direction.replace('_', ' ')} {target}): {goal_ref['progress']}% - {note}")
-        return f"Goal '{goal_name}': {goal_ref['progress']}% - {note}"
+                    f"({direction.replace('_', ' ')} {target}): {goal_ref['progress']}% - {note}{deadline_suffix}")
+        return f"Goal '{goal_name}': {goal_ref['progress']}% - {note}{deadline_suffix}"
 
     # ── check_goal_progress ──────────────────────────────────────────────────
     elif name == "check_goal_progress":
@@ -1257,6 +1287,30 @@ TOOLS = [
             "target_hours": {"type": "number", "description": "Target nightly sleep. Default 8."},
         }, "required": ["wake_time"]}}},
 
+    {"type": "function", "function": {"name": "get_day_of_week_insights",
+        "description": "Find which day of the week is best/worst for mood, energy, stress, "
+                        "sleep, hydration, meeting_hours, or readiness. Use when the user asks "
+                        "if certain days are better or worse for them, or 'what's my best day "
+                        "of the week'.",
+        "parameters": {"type": "object", "properties": {
+            "days":   {"type": "integer", "description": "Lookback window. Default 90."},
+            "metric": {"type": "string", "enum": ["mood", "energy", "stress", "sleep", "hydration",
+                                                    "meeting_hours", "readiness"],
+                       "description": "Limit to one metric. Omit to check all tracked metrics."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_habit_milestones",
+        "description": "Show how many days remain until each active habit streak reaches its "
+                        "next round-number milestone (7, 14, 30, 50, 100 days, etc.). Use when "
+                        "the user asks how close they are to a habit milestone or streak goal.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_goal_deadlines",
+        "description": "Show every goal that has a deadline set, sorted by urgency, including "
+                        "overdue goals. Use when the user asks about upcoming or overdue goal "
+                        "deadlines.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
     {"type": "function", "function": {"name": "get_on_this_day",
         "description": "Find memory entries logged on this same calendar day (month/day) in "
                         "previous years - a nostalgia lookup. Use when the user asks what they "
@@ -1313,6 +1367,7 @@ TOOLS = [
             "direction":   {"type": "string", "enum": ["at_least", "at_most"],
                             "description": "'at_least' for goals like sleep/mood/hydration, 'at_most' for goals like stress."},
             "window_days": {"type": "integer", "description": "How many recent days to average. Default 7."},
+            "deadline":    {"type": "string", "description": "Optional deadline in YYYY-MM-DD format."},
         }, "required": ["goal_name"]}}},
 
     {"type": "function", "function": {"name": "check_goal_progress",
