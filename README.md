@@ -814,6 +814,64 @@ opportunistically by `recommendations.py` - `get_habit_milestones`
 gives the full countdown list for every active habit on demand, rather
 than waiting for one habit to get close enough to be worth a nudge.
 
+## Logging Consistency
+
+```
+"how consistent have I been with logging?"
+"which trackers have I been neglecting?"
+```
+
+`demo/consistency.py` (`get_logging_consistency`) reports the
+percentage of recent days that had at least one entry logged, overall
+and broken down per tracked metric. A metric that's never been logged
+in the window is simply left out of the breakdown rather than shown as
+a discouraging 0% - an unused tracker isn't "inconsistent", it's just
+unused.
+
+## Time-of-Day Insights
+
+```
+"am I happier in the mornings?"
+"is my stress worse at night?"
+```
+
+`demo/time_of_day.py` (`get_time_of_day_insights`) buckets individual
+logged entries into Morning/Afternoon/Evening/Night by the hour they
+were logged and reports which time of day is best and worst per
+metric - a companion to Day-of-Week Insights that looks at time-of-day
+rather than day-of-week, and works entry-by-entry rather than one
+daily average, since mood at 8am and mood at 8pm on the same day
+should land in different buckets.
+
+## Month-over-Month Comparison
+
+```
+"how is this month going compared to last month?"
+```
+
+`demo/monthly_summary.py` (`get_monthly_comparison`) compares this
+calendar month so far against the same day-count span at the start of
+last calendar month - e.g. running it on the 10th compares days 1-10
+of each month, not the whole of last month against a partial current
+one. Handles month-length edge cases (a 31-day January comparing
+against a 28/29-day February) by capping the previous-month span at
+that month's own last day. Built on top of the existing
+`compare_periods()` averaging/delta logic, just with calendar-month
+date ranges instead of rolling day windows.
+
+## Habit Personal Bests
+
+```
+"am I close to beating my meditation streak record?"
+```
+
+`demo/habit_pb.py` (`get_habit_pb_progress`) compares every habit's
+current streak against its own personal-best streak - a new best, a
+tie, or how many days remain to tie it. This is a different, often
+more motivating lens than the fixed round-number countdown in Habit
+Milestones: a habit whose best streak is 12 will never feel "close" to
+milestone 14, but "2 days from tying your best" always does.
+
 ## Goal Deadlines
 
 ```
@@ -1054,6 +1112,34 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.24.0 - Logging Consistency, Time-of-Day Insights, Month-over-Month, Habit PBs**
+- New **Logging Consistency** (`demo/consistency.py`,
+  `get_logging_consistency`): percentage of recent days with at least
+  one entry logged, overall and per tracked metric - unused trackers
+  are omitted rather than shown as a discouraging 0%.
+- New **Time-of-Day Insights** (`demo/time_of_day.py`,
+  `get_time_of_day_insights`): buckets individual logged entries into
+  Morning/Afternoon/Evening/Night by hour and reports the best/worst
+  time of day per metric - a companion to Day-of-Week Insights that
+  works entry-by-entry instead of on daily averages.
+- New **Month-over-Month Comparison** (`demo/monthly_summary.py`,
+  `get_monthly_comparison`): compares this calendar month so far
+  against the same day-count span at the start of last calendar month,
+  reusing `compare_periods()`'s averaging/delta math with calendar
+  month boundaries instead of rolling day windows; correctly caps a
+  longer current month's span against a shorter previous month (e.g.
+  comparing a 31-day January against February).
+- New **Habit Personal Bests** (`demo/habit_pb.py`,
+  `get_habit_pb_progress`): compares every habit's current streak
+  against its own personal best - new best, tied, or days remaining to
+  tie it - a complement to the fixed-milestone countdown in Habit
+  Milestones.
+- Also promotes `analytics._extract_metric` to a public `extract_metric`
+  (backward-compatible, original kept) so `time_of_day.py` could reuse
+  the exact same per-entry metric extraction rather than duplicating
+  the per-type rules.
+- 54 new tests - suite grew from 951 to 1005.
 
 **v1.23.0 - Day-of-Week Insights, Habit Milestones, Goal Deadlines**
 - New **Day-of-Week Insights** (`demo/day_of_week.py`,
