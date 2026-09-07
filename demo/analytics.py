@@ -67,6 +67,15 @@ def _extract_metric(entry: Dict[str, Any]) -> Optional[Tuple[str, float]]:
     return None
 
 
+def extract_metric(entry: Dict[str, Any]) -> Optional[Tuple[str, float]]:
+    """Public wrapper around _extract_metric() - lets other modules
+    (e.g. time_of_day.py) pull the (metric, value) out of a single raw
+    memory entry without duplicating the per-type extraction rules
+    above. Kept as a thin pass-through so there's exactly one place
+    that knows how to read each entry type."""
+    return _extract_metric(entry)
+
+
 def _entry_date(entry: Dict[str, Any]) -> Optional[str]:
     ts = entry.get("timestamp", "")
     if not ts:

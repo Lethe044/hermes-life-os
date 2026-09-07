@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -196,6 +196,50 @@ class TestGetGoalDeadlinesTool:
         })
         result = tools.dispatch_tool("get_goal_deadlines", {})
         assert "ship project" in result
+
+
+class TestGetLoggingConsistencyTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_logging_consistency", {})
+        assert "No entries logged" in result
+
+    def test_with_data_shows_percentage(self, tools):
+        tools.dispatch_tool("remember", {"type": "sleep", "hours": 7})
+        result = tools.dispatch_tool("get_logging_consistency", {"days": 10})
+        assert "%" in result
+
+
+class TestGetTimeOfDayInsightsTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_time_of_day_insights", {})
+        assert "Not enough logged entries" in result
+
+    def test_with_two_different_times_returns_insight(self, tools):
+        tools.dispatch_tool("remember", {
+            "type": "mood", "score": 9, "timestamp": "2026-01-01T08:00:00Z",
+        })
+        tools.dispatch_tool("remember", {
+            "type": "mood", "score": 2, "timestamp": "2026-01-02T20:00:00Z",
+        })
+        result = tools.dispatch_tool("get_time_of_day_insights", {"metric": "mood", "days": 365})
+        assert "Mood" in result
+
+
+class TestGetMonthlyComparisonTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_monthly_comparison", {})
+        assert "Not enough overlapping data" in result
+
+
+class TestGetHabitPbProgressTool:
+    def test_no_habits_message(self, tools):
+        result = tools.dispatch_tool("get_habit_pb_progress", {})
+        assert "No habit history" in result
+
+    def test_active_habit_shows_progress(self, tools):
+        tools.dispatch_tool("update_habit", {"habit_name": "Meditate", "completed": True})
+        result = tools.dispatch_tool("get_habit_pb_progress", {})
+        assert "Meditate" in result
 
 
 class TestDetectPatternsTool:

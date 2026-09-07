@@ -519,6 +519,37 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         results = compute_goal_deadlines()
         return format_goal_deadlines(results)
 
+    # ── get_logging_consistency ──────────────────────────────────────────────
+    elif name == "get_logging_consistency":
+        from consistency import compute_logging_consistency, format_logging_consistency
+        days = inp.get("days", 30)
+        result = compute_logging_consistency(days)
+        return format_logging_consistency(result)
+
+    # ── get_time_of_day_insights ─────────────────────────────────────────────
+    elif name == "get_time_of_day_insights":
+        from time_of_day import compute_time_of_day_patterns, format_time_of_day_insights
+        days = inp.get("days", 90)
+        metric = inp.get("metric")
+        result = compute_time_of_day_patterns(days, metric)
+        insights = format_time_of_day_insights(result)
+        if not insights:
+            return (f"Not enough logged entries across different times of day yet in the last "
+                     f"{days} days to spot a time-of-day pattern.")
+        return "\n".join(insights)
+
+    # ── get_monthly_comparison ────────────────────────────────────────────────
+    elif name == "get_monthly_comparison":
+        from monthly_summary import compute_monthly_comparison, format_monthly_comparison
+        result = compute_monthly_comparison()
+        return format_monthly_comparison(result)
+
+    # ── get_habit_pb_progress ─────────────────────────────────────────────────
+    elif name == "get_habit_pb_progress":
+        from habit_pb import compute_habit_pb_progress, format_habit_pb_progress
+        results = compute_habit_pb_progress()
+        return format_habit_pb_progress(results)
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -1309,6 +1340,37 @@ TOOLS = [
         "description": "Show every goal that has a deadline set, sorted by urgency, including "
                         "overdue goals. Use when the user asks about upcoming or overdue goal "
                         "deadlines.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_logging_consistency",
+        "description": "Show what percentage of recent days had at least one entry logged, "
+                        "overall and per tracked metric. Use when the user asks how consistent "
+                        "they've been with logging, or which trackers they've been neglecting.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_time_of_day_insights",
+        "description": "Find which time of day (Morning, Afternoon, Evening, Night) is best/worst "
+                        "for mood, energy, stress, sleep, hydration, meeting_hours, or readiness. "
+                        "Use when the user asks if they feel different at certain times of day.",
+        "parameters": {"type": "object", "properties": {
+            "days":   {"type": "integer", "description": "Lookback window. Default 90."},
+            "metric": {"type": "string", "enum": ["mood", "energy", "stress", "sleep", "hydration",
+                                                    "meeting_hours", "readiness"],
+                       "description": "Limit to one metric. Omit to check all tracked metrics."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_monthly_comparison",
+        "description": "Compare this calendar month so far against the same span of days last "
+                        "calendar month, for every tracked metric. Use when the user asks how "
+                        "this month compares to last month.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_habit_pb_progress",
+        "description": "Show how each habit's current streak compares to its personal-best "
+                        "streak - new best, tied, or how many days away from tying it. Use when "
+                        "the user asks about beating or tying a past habit streak record.",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
 
     {"type": "function", "function": {"name": "get_on_this_day",
