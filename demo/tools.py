@@ -578,6 +578,34 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         result = compute_meal_summary(days)
         return format_meal_summary(result)
 
+    # ── get_hydration_summary ─────────────────────────────────────────────────
+    elif name == "get_hydration_summary":
+        from hydration_summary import compute_hydration_summary, format_hydration_summary
+        days = inp.get("days", 30)
+        result = compute_hydration_summary(days)
+        return format_hydration_summary(result)
+
+    # ── get_focus_summary ─────────────────────────────────────────────────────
+    elif name == "get_focus_summary":
+        from focus_summary import compute_focus_summary, format_focus_summary
+        days = inp.get("days", 30)
+        result = compute_focus_summary(days)
+        return format_focus_summary(result)
+
+    # ── get_dream_recap ───────────────────────────────────────────────────────
+    elif name == "get_dream_recap":
+        from dream_recap import compute_dream_recap, format_dream_recap
+        days = inp.get("days", 30)
+        result = compute_dream_recap(days)
+        return format_dream_recap(result)
+
+    # ── get_stress_summary ────────────────────────────────────────────────────
+    elif name == "get_stress_summary":
+        from stress_summary import compute_stress_summary, format_stress_summary
+        days = inp.get("days", 30)
+        result = compute_stress_summary(days)
+        return format_stress_summary(result)
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -1429,6 +1457,38 @@ TOOLS = [
         "description": "Summarize recent meals: total count, average calories per meal and per "
                         "logged day, breakdown by meal time, and the most frequently logged "
                         "foods. Use when the user asks for a nutrition or eating recap.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_hydration_summary",
+        "description": "Summarize recent hydration logging: average daily intake vs. goal, "
+                        "how many logged days met the goal, and the current goal-met streak. "
+                        "Use when the user asks how well they've been hitting their water goal.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_focus_summary",
+        "description": "Summarize recent focus sessions: total count, total/average duration, "
+                        "average quality, completion rate, total distractions, and the most "
+                        "common task. Use when the user asks for a deep-work or productivity recap.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_dream_recap",
+        "description": "Summarize recent dreams: total count, average vividness, the most common "
+                        "tone, and any symbols or emotions that recur across multiple dreams. Use "
+                        "when the user asks about recurring dream themes or patterns.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_stress_summary",
+        "description": "Summarize recent stress logging: average score, whether stress is "
+                        "trending better or worse within the window, high-stress day count, and "
+                        "the most common triggers. Use when the user asks for a stress recap.",
         "parameters": {"type": "object", "properties": {
             "days": {"type": "integer", "description": "Lookback window. Default 30."},
         }, "required": []}}},

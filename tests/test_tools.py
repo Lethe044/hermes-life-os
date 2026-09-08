@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -284,6 +284,50 @@ class TestGetMealSummaryTool:
         tools.dispatch_tool("log_meal", {"meal_time": "breakfast", "food": "oatmeal", "calories": 300})
         result = tools.dispatch_tool("get_meal_summary", {})
         assert "oatmeal" in result
+
+
+class TestGetHydrationSummaryTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_hydration_summary", {})
+        assert "No hydration logged" in result
+
+    def test_with_data_shows_average(self, tools):
+        tools.dispatch_tool("log_hydration", {"glasses": 4})
+        result = tools.dispatch_tool("get_hydration_summary", {})
+        assert "glasses/day" in result
+
+
+class TestGetFocusSummaryTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_focus_summary", {})
+        assert "No focus sessions logged" in result
+
+    def test_with_data_shows_totals(self, tools):
+        tools.dispatch_tool("log_focus_session", {"duration_min": 25, "task": "writing"})
+        result = tools.dispatch_tool("get_focus_summary", {})
+        assert "writing" in result
+
+
+class TestGetDreamRecapTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_dream_recap", {})
+        assert "No dreams logged" in result
+
+    def test_with_data_shows_tone(self, tools):
+        tools.dispatch_tool("log_dream", {"content": "flying", "tone": "peaceful", "vividness": 7})
+        result = tools.dispatch_tool("get_dream_recap", {})
+        assert "peaceful" in result
+
+
+class TestGetStressSummaryTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_stress_summary", {})
+        assert "No stress logged" in result
+
+    def test_with_data_shows_average(self, tools):
+        tools.dispatch_tool("log_stress", {"score": 7, "trigger": "deadline"})
+        result = tools.dispatch_tool("get_stress_summary", {})
+        assert "deadline" in result
 
 
 class TestDetectPatternsTool:

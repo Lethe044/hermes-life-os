@@ -920,6 +920,57 @@ down by meal time (breakfast/lunch/dinner/snack), and lists the most
 frequently logged foods (case-insensitively, so "Salad" and "salad"
 count together).
 
+## Hydration Summary
+
+```
+"how well have I been hitting my water goal?"
+```
+
+`demo/hydration_summary.py` (`get_hydration_summary`) rebuilds daily
+totals from the raw hydration log (rather than the single "today"
+counter, which only reflects the current calendar day), then reports
+the average glasses/day against your goal, how many logged days hit
+it, and the current consecutive-day goal-met streak.
+
+## Focus Summary
+
+```
+"give me a productivity recap"
+```
+
+`demo/focus_summary.py` (`get_focus_summary`) totals recent focus
+sessions and reports total/average duration, average quality,
+completion rate, total distractions, and the most common task.
+
+## Dream Recap
+
+```
+"what are my recurring dream themes?"
+```
+
+`demo/dream_recap.py` (`get_dream_recap`) totals recent dreams and
+surfaces which symbols or emotions recur across multiple distinct
+dreams (a symbol mentioned twice in the same dream only counts once,
+so recurrence reflects a genuine pattern across nights rather than
+repetition within one dream). Dreams have no dedicated storage file of
+their own - they live only in the shared memory log - so this reads
+from `get_recent_memory` rather than a `load_*()` function like the
+other summary tools.
+
+## Stress Summary
+
+```
+"give me a stress recap"
+"is my stress getting better or worse?"
+```
+
+`demo/stress_summary.py` (`get_stress_summary`) reports the average
+stress score, a first-half-vs-second-half trend within the window
+("improving", "worsening", or "steady" - a difference under 1 point on
+the 0-10 scale is treated as steady, to avoid flip-flopping on small
+amounts of data), how many days crossed a high-stress threshold, and
+the most common triggers.
+
 ## Goal Deadlines
 
 ```
@@ -1160,6 +1211,24 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.26.0 - Hydration, Focus, Dream, and Stress Summaries**
+- New **Hydration Summary** (`demo/hydration_summary.py`,
+  `get_hydration_summary`): average daily intake vs. goal, days the
+  goal was met, and the current consecutive-day goal-met streak,
+  rebuilt from the raw hydration log rather than the single "today"
+  counter.
+- New **Focus Summary** (`demo/focus_summary.py`, `get_focus_summary`):
+  totals, average duration/quality, completion rate, total
+  distractions, and the most common task.
+- New **Dream Recap** (`demo/dream_recap.py`, `get_dream_recap`):
+  totals, average vividness, most common tone, and symbols/emotions
+  that recur across multiple distinct dreams. Reads from
+  `get_recent_memory` since dreams have no dedicated storage file.
+- New **Stress Summary** (`demo/stress_summary.py`,
+  `get_stress_summary`): average score, a first-half-vs-second-half
+  trend within the window, high-stress day count, and top triggers.
+- 43 new tests - suite grew from 1048 to 1091.
 
 **v1.25.0 - Workout, Meditation, Gratitude, and Meal Summaries**
 - New **Workout Summary** (`demo/workout_summary.py`,
