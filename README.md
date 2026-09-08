@@ -872,6 +872,54 @@ more motivating lens than the fixed round-number countdown in Habit
 Milestones: a habit whose best streak is 12 will never feel "close" to
 milestone 14, but "2 days from tying your best" always does.
 
+## Workout Summary
+
+```
+"give me a fitness recap"
+"how's my workout streak?"
+```
+
+`demo/workout_summary.py` (`get_workout_summary`) totals recent
+workouts, breaks them down by type, and reports the current
+consecutive-day workout streak. The streak always looks at your full
+workout history rather than just the requested lookback window, so a
+streak that started 40 days ago still shows correctly even when asking
+for a 30-day summary.
+
+## Meditation Summary
+
+```
+"how's my meditation practice going?"
+```
+
+`demo/meditation_summary.py` (`get_meditation_summary`) totals recent
+meditation sessions and reports what percentage of days in the window
+had at least one session - multiple sessions on the same day count
+once toward that consistency figure.
+
+## Gratitude Recap
+
+```
+"what have I been grateful for lately?"
+```
+
+`demo/gratitude_recap.py` (`get_gratitude_recap`) totals recent
+gratitude entries, surfaces the most recurring words across them as a
+lightweight signal for recurring themes (not real NLP, just frequency
+counting with a small stopword list), and lists the most recent items.
+
+## Meal Summary
+
+```
+"give me a nutrition recap"
+```
+
+`demo/meal_summary.py` (`get_meal_summary`) totals recent meals,
+reports average calories per meal and per logged day, breaks meals
+down by meal time (breakfast/lunch/dinner/snack), and lists the most
+frequently logged foods (case-insensitively, so "Salad" and "salad"
+count together).
+
 ## Goal Deadlines
 
 ```
@@ -1112,6 +1160,22 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.25.0 - Workout, Meditation, Gratitude, and Meal Summaries**
+- New **Workout Summary** (`demo/workout_summary.py`,
+  `get_workout_summary`): totals, breakdown by workout type, and a
+  consecutive-day workout streak computed over full history rather
+  than just the requested window.
+- New **Meditation Summary** (`demo/meditation_summary.py`,
+  `get_meditation_summary`): totals and a consistency percentage
+  (days with at least one session logged).
+- New **Gratitude Recap** (`demo/gratitude_recap.py`,
+  `get_gratitude_recap`): totals, recurring-word frequency across
+  logged items, and the most recent entries.
+- New **Meal Summary** (`demo/meal_summary.py`, `get_meal_summary`):
+  totals, average calories per meal/day, breakdown by meal time, and
+  the most frequently logged foods.
+- 43 new tests - suite grew from 1005 to 1048.
 
 **v1.24.0 - Logging Consistency, Time-of-Day Insights, Month-over-Month, Habit PBs**
 - New **Logging Consistency** (`demo/consistency.py`,

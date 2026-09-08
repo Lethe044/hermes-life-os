@@ -550,6 +550,34 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         results = compute_habit_pb_progress()
         return format_habit_pb_progress(results)
 
+    # ── get_workout_summary ───────────────────────────────────────────────────
+    elif name == "get_workout_summary":
+        from workout_summary import compute_workout_summary, format_workout_summary
+        days = inp.get("days", 30)
+        result = compute_workout_summary(days)
+        return format_workout_summary(result)
+
+    # ── get_meditation_summary ────────────────────────────────────────────────
+    elif name == "get_meditation_summary":
+        from meditation_summary import compute_meditation_summary, format_meditation_summary
+        days = inp.get("days", 30)
+        result = compute_meditation_summary(days)
+        return format_meditation_summary(result)
+
+    # ── get_gratitude_recap ───────────────────────────────────────────────────
+    elif name == "get_gratitude_recap":
+        from gratitude_recap import compute_gratitude_recap, format_gratitude_recap
+        days = inp.get("days", 30)
+        result = compute_gratitude_recap(days)
+        return format_gratitude_recap(result)
+
+    # ── get_meal_summary ──────────────────────────────────────────────────────
+    elif name == "get_meal_summary":
+        from meal_summary import compute_meal_summary, format_meal_summary
+        days = inp.get("days", 30)
+        result = compute_meal_summary(days)
+        return format_meal_summary(result)
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -1372,6 +1400,38 @@ TOOLS = [
                         "streak - new best, tied, or how many days away from tying it. Use when "
                         "the user asks about beating or tying a past habit streak record.",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_workout_summary",
+        "description": "Summarize recent workouts: total count, total/average duration, "
+                        "breakdown by workout type, and the current daily workout streak. Use "
+                        "when the user asks for a fitness recap or workout stats.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_meditation_summary",
+        "description": "Summarize recent meditation sessions: total count, total/average "
+                        "duration, and what percentage of days had a session. Use when the user "
+                        "asks for a meditation recap or how consistent their practice has been.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_gratitude_recap",
+        "description": "Summarize recent gratitude entries: total entries/items, the most "
+                        "recurring words across them, and the most recent items. Use when the "
+                        "user asks what they've been grateful for lately.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_meal_summary",
+        "description": "Summarize recent meals: total count, average calories per meal and per "
+                        "logged day, breakdown by meal time, and the most frequently logged "
+                        "foods. Use when the user asks for a nutrition or eating recap.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": []}}},
 
     {"type": "function", "function": {"name": "get_on_this_day",
         "description": "Find memory entries logged on this same calendar day (month/day) in "
