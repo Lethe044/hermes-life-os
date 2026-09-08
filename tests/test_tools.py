@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -240,6 +240,50 @@ class TestGetHabitPbProgressTool:
         tools.dispatch_tool("update_habit", {"habit_name": "Meditate", "completed": True})
         result = tools.dispatch_tool("get_habit_pb_progress", {})
         assert "Meditate" in result
+
+
+class TestGetWorkoutSummaryTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_workout_summary", {})
+        assert "No workouts logged" in result
+
+    def test_with_data_shows_totals(self, tools):
+        tools.dispatch_tool("log_workout", {"workout_type": "run", "duration_min": 30})
+        result = tools.dispatch_tool("get_workout_summary", {})
+        assert "run" in result
+
+
+class TestGetMeditationSummaryTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_meditation_summary", {})
+        assert "No meditation sessions logged" in result
+
+    def test_with_data_shows_totals(self, tools):
+        tools.dispatch_tool("log_meditation", {"duration_min": 10})
+        result = tools.dispatch_tool("get_meditation_summary", {})
+        assert "1 meditation session(s)" in result
+
+
+class TestGetGratitudeRecapTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_gratitude_recap", {})
+        assert "No gratitude entries logged" in result
+
+    def test_with_data_shows_recent(self, tools):
+        tools.dispatch_tool("log_gratitude", {"items": ["my dog", "sunny weather"]})
+        result = tools.dispatch_tool("get_gratitude_recap", {})
+        assert "my dog" in result
+
+
+class TestGetMealSummaryTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_meal_summary", {})
+        assert "No meals logged" in result
+
+    def test_with_data_shows_totals(self, tools):
+        tools.dispatch_tool("log_meal", {"meal_time": "breakfast", "food": "oatmeal", "calories": 300})
+        result = tools.dispatch_tool("get_meal_summary", {})
+        assert "oatmeal" in result
 
 
 class TestDetectPatternsTool:
