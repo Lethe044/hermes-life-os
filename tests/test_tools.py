@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -397,6 +397,42 @@ class TestGetHabitOverviewTool:
         assert "milestone" in result
         assert "personal best" in result
         assert "consistency" in result
+
+
+class TestGetReadingPaceTool:
+    def test_missing_title_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("get_reading_pace", {})
+        assert "specify a title" in result
+
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_reading_pace", {"title": "Unknown Book"})
+        assert "No reading logged" in result
+
+    def test_with_data_shows_pace(self, tools):
+        tools.dispatch_tool("log_reading", {"title": "Book A", "pages": 50})
+        result = tools.dispatch_tool("get_reading_pace", {"title": "Book A"})
+        assert "Book A" in result
+
+
+class TestGetSpendingTrendsTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_spending_trends", {})
+        assert "No spending logged" in result
+
+    def test_with_data_shows_category(self, tools):
+        tools.dispatch_tool("log_expense", {"amount": 20, "category": "food"})
+        result = tools.dispatch_tool("get_spending_trends", {})
+        assert "food" in result
+
+
+class TestGetSubstanceSleepImpactTool:
+    def test_missing_substance_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("get_substance_sleep_impact", {})
+        assert "specify a substance" in result
+
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_substance_sleep_impact", {"substance": "caffeine"})
+        assert "Not enough overlapping" in result
 
 
 class TestDetectPatternsTool:
@@ -928,6 +964,12 @@ class TestReadingTracking:
     def test_log_reading_with_minutes(self, tools):
         result = tools.dispatch_tool("log_reading", {"title": "Atomic Habits", "minutes": 25})
         assert "25 min" in result
+
+    def test_log_reading_with_total_pages_stored(self, tools):
+        from reading_pace import compute_reading_pace
+        tools.dispatch_tool("log_reading", {"title": "Book A", "pages": 50, "total_pages": 300})
+        result = compute_reading_pace("Book A")
+        assert result["total_pages"] == 300
 
     def test_get_reading_summary_no_data(self, tools):
         result = tools.dispatch_tool("get_reading_summary", {"days": 30})
