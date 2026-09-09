@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -121,6 +121,27 @@ class TestUpdateHabit:
         tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
         result = tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": False})
         assert "streak 0" in result
+
+    def test_completion_recorded_in_memory(self, tools):
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        recalled = tools.dispatch_tool("recall", {"query": "meditate"})
+        assert "meditate" in recalled
+
+    def test_missed_day_recorded_as_not_completed(self, tools):
+        from habit_consistency import compute_habit_consistency
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": False})
+        results = compute_habit_consistency(90)
+        assert results[0]["completed_checkins"] == 1
+        assert results[0]["total_checkins"] == 2
+
+    def test_freeze_used_recorded_as_completed(self, tools):
+        from habit_consistency import compute_habit_consistency
+        for _ in range(7):
+            tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": False, "use_freeze": True})
+        results = compute_habit_consistency(90)
+        assert results[0]["completed_checkins"] == results[0]["total_checkins"]
 
 
 class TestUpdateGoal:
@@ -328,6 +349,54 @@ class TestGetStressSummaryTool:
         tools.dispatch_tool("log_stress", {"score": 7, "trigger": "deadline"})
         result = tools.dispatch_tool("get_stress_summary", {})
         assert "deadline" in result
+
+
+class TestGetHabitConsistencyTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_habit_consistency", {})
+        assert "No habit check-ins recorded" in result
+
+    def test_with_data_shows_percentage(self, tools):
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        result = tools.dispatch_tool("get_habit_consistency", {})
+        assert "meditate" in result
+        assert "100.0%" in result
+
+
+class TestGetHabitMoodImpactTool:
+    def test_missing_habit_name_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("get_habit_mood_impact", {})
+        assert "specify a habit_name" in result
+
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_habit_mood_impact", {"habit_name": "meditate"})
+        assert "Not enough overlapping" in result
+
+    def test_with_overlapping_data_shows_comparison(self, tools):
+        from datetime import datetime, timedelta
+        d1 = (datetime.utcnow() - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        d2 = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        tools.dispatch_tool("remember", {"type": "habit_completion", "habit": "meditate",
+                                          "completed": True, "timestamp": d1})
+        tools.dispatch_tool("remember", {"type": "mood", "score": 9, "timestamp": d1})
+        tools.dispatch_tool("remember", {"type": "habit_completion", "habit": "meditate",
+                                          "completed": False, "timestamp": d2})
+        tools.dispatch_tool("remember", {"type": "mood", "score": 3, "timestamp": d2})
+        result = tools.dispatch_tool("get_habit_mood_impact", {"habit_name": "meditate"})
+        assert "meditate" in result
+
+
+class TestGetHabitOverviewTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_habit_overview", {})
+        assert "No habit data yet" in result
+
+    def test_with_data_combines_sections(self, tools):
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        result = tools.dispatch_tool("get_habit_overview", {})
+        assert "milestone" in result
+        assert "personal best" in result
+        assert "consistency" in result
 
 
 class TestDetectPatternsTool:

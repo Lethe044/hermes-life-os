@@ -606,6 +606,30 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         result = compute_stress_summary(days)
         return format_stress_summary(result)
 
+    # ── get_habit_consistency ─────────────────────────────────────────────────
+    elif name == "get_habit_consistency":
+        from habit_consistency import compute_habit_consistency, format_habit_consistency
+        days = inp.get("days", 90)
+        results = compute_habit_consistency(days)
+        return format_habit_consistency(results)
+
+    # ── get_habit_mood_impact ─────────────────────────────────────────────────
+    elif name == "get_habit_mood_impact":
+        from habit_correlation import compute_habit_mood_impact, format_habit_mood_impact
+        habit_name = inp.get("habit_name", "")
+        days = inp.get("days", 90)
+        if not habit_name:
+            return "Please specify a habit_name to check its mood impact."
+        result = compute_habit_mood_impact(habit_name, days)
+        return format_habit_mood_impact(result)
+
+    # ── get_habit_overview ────────────────────────────────────────────────────
+    elif name == "get_habit_overview":
+        from habit_overview import compute_habit_overview, format_habit_overview
+        days = inp.get("days", 90)
+        result = compute_habit_overview(days)
+        return format_habit_overview(result)
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -722,6 +746,18 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         streak  = next((h["streak"] for h in habits if h["name"].lower() == name_h.lower()), 0)
         best    = next((h.get("best_streak", 0) for h in habits if h["name"].lower() == name_h.lower()), 0)
         freezes = next((h.get("freezes_available", 0) for h in habits if h["name"].lower() == name_h.lower()), 0)
+
+        # Record this check-in in the shared memory log so later analytics
+        # (habit_consistency.py, habit_correlation.py) can look at a real
+        # per-day completion history instead of just the current streak
+        # counters, which only capture the latest state. "completed" here
+        # means the habit was maintained one way or another - either done
+        # outright or protected with a freeze - as opposed to a missed day
+        # that reset the streak.
+        completed_effective = bool(completed) or freeze_used
+        write_memory({"type": "habit_completion", "content": name_h,
+                      "habit": name_h, "completed": completed_effective,
+                      "used_freeze": freeze_used, "streak": streak})
 
         if freeze_used:
             return (f"Habit '{name_h}': streak protected with a freeze! Still at {streak} days "
@@ -1491,6 +1527,34 @@ TOOLS = [
                         "the most common triggers. Use when the user asks for a stress recap.",
         "parameters": {"type": "object", "properties": {
             "days": {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_habit_consistency",
+        "description": "Show what percentage of check-ins for each habit were successful "
+                        "(done outright or protected with a streak freeze), based on actual "
+                        "per-check-in history rather than just the current streak counter. Use "
+                        "when the user asks how consistent they've really been with a habit.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 90."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_habit_mood_impact",
+        "description": "Compare average mood on days a given habit was completed versus days "
+                        "it was missed. Use when the user asks whether a habit actually affects "
+                        "their mood. Requires mood to have been logged on both completed and "
+                        "missed check-in days to say anything meaningful.",
+        "parameters": {"type": "object", "properties": {
+            "habit_name": {"type": "string", "description": "The habit to check, e.g. 'meditation'."},
+            "days":       {"type": "integer", "description": "Lookback window. Default 90."},
+        }, "required": ["habit_name"]}}},
+
+    {"type": "function", "function": {"name": "get_habit_overview",
+        "description": "A single combined dashboard of habit milestones, personal bests, and "
+                        "consistency - use when the user asks a general 'how are my habits "
+                        "doing' question rather than one specific angle.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window for the consistency "
+                                                          "section. Default 90."},
         }, "required": []}}},
 
     {"type": "function", "function": {"name": "get_on_this_day",
