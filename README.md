@@ -971,6 +971,35 @@ the 0-10 scale is treated as steady, to avoid flip-flopping on small
 amounts of data), how many days crossed a high-stress threshold, and
 the most common triggers.
 
+## Habit Consistency, Mood Impact & Overview
+
+```
+"how consistent have I really been with meditation?"
+"does meditating actually improve my mood?"
+"how are my habits doing overall?"
+```
+
+`update_habit` now also records every check-in (done, missed, or
+protected with a freeze) as a `habit_completion` entry in the shared
+memory log, alongside the existing streak counters in `habits.json`.
+This unlocks three new views built on that real per-check-in history
+rather than just the current streak state:
+
+- `demo/habit_consistency.py` (`get_habit_consistency`) - the
+  percentage of check-ins that were successful for each habit, which
+  can tell a very different story than the current streak (a short
+  current streak can follow a long run of consistency, or vice versa).
+- `demo/habit_correlation.py` (`get_habit_mood_impact`) - compares
+  average mood on days a given habit was completed versus days it was
+  missed. This is naturally forward-looking: it only reflects habit
+  check-ins recorded after this feature shipped, and needs mood logged
+  on both completed and missed days to say anything meaningful.
+- `demo/habit_overview.py` (`get_habit_overview`) - a single combined
+  dashboard over Habit Milestones, Habit Personal Bests, and Habit
+  Consistency, for a general "how are my habits doing" question
+  instead of picking one specific angle. Reuses each module's own
+  formatter, so the wording matches calling that tool directly.
+
 ## Goal Deadlines
 
 ```
@@ -1211,6 +1240,27 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.27.0 - Habit Consistency, Mood Impact, and Overview**
+- **Enhanced `update_habit`**: every check-in (done, missed, or
+  protected with a freeze) is now also recorded as a
+  `habit_completion` entry in the shared memory log, giving Hermes a
+  real per-check-in history to analyze instead of only the current
+  streak counters in `habits.json`.
+- New **Habit Consistency** (`demo/habit_consistency.py`,
+  `get_habit_consistency`): percentage of successful check-ins per
+  habit, a different and sometimes more honest signal than the current
+  streak alone.
+- New **Habit Mood Impact** (`demo/habit_correlation.py`,
+  `get_habit_mood_impact`): compares average mood on days a habit was
+  completed versus missed - a genuine correlation feature, naturally
+  forward-looking since it depends on check-in history recorded from
+  here on.
+- New **Habit Overview** (`demo/habit_overview.py`,
+  `get_habit_overview`): a single combined dashboard over Habit
+  Milestones, Habit Personal Bests, and Habit Consistency for a
+  general "how are my habits doing" question.
+- 33 new tests - suite grew from 1091 to 1124.
 
 **v1.26.0 - Hydration, Focus, Dream, and Stress Summaries**
 - New **Hydration Summary** (`demo/hydration_summary.py`,
