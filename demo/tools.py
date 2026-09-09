@@ -382,6 +382,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             "title":   inp.get("title", ""),
             "minutes": inp.get("minutes", 0),
             "pages":   inp.get("pages", 0),
+            "total_pages": inp.get("total_pages"),
             "notes":   inp.get("notes", ""),
         }
         reading = load_reading()
@@ -629,6 +630,32 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         days = inp.get("days", 90)
         result = compute_habit_overview(days)
         return format_habit_overview(result)
+
+    # ── get_reading_pace ──────────────────────────────────────────────────────
+    elif name == "get_reading_pace":
+        from reading_pace import compute_reading_pace, format_reading_pace
+        title = inp.get("title", "")
+        if not title:
+            return "Please specify a title to check its reading pace."
+        result = compute_reading_pace(title)
+        return format_reading_pace(result)
+
+    # ── get_spending_trends ───────────────────────────────────────────────────
+    elif name == "get_spending_trends":
+        from spending_trends import compute_spending_trends, format_spending_trends
+        days = inp.get("days", 30)
+        result = compute_spending_trends(days)
+        return format_spending_trends(result)
+
+    # ── get_substance_sleep_impact ────────────────────────────────────────────
+    elif name == "get_substance_sleep_impact":
+        from substance_correlation import compute_substance_sleep_impact, format_substance_sleep_impact
+        substance = inp.get("substance", "")
+        days = inp.get("days", 90)
+        if not substance:
+            return "Please specify a substance to check its sleep impact."
+        result = compute_substance_sleep_impact(substance, days)
+        return format_substance_sleep_impact(result)
 
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
@@ -1339,6 +1366,10 @@ TOOLS = [
             "title":       {"type": "string", "description": "What was read/studied."},
             "minutes":     {"type": "integer"},
             "pages":       {"type": "integer"},
+            "total_pages": {"type": "integer", "description": "Optional. The book's total page "
+                                                                "count, if known - enables an "
+                                                                "estimated finish date via "
+                                                                "get_reading_pace."},
             "notes":       {"type": "string"},
         }, "required": ["title"]}}},
 
@@ -1556,6 +1587,32 @@ TOOLS = [
             "days": {"type": "integer", "description": "Lookback window for the consistency "
                                                           "section. Default 90."},
         }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_reading_pace",
+        "description": "Show reading pace (pages/day) for a specific book, and an estimated "
+                        "finish date if a total page count was ever logged for it. Use when the "
+                        "user asks how fast they're reading a book or when they'll finish it.",
+        "parameters": {"type": "object", "properties": {
+            "title": {"type": "string", "description": "The book title, matching what was used "
+                                                          "in log_reading."},
+        }, "required": ["title"]}}},
+
+    {"type": "function", "function": {"name": "get_spending_trends",
+        "description": "Compare spending per category over a recent window against the equal-"
+                        "length window before it - which categories are trending up or down. Use "
+                        "when the user asks how their spending habits are changing.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_substance_sleep_impact",
+        "description": "Compare average sleep hours on days a given substance was logged versus "
+                        "days it wasn't. Use when the user asks whether something (caffeine, "
+                        "alcohol, etc.) affects their sleep.",
+        "parameters": {"type": "object", "properties": {
+            "substance": {"type": "string", "description": "The substance to check, e.g. 'caffeine'."},
+            "days":      {"type": "integer", "description": "Lookback window. Default 90."},
+        }, "required": ["substance"]}}},
 
     {"type": "function", "function": {"name": "get_on_this_day",
         "description": "Find memory entries logged on this same calendar day (month/day) in "

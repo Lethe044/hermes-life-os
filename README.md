@@ -1000,6 +1000,46 @@ rather than just the current streak state:
   instead of picking one specific angle. Reuses each module's own
   formatter, so the wording matches calling that tool directly.
 
+## Reading Pace
+
+```
+"how fast am I reading Atomic Habits?"
+"log_reading('War and Peace', pages=40, total_pages=1225)"
+```
+
+`log_reading` now accepts an optional `total_pages` for a book.
+`demo/reading_pace.py` (`get_reading_pace`) computes pages/day for a
+specific title and, once a total page count has ever been logged for
+it, estimates the remaining days and a finish date at the current
+pace. Without a `total_pages` on file it still reports the pace, just
+without an estimate - there's nothing to count down to.
+
+## Spending Trends
+
+```
+"which spending categories are trending up?"
+```
+
+`demo/spending_trends.py` (`get_spending_trends`) compares spending
+per category over a recent window against the equal-length window
+before it - a different angle than the existing Spending Summary,
+which only totals a single window. A category that's new or has
+stopped appearing still shows up, with 0 on the missing side, rather
+than silently disappearing from the comparison.
+
+## Substance-Sleep Impact
+
+```
+"does caffeine affect my sleep?"
+```
+
+`demo/substance_correlation.py` (`get_substance_sleep_impact`)
+compares average sleep hours on days a given substance was logged
+versus days it wasn't. This compares same-calendar-day entries rather
+than "the following night", since a sleep log's date is whatever day
+it was logged (typically the morning after waking) and there's no
+reliable way to know which night it refers to otherwise.
+
 ## Goal Deadlines
 
 ```
@@ -1240,6 +1280,22 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.28.0 - Reading Pace, Spending Trends, Substance-Sleep Impact**
+- **Enhanced `log_reading`**: now accepts an optional `total_pages`
+  for a book, enabling a real finish estimate.
+- New **Reading Pace** (`demo/reading_pace.py`, `get_reading_pace`):
+  pages/day for a specific book, and an estimated finish date once a
+  total page count has been logged for it.
+- New **Spending Trends** (`demo/spending_trends.py`,
+  `get_spending_trends`): compares spending per category between a
+  recent window and the equal-length window before it - which
+  categories are trending up or down, complementing the existing
+  single-window Spending Summary.
+- New **Substance-Sleep Impact** (`demo/substance_correlation.py`,
+  `get_substance_sleep_impact`): compares average sleep hours on days
+  a substance was logged versus days it wasn't.
+- 39 new tests - suite grew from 1124 to 1163.
 
 **v1.27.0 - Habit Consistency, Mood Impact, and Overview**
 - **Enhanced `update_habit`**: every check-in (done, missed, or
