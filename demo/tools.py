@@ -680,6 +680,31 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         result = compute_medication_streak(med_name)
         return format_medication_streak(result)
 
+    # ── get_workout_mood_impact ───────────────────────────────────────────────
+    elif name == "get_workout_mood_impact":
+        from workout_correlation import compute_workout_mood_impact, format_workout_mood_impact
+        days = inp.get("days", 90)
+        result = compute_workout_mood_impact(days)
+        return format_workout_mood_impact(result)
+
+    # ── export_data ───────────────────────────────────────────────────────────
+    elif name == "export_data":
+        from export_tool import run_export, format_export_result
+        export_format = inp.get("format", "json")
+        days = inp.get("days")
+        try:
+            result = run_export(export_format, days)
+        except ValueError as e:
+            return str(e)
+        return format_export_result(result)
+
+    # ── backup_now ────────────────────────────────────────────────────────────
+    elif name == "backup_now":
+        from backup import run_backup
+        keep = inp.get("keep", 7)
+        out_path = run_backup(keep=keep)
+        return f"Backup written: {out_path} (keeping the {keep} most recent)."
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -1663,6 +1688,36 @@ TOOLS = [
                                                              "matching what was used in "
                                                              "log_medication."},
         }, "required": ["med_name"]}}},
+
+    {"type": "function", "function": {"name": "get_workout_mood_impact",
+        "description": "Compare average mood on days a workout was logged versus days without "
+                        "one. Use when the user asks whether exercising affects their mood.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 90."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "export_data",
+        "description": "Export all logged data to a file - json (a complete backup of every "
+                        "tracker and memory entry), csv (one row per day with core metrics, "
+                        "spreadsheet-friendly), or markdown (one daily note per day, Obsidian/"
+                        "Notion-compatible). Use when the user asks to export, download, or back "
+                        "up their data.",
+        "parameters": {"type": "object", "properties": {
+            "format": {"type": "string", "enum": ["json", "csv", "markdown"],
+                       "description": "Export format. Default 'json'."},
+            "days":   {"type": "integer", "description": "For markdown only: limit to a recent "
+                                                            "window instead of full history."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "backup_now",
+        "description": "Write an immediate timestamped JSON backup of all data and rotate out "
+                        "old backups beyond the keep count. Use when the user asks to back up "
+                        "their data right now, distinct from export_data which is for taking "
+                        "data elsewhere (e.g. a spreadsheet or Obsidian) rather than safekeeping.",
+        "parameters": {"type": "object", "properties": {
+            "keep": {"type": "integer", "description": "How many recent backups to retain. "
+                                                          "Default 7."},
+        }, "required": []}}},
 
     {"type": "function", "function": {"name": "get_on_this_day",
         "description": "Find memory entries logged on this same calendar day (month/day) in "

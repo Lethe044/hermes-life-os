@@ -1071,6 +1071,35 @@ medication or supplement - a different angle than the existing
 Medication Adherence, which only reports an overall percentage for the
 lookback window rather than a day-by-day streak.
 
+## Workout Mood Impact
+
+```
+"does exercising actually improve my mood?"
+```
+
+`demo/workout_correlation.py` (`get_workout_mood_impact`) compares
+average mood on days a workout was logged versus days without one,
+using the same same-calendar-day comparison convention as Habit Mood
+Impact, Substance-Sleep Impact, and Social Mood Impact.
+
+## Export & Backup, Now Conversational
+
+```
+"export my data as csv"
+"back up my data right now"
+```
+
+Hermes Life OS has always had a full data-export system
+(`demo/data_export.py` - JSON/CSV/Markdown) and rotating automated
+backups (`demo/backup.py`), but until now they could only be triggered
+by running those scripts directly. `demo/export_tool.py` wraps them as
+two ordinary tools, `export_data` and `backup_now`, so they can be
+triggered from a normal conversation - picking a sensible default
+output path under the active profile's `exports/` or `backups/`
+directory so nobody has to supply one. `export_data` is for taking
+your data elsewhere (a spreadsheet, Obsidian, Notion); `backup_now` is
+for safekeeping in place.
+
 ## Goal Deadlines
 
 ```
@@ -1311,6 +1340,23 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.30.0 - Workout Mood Impact, Conversational Export & Backup**
+- New **Workout Mood Impact** (`demo/workout_correlation.py`,
+  `get_workout_mood_impact`): compares average mood on workout days
+  versus non-workout days.
+- New **Conversational Export & Backup** (`demo/export_tool.py`,
+  `export_data` and `backup_now`): exposes the existing
+  `data_export.py` (JSON/CSV/Markdown) and `backup.py` (rotating
+  backups) CLI scripts as ordinary dispatch_tool calls, so they can be
+  triggered from chat instead of only from the command line. Picks a
+  sensible default output path under the active profile's `exports/`
+  or `backups/` directory.
+- README badge fix: swapped the PyPI Downloads badge from
+  shields.io's `pypi/dm` (which depends on pypistats.org and
+  intermittently shows "rate limited by upstream service") to
+  pepy.tech's own badge service.
+- 22 new tests - suite grew from 1191 to 1213.
 
 **v1.29.0 - Social Insights, Social Mood Impact, Medication Streak**
 - New **Social Insights** (`demo/social_insights.py`,
