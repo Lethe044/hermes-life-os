@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "demo"))
 def demo_life_os(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ("storage", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "tools", "demo_life_os"):
+    for mod in ("storage", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "social_insights", "social_correlation", "medication_streak", "tools", "demo_life_os"):
         if mod in sys.modules:
             del sys.modules[mod]
     import demo_life_os as dlo

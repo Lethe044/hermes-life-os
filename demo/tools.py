@@ -657,6 +657,29 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         result = compute_substance_sleep_impact(substance, days)
         return format_substance_sleep_impact(result)
 
+    # ── get_social_insights ───────────────────────────────────────────────────
+    elif name == "get_social_insights":
+        from social_insights import compute_social_insights, format_social_insights
+        days = inp.get("days", 30)
+        result = compute_social_insights(days)
+        return format_social_insights(result)
+
+    # ── get_social_mood_impact ────────────────────────────────────────────────
+    elif name == "get_social_mood_impact":
+        from social_correlation import compute_social_mood_impact, format_social_mood_impact
+        days = inp.get("days", 90)
+        result = compute_social_mood_impact(days)
+        return format_social_mood_impact(result)
+
+    # ── get_medication_streak ─────────────────────────────────────────────────
+    elif name == "get_medication_streak":
+        from medication_streak import compute_medication_streak, format_medication_streak
+        med_name = inp.get("med_name", "")
+        if not med_name:
+            return "Please specify a med_name to check its streak."
+        result = compute_medication_streak(med_name)
+        return format_medication_streak(result)
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -1613,6 +1636,33 @@ TOOLS = [
             "substance": {"type": "string", "description": "The substance to check, e.g. 'caffeine'."},
             "days":      {"type": "integer", "description": "Lookback window. Default 90."},
         }, "required": ["substance"]}}},
+
+    {"type": "function", "function": {"name": "get_social_insights",
+        "description": "Break down recent social interactions by who they were with: time spent, "
+                        "average quality, and the most frequent contact. Use when the user asks "
+                        "who they've been spending time with lately.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_social_mood_impact",
+        "description": "Compare average mood on days with a logged social interaction versus "
+                        "days without one. Use when the user asks whether socializing affects "
+                        "their mood.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 90."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_medication_streak",
+        "description": "Show the current and longest consecutive-day streak of taking a "
+                        "specific medication or supplement. Use when the user asks how "
+                        "consistently they've been taking something, beyond the overall "
+                        "adherence percentage.",
+        "parameters": {"type": "object", "properties": {
+            "med_name": {"type": "string", "description": "The medication/supplement name, "
+                                                             "matching what was used in "
+                                                             "log_medication."},
+        }, "required": ["med_name"]}}},
 
     {"type": "function", "function": {"name": "get_on_this_day",
         "description": "Find memory entries logged on this same calendar day (month/day) in "

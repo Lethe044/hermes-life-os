@@ -2,8 +2,11 @@
 
 [![Tests](https://github.com/Lethe044/hermes-life-os/actions/workflows/tests.yml/badge.svg)](https://github.com/Lethe044/hermes-life-os/actions/workflows/tests.yml)
 [![PyPI](https://img.shields.io/pypi/v/hermes-life-os)](https://pypi.org/project/hermes-life-os/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/hermes-life-os)](https://pypi.org/project/hermes-life-os/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/hermes-life-os)](https://pypi.org/project/hermes-life-os/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Lethe044/hermes-life-os?style=flat&color=yellow)](https://github.com/Lethe044/hermes-life-os/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/Lethe044/hermes-life-os)](https://github.com/Lethe044/hermes-life-os/commits/main)
 
 **The personal OS that grows with you.**
 
@@ -1040,6 +1043,34 @@ than "the following night", since a sleep log's date is whatever day
 it was logged (typically the morning after waking) and there's no
 reliable way to know which night it refers to otherwise.
 
+## Social Insights & Mood Impact
+
+```
+"who have I been spending time with lately?"
+"does socializing actually improve my mood?"
+```
+
+`demo/social_insights.py` (`get_social_insights`) breaks recent social
+interactions down by who they were with - time spent, average quality,
+and the most frequent contact - a different angle than the existing
+Social Summary, which only totals the whole window.
+`demo/social_correlation.py` (`get_social_mood_impact`) compares
+average mood on days with a logged social interaction versus days
+without one, using the same same-calendar-day comparison convention as
+Habit Mood Impact and Substance-Sleep Impact.
+
+## Medication Streak
+
+```
+"how consistent have I been with taking my Vitamin D?"
+```
+
+`demo/medication_streak.py` (`get_medication_streak`) reports the
+current and longest consecutive-day streak of taking a specific
+medication or supplement - a different angle than the existing
+Medication Adherence, which only reports an overall percentage for the
+lookback window rather than a day-by-day streak.
+
 ## Goal Deadlines
 
 ```
@@ -1280,6 +1311,24 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.29.0 - Social Insights, Social Mood Impact, Medication Streak**
+- New **Social Insights** (`demo/social_insights.py`,
+  `get_social_insights`): recent social interactions broken down by
+  who they were with - time spent, average quality, and the most
+  frequent contact.
+- New **Social Mood Impact** (`demo/social_correlation.py`,
+  `get_social_mood_impact`): compares average mood on days with a
+  logged social interaction versus days without one.
+- New **Medication Streak** (`demo/medication_streak.py`,
+  `get_medication_streak`): current and longest consecutive-day streak
+  of taking a specific medication/supplement, complementing the
+  existing overall-percentage Medication Adherence.
+- Also refreshed the README badge row: added PyPI downloads, dynamic
+  Python-versions (from PyPI metadata instead of a static "3.10+"),
+  GitHub stars, and last-commit badges alongside the existing
+  Tests/PyPI-version/License badges.
+- 28 new tests - suite grew from 1163 to 1191.
 
 **v1.28.0 - Reading Pace, Spending Trends, Substance-Sleep Impact**
 - **Enhanced `log_reading`**: now accepts an optional `total_pages`
