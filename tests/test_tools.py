@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "social_insights", "social_correlation", "medication_streak", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "social_insights", "social_correlation", "medication_streak", "workout_correlation", "export_tool", "data_export", "backup", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -465,6 +465,41 @@ class TestGetMedicationStreakTool:
         tools.dispatch_tool("log_medication", {"name": "Vitamin D", "taken": True})
         result = tools.dispatch_tool("get_medication_streak", {"med_name": "Vitamin D"})
         assert "current streak" in result
+
+
+class TestGetWorkoutMoodImpactTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_workout_mood_impact", {})
+        assert "Not enough overlapping" in result
+
+
+class TestExportDataTool:
+    def test_default_json_export(self, tools):
+        tools.dispatch_tool("remember", {"type": "mood", "score": 5})
+        result = tools.dispatch_tool("export_data", {})
+        assert "memory entries" in result
+
+    def test_csv_export(self, tools):
+        result = tools.dispatch_tool("export_data", {"format": "csv"})
+        assert "daily rows" in result
+
+    def test_markdown_export(self, tools):
+        result = tools.dispatch_tool("export_data", {"format": "markdown"})
+        assert "day-files" in result
+
+    def test_invalid_format_returns_error_message(self, tools):
+        result = tools.dispatch_tool("export_data", {"format": "xml"})
+        assert "Unknown export format" in result
+
+
+class TestBackupNowTool:
+    def test_writes_backup(self, tools):
+        result = tools.dispatch_tool("backup_now", {})
+        assert "Backup written" in result
+
+    def test_custom_keep(self, tools):
+        result = tools.dispatch_tool("backup_now", {"keep": 3})
+        assert "keeping the 3 most recent" in result
 
 
 class TestDetectPatternsTool:
