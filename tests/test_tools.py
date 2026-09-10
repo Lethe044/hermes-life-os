@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "social_insights", "social_correlation", "medication_streak", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -433,6 +433,38 @@ class TestGetSubstanceSleepImpactTool:
     def test_no_data_message(self, tools):
         result = tools.dispatch_tool("get_substance_sleep_impact", {"substance": "caffeine"})
         assert "Not enough overlapping" in result
+
+
+class TestGetSocialInsightsTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_social_insights", {})
+        assert "No social interactions logged" in result
+
+    def test_with_data_shows_person(self, tools):
+        tools.dispatch_tool("log_social_interaction", {"with_who": "Alice", "quality": 8, "duration_min": 60})
+        result = tools.dispatch_tool("get_social_insights", {})
+        assert "Alice" in result
+
+
+class TestGetSocialMoodImpactTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_social_mood_impact", {})
+        assert "Not enough overlapping" in result
+
+
+class TestGetMedicationStreakTool:
+    def test_missing_med_name_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("get_medication_streak", {})
+        assert "specify a med_name" in result
+
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_medication_streak", {"med_name": "Vitamin D"})
+        assert "No logs found" in result
+
+    def test_with_data_shows_streak(self, tools):
+        tools.dispatch_tool("log_medication", {"name": "Vitamin D", "taken": True})
+        result = tools.dispatch_tool("get_medication_streak", {"med_name": "Vitamin D"})
+        assert "current streak" in result
 
 
 class TestDetectPatternsTool:
