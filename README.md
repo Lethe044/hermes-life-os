@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/Lethe044/hermes-life-os/actions/workflows/tests.yml/badge.svg)](https://github.com/Lethe044/hermes-life-os/actions/workflows/tests.yml)
 [![PyPI](https://img.shields.io/pypi/v/hermes-life-os)](https://pypi.org/project/hermes-life-os/)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/hermes-life-os)](https://pypi.org/project/hermes-life-os/)
+[![PyPI Downloads](https://static.pepy.tech/badge/hermes-life-os)](https://pepy.tech/project/hermes-life-os)
 [![Python Versions](https://img.shields.io/pypi/pyversions/hermes-life-os)](https://pypi.org/project/hermes-life-os/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/Lethe044/hermes-life-os?style=flat&color=yellow)](https://github.com/Lethe044/hermes-life-os/stargazers)
