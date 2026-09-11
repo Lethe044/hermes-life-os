@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "demo"))
 def workout_correlation(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ("storage", "analytics", "workout_correlation"):
+    for mod in ("storage", "analytics", "correlation_utils", "workout_correlation"):
         if mod in sys.modules:
             del sys.modules[mod]
     import workout_correlation as wc

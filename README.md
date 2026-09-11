@@ -1082,6 +1082,41 @@ average mood on days a workout was logged versus days without one,
 using the same same-calendar-day comparison convention as Habit Mood
 Impact, Substance-Sleep Impact, and Social Mood Impact.
 
+## Correlation Refactor, Reading Mood Impact & Insights Digest
+
+```
+"what stands out in my data lately?"
+"does reading affect my mood?"
+```
+
+Habit Mood Impact, Substance-Sleep Impact, Social Mood Impact, and
+Workout Mood Impact had each grown their own near-identical
+"average metric X on days condition Y held versus days it didn't"
+implementation. `demo/correlation_utils.py` now holds that logic once
+- `compute_metric_impact_by_presence()` for checks where "it didn't
+happen" is inferred from absence (workouts, substances, social
+interactions, reading), and `compute_metric_impact_by_status()` for
+checks where "it didn't happen" needs its own explicit record (a habit
+logged as missed, as opposed to a habit that was never checked in on
+at all). Every existing correlation tool now calls one of these two
+functions internally; their public functions, return shapes, and
+wording are unchanged.
+
+That shared foundation made two things cheap to add:
+
+- **Reading Mood Impact** (`demo/reading_correlation.py`,
+  `get_reading_mood_impact`) - the same day-vs-day mood comparison,
+  now for reading sessions.
+- **Insights Digest** (`demo/insights_digest.py`,
+  `get_insights_digest`) - runs every correlation check at once
+  (workout/social/reading vs mood, every tracked habit vs mood, every
+  logged substance vs sleep) and surfaces only the findings with a
+  meaningful difference, instead of the person needing to know which
+  of seven-plus separate tools to call, or call all of them just to
+  see if anything stands out. A digest that repeats "not enough data"
+  seven times isn't useful, so anything below the threshold (default
+  1.0 points/hours) is silently omitted.
+
 ## Export & Backup, Now Conversational
 
 ```
@@ -1340,6 +1375,23 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.31.0 - Correlation Refactor, Reading Mood Impact, Insights Digest**
+- **Refactored** Habit Mood Impact, Substance-Sleep Impact, Social
+  Mood Impact, and Workout Mood Impact to share one implementation in
+  new `demo/correlation_utils.py`, instead of four nearly-identical
+  same-calendar-day comparison implementations. Public functions,
+  return shapes, and wording are all unchanged - verified by the full
+  existing test suite for all four passing unmodified.
+- New **Reading Mood Impact** (`demo/reading_correlation.py`,
+  `get_reading_mood_impact`): the same day-vs-day mood comparison, for
+  reading sessions - made cheap to add by the refactor above.
+- New **Insights Digest** (`demo/insights_digest.py`,
+  `get_insights_digest`): runs every correlation check at once and
+  surfaces only the findings with a meaningful difference, instead of
+  needing to call seven-plus separate correlation tools to find out if
+  anything stands out.
+- 25 new tests - suite grew from 1213 to 1238.
 
 **v1.30.0 - Workout Mood Impact, Conversational Export & Backup**
 - New **Workout Mood Impact** (`demo/workout_correlation.py`,

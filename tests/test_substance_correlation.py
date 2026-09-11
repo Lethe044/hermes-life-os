@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "demo"))
 def substance_correlation(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ("storage", "analytics", "substance_correlation"):
+    for mod in ("storage", "analytics", "correlation_utils", "substance_correlation"):
         if mod in sys.modules:
             del sys.modules[mod]
     import substance_correlation as sc
