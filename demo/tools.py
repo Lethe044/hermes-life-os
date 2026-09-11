@@ -705,6 +705,21 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         out_path = run_backup(keep=keep)
         return f"Backup written: {out_path} (keeping the {keep} most recent)."
 
+    # ── get_reading_mood_impact ───────────────────────────────────────────────
+    elif name == "get_reading_mood_impact":
+        from reading_correlation import compute_reading_mood_impact, format_reading_mood_impact
+        days = inp.get("days", 90)
+        result = compute_reading_mood_impact(days)
+        return format_reading_mood_impact(result)
+
+    # ── get_insights_digest ───────────────────────────────────────────────────
+    elif name == "get_insights_digest":
+        from insights_digest import compute_insights_digest, format_insights_digest
+        days = inp.get("days", 90)
+        threshold = inp.get("threshold", 1.0)
+        result = compute_insights_digest(days, threshold)
+        return format_insights_digest(result)
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -1717,6 +1732,26 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "keep": {"type": "integer", "description": "How many recent backups to retain. "
                                                           "Default 7."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_reading_mood_impact",
+        "description": "Compare average mood on days a reading session was logged versus days "
+                        "without one. Use when the user asks whether reading affects their mood.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Lookback window. Default 90."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_insights_digest",
+        "description": "Run every available same-day correlation check at once (workout, "
+                        "social, and reading vs mood; each substance vs sleep; each habit vs "
+                        "mood) and surface only the ones with a meaningful difference. Use when "
+                        "the user asks a broad 'what stands out in my data' or 'tell me "
+                        "something interesting' question, instead of calling each correlation "
+                        "tool separately.",
+        "parameters": {"type": "object", "properties": {
+            "days":      {"type": "integer", "description": "Lookback window. Default 90."},
+            "threshold": {"type": "number", "description": "Minimum absolute difference to "
+                                                              "surface a finding. Default 1.0."},
         }, "required": []}}},
 
     {"type": "function", "function": {"name": "get_on_this_day",
