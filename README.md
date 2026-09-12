@@ -1082,6 +1082,32 @@ average mood on days a workout was logged versus days without one,
 using the same same-calendar-day comparison convention as Habit Mood
 Impact, Substance-Sleep Impact, and Social Mood Impact.
 
+## Proactive Nudges & Wrapped, Now Conversational
+
+```
+"is there anything I should know about?"
+"give me my wrapped for the last 30 days"
+```
+
+Two more existing-but-CLI/scheduler-only features are now ordinary
+tools: `demo/nudges.py`'s deterministic anomaly and off-track-goal
+checker (previously only run by the scheduler for proactive
+notifications) is now available on demand as `get_nudges`, and
+`demo/wrapped.py`'s "Spotify Wrapped"-style period recap - average
+life score, mood, sleep, stress, best day, badges earned - is now
+available as text via `get_wrapped`, alongside its existing
+`hermes-life-os-wrapped` image-card CLI.
+
+Getting `get_wrapped` working safely surfaced a real bug: `wrapped.py`
+imported matplotlib at module level and called `sys.exit(1)` if it
+wasn't installed - fine for a CLI script, but it would have killed the
+entire bot/API process the first time a text-only caller tried to use
+it in an environment without matplotlib. The matplotlib import is now
+lazy, living inside `render_wrapped_image()` (the only function that
+actually needs it) and raising a normal `ImportError` instead of
+exiting the process; `build_wrapped_stats()` and the new
+`format_wrapped_summary()` need no plotting library at all.
+
 ## Correlation Refactor, Reading Mood Impact & Insights Digest
 
 ```
@@ -1375,6 +1401,23 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.32.0 - Proactive Nudges & Wrapped, Now Conversational**
+- New **`get_nudges`**: exposes the scheduler's existing deterministic
+  anomaly and off-track-goal checker (`demo/nudges.py`) on demand,
+  instead of only running on a schedule.
+- New **`get_wrapped`**: a text version of `demo/wrapped.py`'s
+  "Spotify Wrapped"-style period recap, via a new
+  `format_wrapped_summary()` alongside the existing image-rendering
+  `render_wrapped_image()`.
+- **Bug fix**: `wrapped.py` used to import matplotlib at module level
+  and call `sys.exit(1)` if it was missing - harmless for a CLI
+  script, but it would have crashed the whole bot/API process the
+  first time `get_wrapped` ran anywhere without matplotlib installed.
+  The import is now lazy (inside `render_wrapped_image()` only) and
+  raises a normal `ImportError`; the CLI's `main()` still exits
+  cleanly with the same message as before.
+- 10 new tests - suite grew from 1238 to 1248.
 
 **v1.31.0 - Correlation Refactor, Reading Mood Impact, Insights Digest**
 - **Refactored** Habit Mood Impact, Substance-Sleep Impact, Social

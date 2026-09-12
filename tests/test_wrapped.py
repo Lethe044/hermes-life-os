@@ -77,6 +77,58 @@ class TestBuildWrappedStats:
         assert stats["days"] == 14
 
 
+class TestFormatWrappedSummary:
+    def test_no_data_message(self, wrapped):
+        stats = wrapped.build_wrapped_stats(30)
+        text = wrapped.format_wrapped_summary(stats)
+        assert "nothing to wrap yet" in text
+
+    def test_with_data_shows_score_and_period_label(self, wrapped):
+        import storage
+        storage.write_memory({"type": "mood", "content": "great day", "score": 9})
+        stats = wrapped.build_wrapped_stats(30)
+        text = wrapped.format_wrapped_summary(stats)
+        assert "My Month with Hermes" in text
+        assert "Average mood: 9.0/10" in text
+
+    def test_week_period_label(self, wrapped):
+        import storage
+        storage.write_memory({"type": "mood", "content": "ok", "score": 6})
+        stats = wrapped.build_wrapped_stats(7)
+        text = wrapped.format_wrapped_summary(stats)
+        assert "My Week with Hermes" in text
+
+    def test_year_period_label(self, wrapped):
+        import storage
+        storage.write_memory({"type": "mood", "content": "ok", "score": 6})
+        stats = wrapped.build_wrapped_stats(365)
+        text = wrapped.format_wrapped_summary(stats)
+        assert "My Year with Hermes" in text
+
+    def test_badges_included_when_earned(self, wrapped):
+        import storage
+        storage.write_memory({"type": "workout", "content": "run", "duration_min": 30})
+        stats = wrapped.build_wrapped_stats(30)
+        text = wrapped.format_wrapped_summary(stats)
+        assert "badge(s) earned" in text
+
+    def test_no_matplotlib_import_required(self, wrapped, monkeypatch):
+        """format_wrapped_summary (and build_wrapped_stats) must work even
+        if matplotlib can't be imported, since a text-only caller like the
+        get_wrapped dispatch_tool has no need for a plotting library."""
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "matplotlib" or name.startswith("matplotlib."):
+                raise ImportError("simulated: no matplotlib")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        stats = wrapped.build_wrapped_stats(30)
+        assert wrapped.format_wrapped_summary(stats)  # doesn't raise
+
+
 class TestRenderWrappedImage:
     def test_renders_a_real_png_file(self, wrapped, tmp_path):
         import storage
@@ -85,6 +137,20 @@ class TestRenderWrappedImage:
         out = wrapped.render_wrapped_image(stats, tmp_path / "card.png")
         assert out.exists()
         assert out.stat().st_size > 1000  # a real image, not an empty/corrupt file
+
+    def test_missing_matplotlib_raises_import_error_not_sys_exit(self, wrapped, tmp_path, monkeypatch):
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "matplotlib" or name.startswith("matplotlib."):
+                raise ImportError("simulated: no matplotlib")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        stats = wrapped.build_wrapped_stats(30)
+        with pytest.raises(ImportError, match="matplotlib"):
+            wrapped.render_wrapped_image(stats, tmp_path / "card.png")
 
     def test_renders_cleanly_with_zero_data(self, wrapped, tmp_path):
         # No entries at all - every field is None/empty; must still

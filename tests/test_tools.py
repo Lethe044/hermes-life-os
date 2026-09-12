@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "social_insights", "social_correlation", "medication_streak", "workout_correlation", "export_tool", "data_export", "backup", "correlation_utils", "reading_correlation", "insights_digest", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "social_insights", "social_correlation", "medication_streak", "workout_correlation", "export_tool", "data_export", "backup", "correlation_utils", "reading_correlation", "insights_digest", "nudges", "wrapped", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -522,6 +522,23 @@ class TestGetInsightsDigestTool:
         tools.dispatch_tool("remember", {"type": "mood", "score": 2, "timestamp": two_days_ago})
         result = tools.dispatch_tool("get_insights_digest", {"threshold": 1.0})
         assert "Workout vs mood" in result
+
+
+class TestGetNudgesTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_nudges", {})
+        assert "Nothing worth flagging" in result
+
+
+class TestGetWrappedTool:
+    def test_no_data_message(self, tools):
+        result = tools.dispatch_tool("get_wrapped", {})
+        assert "nothing to wrap yet" in result
+
+    def test_with_data_shows_summary(self, tools):
+        tools.dispatch_tool("remember", {"type": "mood", "score": 9})
+        result = tools.dispatch_tool("get_wrapped", {"days": 30})
+        assert "My Month with Hermes" in result
 
 
 class TestDetectPatternsTool:

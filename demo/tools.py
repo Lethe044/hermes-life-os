@@ -720,6 +720,22 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         result = compute_insights_digest(days, threshold)
         return format_insights_digest(result)
 
+    # ── get_nudges ────────────────────────────────────────────────────────────
+    elif name == "get_nudges":
+        from nudges import generate_nudges
+        window_days = inp.get("window_days", 7)
+        nudges = generate_nudges(window_days)
+        if not nudges:
+            return "Nothing worth flagging right now - no anomalies or off-track goals found."
+        return "\n".join(f"- {n}" for n in nudges)
+
+    # ── get_wrapped ───────────────────────────────────────────────────────────
+    elif name == "get_wrapped":
+        from wrapped import build_wrapped_stats, format_wrapped_summary
+        days = inp.get("days", 30)
+        stats = build_wrapped_stats(days)
+        return format_wrapped_summary(stats)
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -1752,6 +1768,25 @@ TOOLS = [
             "days":      {"type": "integer", "description": "Lookback window. Default 90."},
             "threshold": {"type": "number", "description": "Minimum absolute difference to "
                                                               "surface a finding. Default 1.0."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_nudges",
+        "description": "Run the same deterministic anomaly and off-track-goal check the "
+                        "scheduler uses for proactive notifications, on demand. Use when the "
+                        "user asks if there's anything they should know about, or wants a "
+                        "quick 'anything unusual lately' check without waiting for a scheduled "
+                        "nudge.",
+        "parameters": {"type": "object", "properties": {
+            "window_days": {"type": "integer", "description": "Lookback window. Default 7."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_wrapped",
+        "description": "A shareable-style recap of a period - average life score, mood, sleep, "
+                        "stress, best day, and badges earned - the text version of the "
+                        "hermes-life-os-wrapped image card. Use when the user asks for a "
+                        "'wrapped', a recap, or a highlight reel of a week/month/year.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Period length in days. Default 30."},
         }, "required": []}}},
 
     {"type": "function", "function": {"name": "get_on_this_day",
