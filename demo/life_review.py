@@ -33,14 +33,6 @@ from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-try:
-    import matplotlib
-    matplotlib.use("Agg")  # headless - no display needed to render charts
-    import matplotlib.pyplot as plt
-except ImportError:
-    print("Life Review needs matplotlib. Install it with:\n  pip install matplotlib")
-    sys.exit(1)
-
 import storage
 from storage import get_recent_memory, get_memory_window, load_habits
 from analytics import (
@@ -51,12 +43,13 @@ from analytics import (
 from patterns import detect_patterns
 from life_score import compute_life_score_trend
 from achievements import evaluate_achievements
-from dashboard import _fig_to_base64  # reuse chart -> base64 helper for visual consistency
+from dashboard import _fig_to_base64, _get_pyplot  # reuse chart -> base64 helper and lazy matplotlib access
 
 
 def _life_score_chart(trend: List[Dict[str, Any]]) -> str:
     if len(trend) < 2:
         return ""
+    plt = _get_pyplot()
     fig, ax = plt.subplots(figsize=(9, 3))
     dates = [t["date"] for t in trend]
     scores = [t["score"] for t in trend]
@@ -117,6 +110,35 @@ def build_life_review_data(days: int = 90, compare_days: Optional[int] = None) -
         "habits": load_habits(),
         "earned_badges": earned,
     }
+
+
+def format_life_review_summary(data: Dict[str, Any]) -> str:
+    """Turns build_life_review_data()'s output into a friendly
+    plain-text summary - a text-only counterpart to render_html()/
+    render_pdf(), for callers (like the get_life_review dispatch_tool)
+    that want the numbers without a file and without needing
+    matplotlib installed."""
+    if data["entry_count"] == 0:
+        return f"No entries logged in the last {data['days']} days - nothing to review yet."
+
+    lines = [f"{data['period_label']} review (last {data['days']} days, {data['entry_count']} entries):"]
+    score = data["avg_life_score"]
+    lines.append(f"Average life score: {score if score is not None else 'N/A'}")
+    if data["best_day"]:
+        lines.append(f"Best day: {data['best_day']['date']} (score {data['best_day']['score']})")
+    if data["worst_day"]:
+        lines.append(f"Toughest day: {data['worst_day']['date']} (score {data['worst_day']['score']})")
+    if data["insights"]:
+        lines.append("Correlations: " + "; ".join(data["insights"][:3]))
+    if data["retrospective"]:
+        for metric, r in sorted(data["retrospective"].items())[:3]:
+            arrow = "up" if r["delta"] > 0 else ("down" if r["delta"] < 0 else "flat")
+            lines.append(f"{metric} vs prior {data['compare_days']} days: {arrow} {abs(r['pct_change'])}%")
+    if data["earned_badges"]:
+        names = ", ".join(b["name"] for b in data["earned_badges"][:3])
+        suffix = f", +{len(data['earned_badges']) - 3} more" if len(data["earned_badges"]) > 3 else ""
+        lines.append(f"{len(data['earned_badges'])} badge(s) earned: {names}{suffix}")
+    return "\n".join(lines)
 
 
 def _retrospective_html(retrospective: Dict[str, Dict[str, float]]) -> str:
@@ -277,6 +299,7 @@ def render_pdf(data: Dict[str, Any], out_path: Path) -> Path:
     habits. Long lists are capped (not paginated further) to keep this
     simple and predictable rather than open-ended."""
     import textwrap
+    plt = _get_pyplot()
     from matplotlib.backends.backend_pdf import PdfPages
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -411,4 +434,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except ImportError as e:
+        print(str(e))
+        sys.exit(1)

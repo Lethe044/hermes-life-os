@@ -95,6 +95,42 @@ class TestRenderHtml:
         assert "morning run" in html
         assert "5 day streak" in html
 
+    def test_build_dashboard_data_works_without_matplotlib(self, fake_home, monkeypatch):
+        """build_dashboard_data() is pure data and shouldn't need
+        matplotlib at all - only actually rendering a chart should."""
+        _, dashboard, storage = fake_home
+        storage.HERMES_DIR.mkdir(parents=True, exist_ok=True)
+        _seed_entries(storage, n_days=14)
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "matplotlib" or name.startswith("matplotlib."):
+                raise ImportError("simulated: no matplotlib")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        data = dashboard.build_dashboard_data(days=30)
+        assert data["dates"]
+
+    def test_render_html_raises_import_error_not_sys_exit_without_matplotlib(self, fake_home, monkeypatch):
+        _, dashboard, storage = fake_home
+        storage.HERMES_DIR.mkdir(parents=True, exist_ok=True)
+        _seed_entries(storage, n_days=14)
+        data = dashboard.build_dashboard_data(days=30)
+
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "matplotlib" or name.startswith("matplotlib."):
+                raise ImportError("simulated: no matplotlib")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        with pytest.raises(ImportError, match="matplotlib"):
+            dashboard.render_html(data)
+
 
 class TestCliEndToEnd:
     def test_main_writes_html_file_without_data(self, fake_home, capsys):

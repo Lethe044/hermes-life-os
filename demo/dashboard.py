@@ -29,14 +29,6 @@ from typing import Dict, List
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-try:
-    import matplotlib
-    matplotlib.use("Agg")  # headless - no display needed to render charts
-    import matplotlib.pyplot as plt
-except ImportError:
-    print("Dashboard needs matplotlib. Install it with:\n  pip install matplotlib")
-    sys.exit(1)
-
 import storage
 from storage import get_recent_memory, load_habits, get_memory_window
 from analytics import (
@@ -58,7 +50,30 @@ METRIC_COLORS = {
 }
 
 
+_plt_module = None
+
+
+def _get_pyplot():
+    """Lazily imports and caches matplotlib.pyplot - only the chart-
+    rendering functions below need it, so build_dashboard_data() (pure
+    data) works fine without matplotlib installed at all. Raises a
+    friendly ImportError instead of the old behavior of killing the
+    whole process with sys.exit(1) at module import time."""
+    global _plt_module
+    if _plt_module is None:
+        try:
+            import matplotlib
+            matplotlib.use("Agg")  # headless - no display needed to render charts
+            import matplotlib.pyplot as plt
+        except ImportError as e:
+            raise ImportError("Dashboard chart rendering needs matplotlib. Install it with:\n"
+                               "  pip install matplotlib") from e
+        _plt_module = plt
+    return _plt_module
+
+
 def _fig_to_base64(fig) -> str:
+    plt = _get_pyplot()
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=140, bbox_inches="tight")
     plt.close(fig)
@@ -74,6 +89,7 @@ def _render_metric_chart(dates: List[str], values: Dict[str, List[float]]) -> st
     if not present:
         return ""
 
+    plt = _get_pyplot()
     fig, axes = plt.subplots(len(present), 1, figsize=(9, 2.1 * len(present)), sharex=True)
     if len(present) == 1:
         axes = [axes]
@@ -296,4 +312,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except ImportError as e:
+        print(str(e))
+        sys.exit(1)
