@@ -73,6 +73,45 @@ class TestBuildLifeReviewData:
         data = life_review.build_life_review_data(365)
         assert data["period_label"] == "Year"
 
+    def test_works_without_matplotlib(self, life_review, monkeypatch):
+        """build_life_review_data() is pure data and shouldn't need
+        matplotlib at all - only actually rendering a chart should."""
+        import storage
+        storage.write_memory({"type": "mood", "content": "good day", "score": 8})
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "matplotlib" or name.startswith("matplotlib."):
+                raise ImportError("simulated: no matplotlib")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        data = life_review.build_life_review_data(90)
+        assert data["entry_count"] == 1
+
+
+class TestFormatLifeReviewSummary:
+    def test_no_data_message(self, life_review):
+        data = life_review.build_life_review_data(90)
+        text = life_review.format_life_review_summary(data)
+        assert "nothing to review yet" in text
+
+    def test_with_data_shows_score_and_period(self, life_review):
+        import storage
+        storage.write_memory({"type": "mood", "content": "good day", "score": 8})
+        data = life_review.build_life_review_data(90)
+        text = life_review.format_life_review_summary(data)
+        assert "Quarter review" in text
+        assert "Average life score" in text
+
+    def test_badges_included_when_earned(self, life_review):
+        import storage
+        storage.write_memory({"type": "workout", "content": "run", "duration_min": 30})
+        data = life_review.build_life_review_data(90)
+        text = life_review.format_life_review_summary(data)
+        assert "badge(s) earned" in text
+
 
 class TestRenderHtml:
     def test_renders_valid_html_with_no_data(self, life_review):
@@ -100,6 +139,26 @@ class TestRenderHtml:
             warnings.simplefilter("error", UserWarning)
             html = life_review.render_html(data)
         assert html
+
+    def test_raises_import_error_not_sys_exit_without_matplotlib(self, life_review, monkeypatch):
+        import storage
+        from datetime import datetime, timedelta
+        for i, score in enumerate((5, 6, 7, 8)):
+            ts = (datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%dT10:00:00Z")
+            storage.write_memory({"type": "mood", "content": "day", "score": score, "timestamp": ts})
+        data = life_review.build_life_review_data(90)
+
+        import builtins
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "matplotlib" or name.startswith("matplotlib."):
+                raise ImportError("simulated: no matplotlib")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+        with pytest.raises(ImportError, match="matplotlib"):
+            life_review.render_html(data)
 
 
 class TestRenderPdf:

@@ -736,6 +736,14 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         stats = build_wrapped_stats(days)
         return format_wrapped_summary(stats)
 
+    # ── get_life_review ───────────────────────────────────────────────────────
+    elif name == "get_life_review":
+        from life_review import build_life_review_data, format_life_review_summary
+        days = inp.get("days", 90)
+        compare_days = inp.get("compare_days")
+        data = build_life_review_data(days, compare_days)
+        return format_life_review_summary(data)
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -1787,6 +1795,18 @@ TOOLS = [
                         "'wrapped', a recap, or a highlight reel of a week/month/year.",
         "parameters": {"type": "object", "properties": {
             "days": {"type": "integer", "description": "Period length in days. Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_life_review",
+        "description": "A deeper period review than get_wrapped - life score trend, best/"
+                        "toughest day, correlation insights, a retrospective comparison against "
+                        "the prior period, and badges earned - the text version of the "
+                        "hermes-life-os-review HTML/PDF report. Use when the user asks for a "
+                        "fuller review or retrospective, not just a quick recap.",
+        "parameters": {"type": "object", "properties": {
+            "days":         {"type": "integer", "description": "Period length in days. Default 90."},
+            "compare_days": {"type": "integer", "description": "Retrospective comparison window. "
+                                                                  "Default: same as days."},
         }, "required": []}}},
 
     {"type": "function", "function": {"name": "get_on_this_day",

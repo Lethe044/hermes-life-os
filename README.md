@@ -1082,6 +1082,31 @@ average mood on days a workout was logged versus days without one,
 using the same same-calendar-day comparison convention as Habit Mood
 Impact, Substance-Sleep Impact, and Social Mood Impact.
 
+## Life Review, Now Conversational (and Two More Matplotlib Crash Fixes)
+
+```
+"give me a fuller review of the last quarter"
+```
+
+Fixing `wrapped.py`'s matplotlib crash last round turned up the exact
+same bug in two more report generators: `demo/dashboard.py` and
+`demo/life_review.py` both imported matplotlib at module level and
+called `sys.exit(1)` if it wasn't installed - which would have killed
+the whole bot/API process the first time a text-only caller touched
+either module in an environment without matplotlib. Both now use a
+shared `_get_pyplot()` lazy-import helper (`dashboard._get_pyplot()`,
+reused by `life_review.py`) that raises a normal `ImportError` only
+when a chart is actually about to be rendered; `build_dashboard_data()`
+and `build_life_review_data()` need no plotting library at all.
+
+That fix made `demo/life_review.py`'s data cheap to expose
+conversationally too: new `format_life_review_summary()` gives a text
+version - life score trend, best/toughest day, correlation insights,
+a retrospective comparison against the prior period, badges earned -
+available as `get_life_review`, alongside the existing
+`hermes-life-os-review` HTML/PDF CLI. It's the deeper counterpart to
+`get_wrapped`'s quick recap.
+
 ## Proactive Nudges & Wrapped, Now Conversational
 
 ```
@@ -1401,6 +1426,22 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.33.0 - Life Review Conversational, Two More Matplotlib Crash Fixes**
+- **Bug fix**: found the same matplotlib-crash bug fixed in `wrapped.py`
+  last release in two more places - `demo/dashboard.py` and
+  `demo/life_review.py` both imported matplotlib at module level and
+  called `sys.exit(1)` if it was missing. Both now use a shared,
+  lazily-evaluated `_get_pyplot()` helper that raises a normal
+  `ImportError` only when a chart is actually being rendered.
+  `build_dashboard_data()` and `build_life_review_data()` need no
+  plotting library at all now; the CLIs' behavior is unchanged.
+- New **`get_life_review`**: a text version of `demo/life_review.py`'s
+  full period review (life score trend, best/toughest day, correlation
+  insights, retrospective comparison, badges earned), via a new
+  `format_life_review_summary()` - the deeper counterpart to
+  `get_wrapped`'s quick recap.
+- 9 new tests - suite grew from 1248 to 1257.
 
 **v1.32.0 - Proactive Nudges & Wrapped, Now Conversational**
 - New **`get_nudges`**: exposes the scheduler's existing deterministic
