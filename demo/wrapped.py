@@ -24,14 +24,6 @@ from typing import Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-try:
-    import matplotlib
-    matplotlib.use("Agg")  # headless - no display needed to render
-    import matplotlib.pyplot as plt
-except ImportError:
-    print("Wrapped needs matplotlib. Install it with:\n  pip install matplotlib")
-    sys.exit(1)
-
 from storage import get_recent_memory
 from analytics import daily_averages
 from life_score import compute_life_score_trend
@@ -86,9 +78,55 @@ def _period_label(days: int) -> str:
     return "Year"
 
 
+def format_wrapped_summary(stats: Dict) -> str:
+    """Turns build_wrapped_stats()'s output into a friendly plain-text
+    summary - the text-only counterpart to render_wrapped_image(), for
+    callers (like the get_wrapped dispatch_tool) that want the numbers
+    without an image and without needing matplotlib installed."""
+    if stats["n_entries"] == 0:
+        return f"No entries logged in the last {stats['days']} days - nothing to wrap yet."
+
+    lines = [f"My {_period_label(stats['days'])} with Hermes (last {stats['days']} days):"]
+    score = stats["avg_life_score"]
+    lines.append(f"Average life score: {score if score is not None else 'N/A'}")
+    lines.append(f"Entries logged: {stats['n_entries']} across {stats['n_days_logged']} active day(s)")
+    if stats["avg_mood"] is not None:
+        lines.append(f"Average mood: {stats['avg_mood']}/10")
+    if stats["avg_sleep"] is not None:
+        lines.append(f"Average sleep: {stats['avg_sleep']}h")
+    if stats["avg_stress"] is not None:
+        lines.append(f"Average stress: {stats['avg_stress']}/10")
+    best_day = stats["best_day"]
+    if best_day:
+        lines.append(f"Best day: {best_day['date']} (score {best_day['score']})")
+    badges = stats["earned_badges"]
+    if badges:
+        names = ", ".join(b["name"] for b in badges[:3])
+        suffix = f", +{len(badges) - 3} more" if len(badges) > 3 else ""
+        lines.append(f"{len(badges)} badge(s) earned: {names}{suffix}")
+    return "\n".join(lines)
+
+
 def render_wrapped_image(stats: Dict, out_path: Path, title: Optional[str] = None) -> Path:
     """Renders build_wrapped_stats()'s output as a single PNG card,
-    sized for social sharing (a tall, portrait-friendly aspect ratio)."""
+    sized for social sharing (a tall, portrait-friendly aspect ratio).
+    Imports matplotlib lazily, only when an image is actually being
+    rendered - build_wrapped_stats() itself needs no plotting library
+    at all, so text-only callers (like the get_wrapped dispatch_tool)
+    can use it even where matplotlib isn't installed. Raises
+    ImportError with a friendly message if matplotlib is missing,
+    rather than the old behavior of killing the whole process at
+    import time with sys.exit(1) - a text-only caller shouldn't crash
+    just because this module happens to also support image rendering.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")  # headless - no display needed to render
+        import matplotlib.pyplot as plt
+    except ImportError as e:
+        raise ImportError("Wrapped image rendering needs matplotlib. Install it with:\n"
+                           "  pip install matplotlib") from e
+
     title = title or f"My {_period_label(stats['days'])} with Hermes"
 
     fig = plt.figure(figsize=(8, 10), facecolor=BG_COLOR)
@@ -176,4 +214,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except ImportError as e:
+        print(str(e))
+        sys.exit(1)
