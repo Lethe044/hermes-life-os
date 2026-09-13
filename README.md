@@ -1186,6 +1186,38 @@ directory so nobody has to supply one. `export_data` is for taking
 your data elsewhere (a spreadsheet, Obsidian, Notion); `backup_now` is
 for safekeeping in place.
 
+## Habit-Linked Goals
+
+```
+"update_goal('meditation streak', linked_habit='meditate', target_streak=30)"
+```
+
+`update_goal` now supports a third way to track progress, alongside
+manual and metric-linked: `linked_habit` + `target_streak` ties a
+goal's progress directly to a habit's actual current streak (e.g. "hit
+a 30-day meditation streak"), computed via a new
+`compute_habit_goal_progress()` in `analytics.py` - the habit-tracking
+counterpart to the existing metric-tracking `compute_goal_progress()`.
+`check_goal_progress` refreshes habit-linked goals from the live
+streak the same way it already refreshes metric-linked ones. A goal is
+manual, metric-linked, or habit-linked - not more than one at once.
+
+## Quick-Log Templates
+
+```
+"save my usual breakfast as a template"
+"log my usual breakfast"
+```
+
+`demo/templates.py` lets you save a named shortcut for a specific
+`log_*` tool call with fixed parameters (`save_log_template`), then
+replay it later with one call (`use_log_template`) instead of
+re-typing the same details every time - `list_log_templates` and
+`delete_log_template` round it out. Templates can only ever point at
+`log_*` tools, never at export/backup/goal/habit-management or any
+other tool, so replaying one can only ever add a new log entry, never
+trigger a side effect beyond what the person explicitly asked to save.
+
 ## Goal Deadlines
 
 ```
@@ -1426,6 +1458,21 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.34.0 - Habit-Linked Goals & Quick-Log Templates**
+- New **Habit-Linked Goals**: `update_goal` now accepts `linked_habit`
+  + `target_streak` as a third progress-tracking mode alongside manual
+  and metric-linked - a goal like "hit a 30-day meditation streak" now
+  auto-tracks itself from the habit's real current streak via new
+  `compute_habit_goal_progress()`. `check_goal_progress` refreshes
+  these the same way it already refreshes metric-linked goals.
+- New **Quick-Log Templates** (`demo/templates.py`,
+  `save_log_template`/`use_log_template`/`list_log_templates`/
+  `delete_log_template`): save a named shortcut for a specific `log_*`
+  tool call with fixed parameters and replay it later with one call.
+  Restricted to `log_*` tools only, so a template can never trigger
+  anything beyond adding a new log entry.
+- 36 new tests - suite grew from 1257 to 1293.
 
 **v1.33.0 - Life Review Conversational, Two More Matplotlib Crash Fixes**
 - **Bug fix**: found the same matplotlib-crash bug fixed in `wrapped.py`

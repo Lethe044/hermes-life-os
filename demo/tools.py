@@ -42,7 +42,7 @@ from storage import (
 import plugins as _plugins
 from patterns import detect_patterns
 from analytics import (
-    compute_goal_progress, compare_periods, compare_before_after,
+    compute_goal_progress, compute_habit_goal_progress, compare_periods, compare_before_after,
     detect_anomalies, daily_averages, TRACKABLE_METRICS,
     compute_correlations, format_correlation_insights,
     compute_lagged_correlations_multi, format_lagged_insights,
@@ -744,6 +744,45 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         data = build_life_review_data(days, compare_days)
         return format_life_review_summary(data)
 
+    # ── save_log_template ─────────────────────────────────────────────────────
+    elif name == "save_log_template":
+        from templates import save_template
+        template_name = inp.get("template_name", "")
+        tool_name = inp.get("tool_name", "")
+        params = inp.get("params", {})
+        if not template_name or not tool_name:
+            return "Please specify both a template_name and a tool_name."
+        if not tool_name.startswith("log_"):
+            return "Templates can only be saved for log_* tools (e.g. log_meal, log_workout)."
+        if tool_name not in {t["function"]["name"] for t in TOOLS}:
+            return f"'{tool_name}' isn't a known tool."
+        save_template(template_name, tool_name, params)
+        return f"Template '{template_name}' saved: {tool_name}({params})."
+
+    # ── use_log_template ──────────────────────────────────────────────────────
+    elif name == "use_log_template":
+        from templates import get_template
+        template_name = inp.get("template_name", "")
+        template = get_template(template_name)
+        if template is None:
+            return f"No template named '{template_name}' found."
+        result = dispatch_tool(template["tool_name"], template["params"])
+        return f"[from template '{template_name}'] {result}"
+
+    # ── list_log_templates ────────────────────────────────────────────────────
+    elif name == "list_log_templates":
+        from templates import list_templates, format_template_list
+        return format_template_list(list_templates())
+
+    # ── delete_log_template ───────────────────────────────────────────────────
+    elif name == "delete_log_template":
+        from templates import delete_template
+        template_name = inp.get("template_name", "")
+        deleted = delete_template(template_name)
+        if deleted:
+            return f"Template '{template_name}' deleted."
+        return f"No template named '{template_name}' found."
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -891,6 +930,8 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         direction = inp.get("direction", "at_least")
         window_days = inp.get("window_days", 7)
         deadline  = inp.get("deadline")
+        linked_habit  = inp.get("linked_habit")
+        target_streak = inp.get("target_streak")
 
         goals     = load_goals()
         found     = False
@@ -902,7 +943,10 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                     g["target"] = target
                     g["direction"] = direction
                     g["window_days"] = window_days
-                if progress is not None and "metric" not in g:
+                if linked_habit:
+                    g["linked_habit"] = linked_habit
+                    g["target_streak"] = target_streak
+                if progress is not None and "metric" not in g and "linked_habit" not in g:
                     g["progress"] = progress
                 if deadline:
                     g["deadline"] = deadline
@@ -921,11 +965,18 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                 goal_ref["target"] = target
                 goal_ref["direction"] = direction
                 goal_ref["window_days"] = window_days
+            if linked_habit:
+                goal_ref["linked_habit"] = linked_habit
+                goal_ref["target_streak"] = target_streak
             if deadline:
                 goal_ref["deadline"] = deadline
             goals.append(goal_ref)
 
-        if goal_ref.get("metric"):
+        if goal_ref.get("linked_habit"):
+            computed = compute_habit_goal_progress(goal_ref, load_habits())
+            if computed is not None:
+                goal_ref["progress"] = computed
+        elif goal_ref.get("metric"):
             entries = get_recent_memory(days=goal_ref.get("window_days", 7))
             computed = compute_goal_progress(goal_ref, entries)
             if computed is not None:
@@ -933,6 +984,10 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
 
         save_goals(goals)
         deadline_suffix = f" (deadline {goal_ref['deadline']})" if goal_ref.get("deadline") else ""
+        if goal_ref.get("linked_habit"):
+            return (f"Goal '{goal_name}' now auto-tracks the '{goal_ref['linked_habit']}' habit "
+                    f"streak (target: {goal_ref['target_streak']} days): "
+                    f"{goal_ref['progress']}% - {note}{deadline_suffix}")
         if goal_ref.get("metric"):
             return (f"Goal '{goal_name}' now auto-tracks {goal_ref['metric']} "
                     f"({direction.replace('_', ' ')} {target}): {goal_ref['progress']}% - {note}{deadline_suffix}")
@@ -943,9 +998,19 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         goals = load_goals()
         if not goals:
             return "No goals set yet."
+        habits_cache = load_habits()
         lines = []
         for g in goals:
-            if g.get("metric"):
+            if g.get("linked_habit"):
+                computed = compute_habit_goal_progress(g, habits_cache)
+                if computed is not None:
+                    g["progress"] = computed
+                lines.append(
+                    f"{g['name']}: {g.get('progress', 0)}% "
+                    f"(auto-tracked: '{g['linked_habit']}' habit streak, "
+                    f"target {g.get('target_streak')} days)"
+                )
+            elif g.get("metric"):
                 entries = get_recent_memory(days=g.get("window_days", 7))
                 computed = compute_goal_progress(g, entries)
                 if computed is not None:
@@ -1809,6 +1874,39 @@ TOOLS = [
                                                                   "Default: same as days."},
         }, "required": []}}},
 
+    {"type": "function", "function": {"name": "save_log_template",
+        "description": "Save a reusable shortcut for a specific log_* tool call with fixed "
+                        "parameters, e.g. save 'usual breakfast' as log_meal with particular "
+                        "food/calories, so it can be replayed later with use_log_template "
+                        "instead of re-typing the same details. Only log_* tools can be saved "
+                        "as templates.",
+        "parameters": {"type": "object", "properties": {
+            "template_name": {"type": "string", "description": "A short name for the template, "
+                                                                  "e.g. 'usual breakfast'."},
+            "tool_name":     {"type": "string", "description": "The log_* tool to save, e.g. 'log_meal'."},
+            "params":        {"type": "object", "description": "The exact parameters to replay for "
+                                                                  "that tool."},
+        }, "required": ["template_name", "tool_name", "params"]}}},
+
+    {"type": "function", "function": {"name": "use_log_template",
+        "description": "Replay a previously saved log template by name - runs the saved log_* "
+                        "tool call with its saved parameters. Use when the user references a "
+                        "saved shortcut, e.g. 'log my usual breakfast'.",
+        "parameters": {"type": "object", "properties": {
+            "template_name": {"type": "string"},
+        }, "required": ["template_name"]}}},
+
+    {"type": "function", "function": {"name": "list_log_templates",
+        "description": "List every saved log template and what it replays. Use when the user "
+                        "asks what shortcuts they have saved.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "delete_log_template",
+        "description": "Delete a saved log template by name.",
+        "parameters": {"type": "object", "properties": {
+            "template_name": {"type": "string"},
+        }, "required": ["template_name"]}}},
+
     {"type": "function", "function": {"name": "get_on_this_day",
         "description": "Find memory entries logged on this same calendar day (month/day) in "
                         "previous years - a nostalgia lookup. Use when the user asks what they "
@@ -1854,10 +1952,15 @@ TOOLS = [
         "description": "Create or update a goal. For goals that should track themselves "
                        "automatically from logged data (e.g. 'sleep 7+ hours', 'keep stress "
                        "under 4'), set metric/target/direction instead of a manual progress "
-                       "number - progress will be computed from real logged averages.",
+                       "number - progress will be computed from real logged averages. For "
+                       "goals tied to a habit streak (e.g. 'meditate for a 30-day streak'), "
+                       "set linked_habit/target_streak instead - progress will be computed "
+                       "from that habit's actual current streak. A goal can be metric-linked, "
+                       "habit-linked, or manually tracked, but not more than one of those at "
+                       "once.",
         "parameters": {"type": "object", "properties": {
             "goal_name":   {"type": "string"},
-            "progress":    {"type": "number", "description": "Manual progress 0-100. Ignored if metric is set."},
+            "progress":    {"type": "number", "description": "Manual progress 0-100. Ignored if metric or linked_habit is set."},
             "note":        {"type": "string"},
             "metric":      {"type": "string", "enum": ["mood", "energy", "stress", "sleep", "hydration"],
                             "description": "Set this to make the goal auto-track from logged data."},
@@ -1866,6 +1969,10 @@ TOOLS = [
                             "description": "'at_least' for goals like sleep/mood/hydration, 'at_most' for goals like stress."},
             "window_days": {"type": "integer", "description": "How many recent days to average. Default 7."},
             "deadline":    {"type": "string", "description": "Optional deadline in YYYY-MM-DD format."},
+            "linked_habit":  {"type": "string", "description": "Set this to make the goal auto-track a "
+                                                                  "habit's streak, e.g. 'meditation'."},
+            "target_streak": {"type": "integer", "description": "Streak length (days) that counts as "
+                                                                   "100% for a habit-linked goal."},
         }, "required": ["goal_name"]}}},
 
     {"type": "function", "function": {"name": "check_goal_progress",
