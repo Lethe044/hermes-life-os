@@ -857,6 +857,31 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                 f"{a['name']} ({a['progress_pct']:.0f}%)" for a in top))
         return "\n".join(lines)
 
+    # ── list_habits ───────────────────────────────────────────────────────────
+    elif name == "list_habits":
+        habits = load_habits()
+        if not habits:
+            return "No habits created yet."
+        lines = ["All habits:"]
+        for h in habits:
+            freezes = h.get("freezes_available", 0)
+            freeze_suffix = f", {freezes} freeze(s) available" if freezes else ""
+            lines.append(
+                f"- {h.get('name', '?')}: streak {h.get('streak', 0)} days "
+                f"(best: {h.get('best_streak', 0)}){freeze_suffix}"
+            )
+        return "\n".join(lines)
+
+    # ── delete_habit ──────────────────────────────────────────────────────────
+    elif name == "delete_habit":
+        habit_name = inp.get("habit_name", "")
+        habits = load_habits()
+        remaining = [h for h in habits if h.get("name", "").lower() != habit_name.lower()]
+        if len(remaining) == len(habits):
+            return f"No habit named '{habit_name}' found."
+        save_habits(remaining)
+        return f"Habit '{habit_name}' deleted. This can't be undone."
+
     # ── update_habit ──────────────────────────────────────────────────────────
     elif name == "update_habit":
         name_h     = inp.get("habit_name", "")
@@ -1024,6 +1049,16 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                 lines.append(f"{g['name']}: {g.get('progress', 0)}% (manually tracked)")
         save_goals(goals)
         return "\n".join(lines)
+
+    # ── delete_goal ───────────────────────────────────────────────────────────
+    elif name == "delete_goal":
+        goal_name = inp.get("goal_name", "")
+        goals = load_goals()
+        remaining = [g for g in goals if g.get("name", "").lower() != goal_name.lower()]
+        if len(remaining) == len(goals):
+            return f"No goal named '{goal_name}' found."
+        save_goals(remaining)
+        return f"Goal '{goal_name}' deleted. This can't be undone."
 
     # ── compare_periods ──────────────────────────────────────────────────────
     elif name == "compare_periods":
@@ -1937,6 +1972,21 @@ TOOLS = [
             "days": {"type": "integer", "description": "Lookback window for Life Score. Default 7."},
         }, "required": []}}},
 
+    {"type": "function", "function": {"name": "list_habits",
+        "description": "List every habit that's ever been created, regardless of current "
+                        "streak - including brand-new habits with a 0-day streak, which don't "
+                        "show up in get_habit_milestones/get_habit_pb_progress/the health "
+                        "dashboard since those only cover habits with an active or past streak. "
+                        "Use when the user asks what habits they have set up.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "delete_habit",
+        "description": "Permanently delete a habit and its streak history. Use when the user "
+                        "asks to remove, delete, or stop tracking a habit.",
+        "parameters": {"type": "object", "properties": {
+            "habit_name": {"type": "string"},
+        }, "required": ["habit_name"]}}},
+
     {"type": "function", "function": {"name": "update_habit",
         "description": "Update habit streak. Habits earn a 'streak freeze' every 7 days of streak "
                         "(banked, up to 3) - if a day is missed, set completed=false and "
@@ -1978,6 +2028,13 @@ TOOLS = [
     {"type": "function", "function": {"name": "check_goal_progress",
         "description": "Show current progress on every goal, refreshing auto-tracked goals from the latest logged data.",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "delete_goal",
+        "description": "Permanently delete a goal. Use when the user asks to remove, delete, "
+                        "or abandon a goal.",
+        "parameters": {"type": "object", "properties": {
+            "goal_name": {"type": "string"},
+        }, "required": ["goal_name"]}}},
 
     {"type": "function", "function": {"name": "compare_periods",
         "description": "Compare average mood/energy/stress/sleep/hydration between the last "
