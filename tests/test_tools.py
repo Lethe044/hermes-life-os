@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "social_insights", "social_correlation", "medication_streak", "workout_correlation", "export_tool", "data_export", "backup", "correlation_utils", "reading_correlation", "insights_digest", "nudges", "wrapped", "dashboard", "life_review", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "social_insights", "social_correlation", "medication_streak", "workout_correlation", "export_tool", "data_export", "backup", "correlation_utils", "reading_correlation", "insights_digest", "nudges", "wrapped", "dashboard", "life_review", "templates", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -173,6 +173,32 @@ class TestUpdateGoal:
     def test_no_deadline_omits_suffix(self, tools):
         result = tools.dispatch_tool("update_goal", {"goal_name": "ship project", "progress": 30})
         assert "deadline" not in result
+
+    def test_linked_habit_new_goal(self, tools):
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        result = tools.dispatch_tool("update_goal", {
+            "goal_name": "meditation streak", "linked_habit": "meditate", "target_streak": 10,
+        })
+        assert "meditate" in result
+        assert "10.0%" in result  # 1-day streak / 10-day target
+
+    def test_linked_habit_progress_updates_with_streak(self, tools):
+        for _ in range(5):
+            tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        result = tools.dispatch_tool("update_goal", {
+            "goal_name": "meditation streak", "linked_habit": "meditate", "target_streak": 10,
+        })
+        assert "50.0%" in result
+
+    def test_manual_progress_ignored_once_habit_linked(self, tools):
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        tools.dispatch_tool("update_goal", {
+            "goal_name": "meditation streak", "linked_habit": "meditate", "target_streak": 10,
+        })
+        result = tools.dispatch_tool("update_goal", {
+            "goal_name": "meditation streak", "progress": 99,
+        })
+        assert "99" not in result
 
 
 class TestGetDayOfWeekInsightsTool:
@@ -552,6 +578,84 @@ class TestGetLifeReviewTool:
         assert "review" in result.lower()
 
 
+class TestSaveLogTemplateTool:
+    def test_missing_fields_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("save_log_template", {})
+        assert "specify both" in result
+
+    def test_non_log_tool_rejected(self, tools):
+        result = tools.dispatch_tool("save_log_template", {
+            "template_name": "sneaky", "tool_name": "backup_now", "params": {},
+        })
+        assert "log_* tools" in result
+
+    def test_unknown_tool_rejected(self, tools):
+        result = tools.dispatch_tool("save_log_template", {
+            "template_name": "x", "tool_name": "log_not_a_real_tool", "params": {},
+        })
+        assert "isn't a known tool" in result
+
+    def test_valid_template_saved(self, tools):
+        result = tools.dispatch_tool("save_log_template", {
+            "template_name": "usual breakfast", "tool_name": "log_meal",
+            "params": {"food": "oatmeal", "calories": 300},
+        })
+        assert "usual breakfast" in result
+        assert "log_meal" in result
+
+
+class TestUseLogTemplateTool:
+    def test_nonexistent_template_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("use_log_template", {"template_name": "ghost"})
+        assert "No template named" in result
+
+    def test_replays_saved_tool_call(self, tools):
+        tools.dispatch_tool("save_log_template", {
+            "template_name": "usual breakfast", "tool_name": "log_meal",
+            "params": {"food": "oatmeal", "calories": 300},
+        })
+        result = tools.dispatch_tool("use_log_template", {"template_name": "usual breakfast"})
+        assert "usual breakfast" in result
+        assert "oatmeal" in result
+
+    def test_replay_actually_logs_the_entry(self, tools):
+        tools.dispatch_tool("save_log_template", {
+            "template_name": "usual breakfast", "tool_name": "log_meal",
+            "params": {"food": "oatmeal", "calories": 300},
+        })
+        tools.dispatch_tool("use_log_template", {"template_name": "usual breakfast"})
+        summary = tools.dispatch_tool("get_meal_summary", {})
+        assert "oatmeal" in summary
+
+
+class TestListLogTemplatesTool:
+    def test_no_templates_message(self, tools):
+        result = tools.dispatch_tool("list_log_templates", {})
+        assert "No log templates saved" in result
+
+    def test_with_templates_lists_them(self, tools):
+        tools.dispatch_tool("save_log_template", {
+            "template_name": "usual breakfast", "tool_name": "log_meal", "params": {"food": "oatmeal"},
+        })
+        result = tools.dispatch_tool("list_log_templates", {})
+        assert "usual breakfast" in result
+
+
+class TestDeleteLogTemplateTool:
+    def test_nonexistent_template_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("delete_log_template", {"template_name": "ghost"})
+        assert "No template named" in result
+
+    def test_deletes_existing_template(self, tools):
+        tools.dispatch_tool("save_log_template", {
+            "template_name": "usual breakfast", "tool_name": "log_meal", "params": {"food": "oatmeal"},
+        })
+        result = tools.dispatch_tool("delete_log_template", {"template_name": "usual breakfast"})
+        assert "deleted" in result
+        listed = tools.dispatch_tool("list_log_templates", {})
+        assert "usual breakfast" not in listed
+
+
 class TestDetectPatternsTool:
     def test_no_data_message(self, tools):
         result = tools.dispatch_tool("detect_patterns", {})
@@ -830,6 +934,19 @@ class TestCheckGoalProgressTool:
         result = tools.dispatch_tool("check_goal_progress", {})
         assert "Manual goal" in result and "manually tracked" in result
         assert "Auto goal" in result and "auto-tracked" in result
+
+    def test_habit_linked_goal_refreshes_with_streak(self, tools):
+        for _ in range(3):
+            tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        tools.dispatch_tool("update_goal", {
+            "goal_name": "meditation streak", "linked_habit": "meditate", "target_streak": 30,
+        })
+        for _ in range(3):
+            tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        result = tools.dispatch_tool("check_goal_progress", {})
+        assert "meditation streak" in result
+        assert "20.0%" in result  # 6-day streak / 30-day target
+        assert "habit streak" in result
 
 
 class TestComparePeriodsTool:

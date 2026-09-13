@@ -387,6 +387,33 @@ def compute_goal_progress(goal: Dict[str, Any], entries: List[Dict[str, Any]]) -
         return round(max(0.0, min(100.0, 100.0 * avg / target)), 1)
 
 
+def compute_habit_goal_progress(goal: Dict[str, Any], habits: List[Dict[str, Any]]) -> Optional[float]:
+    """
+    For a habit-linked goal (has "linked_habit" and "target_streak"
+    fields), computes real progress (0-100) from the habit's actual
+    current streak instead of a manual number - the habit-tracking
+    counterpart to compute_goal_progress()'s metric tracking. Returns
+    None if the goal isn't habit-linked, or if no habit with that name
+    exists yet (caller should leave the existing/manual progress value
+    untouched in that case).
+
+    Progress is current_streak / target_streak, clamped to [0, 100].
+    Reaching or passing the target streak is capped at 100, not left
+    to grow past it - a goal is either met or it isn't.
+    """
+    linked_habit = goal.get("linked_habit")
+    target_streak = goal.get("target_streak")
+    if not linked_habit or not target_streak or target_streak <= 0:
+        return None
+
+    habit = next((h for h in habits if h.get("name", "").lower() == linked_habit.lower()), None)
+    if habit is None:
+        return None
+
+    streak = habit.get("streak", 0)
+    return round(max(0.0, min(100.0, 100.0 * streak / target_streak)), 1)
+
+
 # ---------------------------------------------------------------------------
 # Period-over-period comparison (this week vs. last week, etc.)
 # ---------------------------------------------------------------------------

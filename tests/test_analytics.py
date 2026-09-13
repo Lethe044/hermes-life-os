@@ -14,6 +14,7 @@ from analytics import (
     compute_lagged_correlations_multi,
     format_lagged_insights,
     compute_goal_progress,
+    compute_habit_goal_progress,
     compare_periods,
     compare_before_after,
     detect_anomalies,
@@ -345,6 +346,52 @@ class TestComputeGoalProgress:
         goal = {"metric": "not_a_real_metric", "target": 5, "direction": "at_least"}
         entries = [_entry("mood", "2026-01-01T09:00:00Z", score=8)]
         assert compute_goal_progress(goal, entries) is None
+
+
+class TestComputeHabitGoalProgress:
+    def test_none_when_not_habit_linked(self):
+        habits = [{"name": "meditate", "streak": 5}]
+        assert compute_habit_goal_progress({"name": "x", "progress": 50}, habits) is None
+
+    def test_none_when_no_target_streak(self):
+        goal = {"linked_habit": "meditate"}
+        habits = [{"name": "meditate", "streak": 5}]
+        assert compute_habit_goal_progress(goal, habits) is None
+
+    def test_none_when_habit_not_found(self):
+        goal = {"linked_habit": "meditate", "target_streak": 30}
+        habits = [{"name": "reading", "streak": 5}]
+        assert compute_habit_goal_progress(goal, habits) is None
+
+    def test_partial_progress(self):
+        goal = {"linked_habit": "meditate", "target_streak": 30}
+        habits = [{"name": "meditate", "streak": 15}]
+        assert compute_habit_goal_progress(goal, habits) == 50.0
+
+    def test_full_progress_at_target(self):
+        goal = {"linked_habit": "meditate", "target_streak": 30}
+        habits = [{"name": "meditate", "streak": 30}]
+        assert compute_habit_goal_progress(goal, habits) == 100.0
+
+    def test_clamped_to_100_past_target(self):
+        goal = {"linked_habit": "meditate", "target_streak": 10}
+        habits = [{"name": "meditate", "streak": 50}]
+        assert compute_habit_goal_progress(goal, habits) == 100.0
+
+    def test_habit_name_matching_case_insensitive(self):
+        goal = {"linked_habit": "Meditate", "target_streak": 20}
+        habits = [{"name": "meditate", "streak": 10}]
+        assert compute_habit_goal_progress(goal, habits) == 50.0
+
+    def test_zero_streak_gives_zero_progress(self):
+        goal = {"linked_habit": "meditate", "target_streak": 10}
+        habits = [{"name": "meditate", "streak": 0}]
+        assert compute_habit_goal_progress(goal, habits) == 0.0
+
+    def test_zero_target_streak_returns_none(self):
+        goal = {"linked_habit": "meditate", "target_streak": 0}
+        habits = [{"name": "meditate", "streak": 5}]
+        assert compute_habit_goal_progress(goal, habits) is None
 
 
 class TestComparePeriods:
