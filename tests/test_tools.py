@@ -107,6 +107,80 @@ class TestLogFocusSession:
         assert "writing tests" in result
 
 
+class TestListHabitsTool:
+    def test_no_habits_message(self, tools):
+        result = tools.dispatch_tool("list_habits", {})
+        assert "No habits created yet" in result
+
+    def test_shows_brand_new_zero_streak_habit(self, tools):
+        # A habit created via a missed check-in (streak=0, best_streak=0)
+        # doesn't show up in get_habit_milestones or get_habit_pb_progress -
+        # both explicitly exclude habits with no active or past streak -
+        # so list_habits is the only place it's visible. This is exactly
+        # the gap it exists to fill.
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": False})
+        milestones = tools.dispatch_tool("get_habit_milestones", {})
+        pb = tools.dispatch_tool("get_habit_pb_progress", {})
+        assert "meditate" not in milestones
+        assert "meditate" not in pb
+        listed = tools.dispatch_tool("list_habits", {})
+        assert "meditate" in listed
+        assert "streak 0 days" in listed
+
+    def test_shows_freezes_available(self, tools):
+        for _ in range(7):
+            tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        result = tools.dispatch_tool("list_habits", {})
+        assert "freeze(s) available" in result
+
+
+class TestDeleteHabitTool:
+    def test_nonexistent_habit_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("delete_habit", {"habit_name": "ghost"})
+        assert "No habit named" in result
+
+    def test_deletes_existing_habit(self, tools):
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        result = tools.dispatch_tool("delete_habit", {"habit_name": "meditate"})
+        assert "deleted" in result
+        listed = tools.dispatch_tool("list_habits", {})
+        assert "No habits created yet" in listed
+
+    def test_delete_case_insensitive(self, tools):
+        tools.dispatch_tool("update_habit", {"habit_name": "Meditate", "completed": True})
+        result = tools.dispatch_tool("delete_habit", {"habit_name": "meditate"})
+        assert "deleted" in result
+
+    def test_deleting_one_habit_leaves_others(self, tools):
+        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        tools.dispatch_tool("update_habit", {"habit_name": "read", "completed": True})
+        tools.dispatch_tool("delete_habit", {"habit_name": "meditate"})
+        listed = tools.dispatch_tool("list_habits", {})
+        assert "read" in listed
+        assert "meditate" not in listed
+
+
+class TestDeleteGoalTool:
+    def test_nonexistent_goal_returns_helpful_message(self, tools):
+        result = tools.dispatch_tool("delete_goal", {"goal_name": "ghost"})
+        assert "No goal named" in result
+
+    def test_deletes_existing_goal(self, tools):
+        tools.dispatch_tool("update_goal", {"goal_name": "ship project", "progress": 50})
+        result = tools.dispatch_tool("delete_goal", {"goal_name": "ship project"})
+        assert "deleted" in result
+        check = tools.dispatch_tool("check_goal_progress", {})
+        assert "No goals set yet" in check
+
+    def test_deleting_one_goal_leaves_others(self, tools):
+        tools.dispatch_tool("update_goal", {"goal_name": "ship project", "progress": 50})
+        tools.dispatch_tool("update_goal", {"goal_name": "learn spanish", "progress": 20})
+        tools.dispatch_tool("delete_goal", {"goal_name": "ship project"})
+        check = tools.dispatch_tool("check_goal_progress", {})
+        assert "learn spanish" in check
+        assert "ship project" not in check
+
+
 class TestUpdateHabit:
     def test_new_habit_created(self, tools):
         result = tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})

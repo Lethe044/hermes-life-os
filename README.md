@@ -1218,6 +1218,23 @@ re-typing the same details every time - `list_log_templates` and
 other tool, so replaying one can only ever add a new log entry, never
 trigger a side effect beyond what the person explicitly asked to save.
 
+## List, Delete Habits & Goals
+
+```
+"what habits do I have set up?"
+"delete my old 'read more' goal"
+```
+
+A real gap: a brand-new habit with a 0-day streak (created via a
+missed first check-in, or one that's since dropped to a 0-day streak
+with no past best) was invisible everywhere - `get_habit_milestones`
+and `get_habit_pb_progress` both explicitly exclude habits with no
+active or past streak, and the health dashboard only lists active
+ones. `list_habits` now shows every habit regardless of streak status.
+`delete_habit` and `delete_goal` round out basic CRUD for both -
+before this, there was no way to remove a habit or goal at all once
+created, only `delete_entry` for individual memory entries.
+
 ## Goal Deadlines
 
 ```
@@ -1458,6 +1475,18 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.35.0 - List, Delete Habits & Goals**
+- New **`list_habits`**: shows every habit regardless of streak status
+  - fills a real blind spot where a brand-new or fully-reset habit
+  (0-day streak, no past best) was invisible to
+  `get_habit_milestones`, `get_habit_pb_progress`, and the health
+  dashboard, all of which only cover habits with an active or past
+  streak.
+- New **`delete_habit`** and **`delete_goal`**: basic CRUD completion -
+  previously there was no way to remove a habit or goal at all once
+  created, only `delete_entry` for individual memory entries.
+- 10 new tests - suite grew from 1293 to 1303.
 
 **v1.34.0 - Habit-Linked Goals & Quick-Log Templates**
 - New **Habit-Linked Goals**: `update_goal` now accepts `linked_habit`
