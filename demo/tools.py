@@ -783,6 +783,59 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             return f"Template '{template_name}' deleted."
         return f"No template named '{template_name}' found."
 
+    # ── set_budget ────────────────────────────────────────────────────────────
+    elif name == "set_budget":
+        from budgets import set_budget
+        category = inp.get("category", "")
+        limit = inp.get("limit")
+        if not category or limit is None:
+            return "Please specify both a category and a limit."
+        entry = set_budget(category, limit)
+        return f"Budget set: {entry['category']} -> {entry['limit']} / month."
+
+    # ── get_budget_status ─────────────────────────────────────────────────────
+    elif name == "get_budget_status":
+        from budgets import compute_budget_status, format_budget_status
+        category = inp.get("category")
+        return format_budget_status(compute_budget_status(category))
+
+    # ── list_budgets ──────────────────────────────────────────────────────────
+    elif name == "list_budgets":
+        from budgets import list_budgets, format_budget_list
+        return format_budget_list(list_budgets())
+
+    # ── delete_budget ─────────────────────────────────────────────────────────
+    elif name == "delete_budget":
+        from budgets import delete_budget
+        category = inp.get("category", "")
+        deleted = delete_budget(category)
+        if deleted:
+            return f"Budget for '{category}' deleted."
+        return f"No budget set for '{category}'."
+
+    # ── create_reminder ───────────────────────────────────────────────────────
+    elif name == "create_reminder":
+        from reminders import create_reminder
+        text = inp.get("text", "")
+        if not text:
+            return "Please specify what to be reminded about."
+        entry = create_reminder(text, inp.get("time"), inp.get("days"))
+        return f"Reminder saved [id={entry['id']}]: {entry['text']}."
+
+    # ── list_reminders ────────────────────────────────────────────────────────
+    elif name == "list_reminders":
+        from reminders import list_reminders, format_reminder_list
+        return format_reminder_list(list_reminders())
+
+    # ── delete_reminder ───────────────────────────────────────────────────────
+    elif name == "delete_reminder":
+        from reminders import delete_reminder
+        reminder_id = inp.get("reminder_id", "")
+        deleted = delete_reminder(reminder_id)
+        if deleted:
+            return f"Reminder '{reminder_id}' deleted."
+        return f"No reminder with id '{reminder_id}' found."
+
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
         today = datetime.utcnow()
@@ -2120,6 +2173,53 @@ TOOLS = [
             "tone":      {"type": "string", "description": "Overall tone: positive/negative/neutral/mixed"},
             "vividness": {"type": "integer","description": "How vivid was it 1-10"},
         }, "required": ["content"]}}},
+
+    {"type": "function", "function": {"name": "set_budget",
+        "description": "Set (or update) a monthly spending limit for a category, e.g. groceries: 400. "
+                        "Use get_budget_status to see progress against it later.",
+        "parameters": {"type": "object", "properties": {
+            "category": {"type": "string", "description": "Spending category, e.g. groceries, dining, transport."},
+            "limit":    {"type": "number", "description": "Monthly limit for this category."},
+        }, "required": ["category", "limit"]}}},
+
+    {"type": "function", "function": {"name": "get_budget_status",
+        "description": "Show how much of each monthly budget has been spent so far this calendar month, "
+                        "compared against the limit set with set_budget. Flags categories that are over budget.",
+        "parameters": {"type": "object", "properties": {
+            "category": {"type": "string", "description": "Optional - limit to just this category."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "list_budgets",
+        "description": "List every saved monthly budget and its limit (without spending data).",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "delete_budget",
+        "description": "Delete the monthly budget set for a category.",
+        "parameters": {"type": "object", "properties": {
+            "category": {"type": "string"},
+        }, "required": ["category"]}}},
+
+    {"type": "function", "function": {"name": "create_reminder",
+        "description": "Save a reminder/rule the user wants to be reminded about, e.g. 'stretch' at '09:00' "
+                        "on certain days. This saves the reminder for later reference via list_reminders - "
+                        "it does not itself send a live notification.",
+        "parameters": {"type": "object", "properties": {
+            "text": {"type": "string", "description": "What to be reminded about."},
+            "time": {"type": "string", "description": "Optional time hint, e.g. '09:00'."},
+            "days": {"type": "array", "items": {"type": "string"},
+                     "description": "Optional list of days (mon, tue, wed, thu, fri, sat, sun). "
+                                    "Omit or leave empty for every day."},
+        }, "required": ["text"]}}},
+
+    {"type": "function", "function": {"name": "list_reminders",
+        "description": "List every saved reminder.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "delete_reminder",
+        "description": "Delete a saved reminder by its id (shown in list_reminders / create_reminder output).",
+        "parameters": {"type": "object", "properties": {
+            "reminder_id": {"type": "string"},
+        }, "required": ["reminder_id"]}}},
 ]
 
 # ---------------------------------------------------------------------------

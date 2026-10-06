@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "social_insights", "social_correlation", "medication_streak", "workout_correlation", "export_tool", "data_export", "backup", "correlation_utils", "reading_correlation", "insights_digest", "nudges", "wrapped", "dashboard", "life_review", "templates", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "social_insights", "social_correlation", "medication_streak", "workout_correlation", "export_tool", "data_export", "backup", "correlation_utils", "reading_correlation", "insights_digest", "nudges", "wrapped", "dashboard", "life_review", "budgets", "reminders", "templates", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -1538,6 +1538,95 @@ class TestLeaderboardTools:
         tools.dispatch_tool("remember", {"type": "mood", "content": "good", "score": 7})
         result = tools.dispatch_tool("get_leaderboard", {})
         assert "Life Score" in result
+
+
+class TestBudgetTools:
+    def test_set_budget_creates(self, tools):
+        result = tools.dispatch_tool("set_budget", {"category": "groceries", "limit": 400})
+        assert "groceries" in result
+        assert "400" in result
+
+    def test_set_budget_missing_fields(self, tools):
+        result = tools.dispatch_tool("set_budget", {"category": "groceries"})
+        assert "specify both" in result
+
+    def test_set_budget_overwrites_same_category(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "groceries", "limit": 400})
+        tools.dispatch_tool("set_budget", {"category": "Groceries", "limit": 500})
+        result = tools.dispatch_tool("list_budgets", {})
+        assert result.count("groceries") + result.count("Groceries") == 1
+        assert "500" in result
+
+    def test_list_budgets_empty(self, tools):
+        result = tools.dispatch_tool("list_budgets", {})
+        assert "No budgets" in result
+
+    def test_get_budget_status_tracks_spending(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 100})
+        tools.dispatch_tool("log_expense", {"amount": 40, "category": "food"})
+        result = tools.dispatch_tool("get_budget_status", {})
+        assert "food" in result
+        assert "40" in result
+        assert "100" in result
+
+    def test_get_budget_status_flags_over_budget(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 10})
+        tools.dispatch_tool("log_expense", {"amount": 50, "category": "food"})
+        result = tools.dispatch_tool("get_budget_status", {})
+        assert "OVER BUDGET" in result
+
+    def test_get_budget_status_filters_by_category(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 100})
+        tools.dispatch_tool("set_budget", {"category": "fun", "limit": 50})
+        result = tools.dispatch_tool("get_budget_status", {"category": "fun"})
+        assert "fun" in result
+        assert "food" not in result
+
+    def test_get_budget_status_no_budgets(self, tools):
+        result = tools.dispatch_tool("get_budget_status", {})
+        assert "No budgets" in result
+
+    def test_delete_budget(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 100})
+        result = tools.dispatch_tool("delete_budget", {"category": "food"})
+        assert "deleted" in result
+        assert tools.dispatch_tool("list_budgets", {}) == "No budgets set yet."
+
+    def test_delete_budget_not_found(self, tools):
+        result = tools.dispatch_tool("delete_budget", {"category": "nonexistent"})
+        assert "No budget set" in result
+
+
+class TestReminderTools:
+    def test_create_reminder(self, tools):
+        result = tools.dispatch_tool("create_reminder", {"text": "stretch", "time": "09:00"})
+        assert "Reminder saved" in result
+        assert "stretch" in result
+
+    def test_create_reminder_missing_text(self, tools):
+        result = tools.dispatch_tool("create_reminder", {})
+        assert "specify what" in result
+
+    def test_create_reminder_with_days(self, tools):
+        tools.dispatch_tool("create_reminder", {"text": "call mom", "days": ["sun", "bogus"]})
+        result = tools.dispatch_tool("list_reminders", {})
+        assert "call mom" in result
+        assert "sun" in result
+
+    def test_list_reminders_empty(self, tools):
+        result = tools.dispatch_tool("list_reminders", {})
+        assert "No reminders" in result
+
+    def test_delete_reminder(self, tools):
+        create_result = tools.dispatch_tool("create_reminder", {"text": "stretch"})
+        reminder_id = create_result.split("id=")[1].split("]")[0]
+        result = tools.dispatch_tool("delete_reminder", {"reminder_id": reminder_id})
+        assert "deleted" in result
+        assert tools.dispatch_tool("list_reminders", {}) == "No reminders set yet."
+
+    def test_delete_reminder_not_found(self, tools):
+        result = tools.dispatch_tool("delete_reminder", {"reminder_id": "nonexistent"})
+        assert "No reminder" in result
 
 
 if __name__ == "__main__":
