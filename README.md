@@ -1235,6 +1235,43 @@ ones. `list_habits` now shows every habit regardless of streak status.
 before this, there was no way to remove a habit or goal at all once
 created, only `delete_entry` for individual memory entries.
 
+## Budgets
+
+```
+"set a 400/month budget for groceries"
+"how am I doing on my budgets this month?"
+```
+
+`demo/budgets.py` is the project's first forward-looking money tool -
+every existing spending feature (`log_expense`, `get_spending_summary`,
+`get_spending_trends`) is retrospective, reporting what already
+happened, with no concept of a limit. `set_budget` saves a per-category
+monthly limit; `get_budget_status` compares it against actual spending
+logged so far in the current calendar month (reusing `load_spending`,
+no new tracking of its own) and flags any category that's over.
+`list_budgets` shows the raw limits, and `delete_budget` removes one.
+Setting a budget for a category that already has one overwrites the
+limit rather than creating a duplicate.
+
+## Reminders
+
+```
+"remind me to stretch every day at 9am"
+"remind me to call mom on sundays"
+"what reminders do I have set?"
+```
+
+`demo/reminders.py` gives user-defined reminders a real, queryable home
+for the first time - `scheduler.py`'s schedule was entirely hardcoded
+(morning/checkin/evening/weekly/nudge_check/backup), with no mechanism
+for a person to define their own. `create_reminder` saves free-text
+reminders with an optional time hint and optional days of the week;
+`list_reminders` and `delete_reminder` round out CRUD. This round is
+deliberately scoped to storage and retrieval only - it does not wire
+into `run_scheduler()` or `notifications.py`'s delivery machinery, so
+a saved reminder is not yet actually sent anywhere on a schedule; it's
+the foundation a later round can connect to real delivery.
+
 ## Goal Deadlines
 
 ```
@@ -1475,6 +1512,21 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.36.0 - Budgets & Reminders**
+- New **Budget Layer** (`demo/budgets.py`, `set_budget`/
+  `get_budget_status`/`list_budgets`/`delete_budget`): the project's
+  first forward-looking money tool, alongside the existing
+  retrospective spending features. A per-category monthly limit is
+  compared against real spending logged so far this calendar month
+  (via `load_spending`), flagging categories that are over budget.
+- New **Reminders Layer** (`demo/reminders.py`, `create_reminder`/
+  `list_reminders`/`delete_reminder`): user-defined reminders with an
+  optional time hint and days of the week, finally giving a person a
+  way to define their own reminder beyond `scheduler.py`'s hardcoded
+  schedule. Scoped to storage/CRUD only in this round - not yet wired
+  into `run_scheduler()` or live notification delivery.
+- 51 new tests - suite grew from 1303 to 1354.
 
 **v1.35.0 - List, Delete Habits & Goals**
 - New **`list_habits`**: shows every habit regardless of streak status
