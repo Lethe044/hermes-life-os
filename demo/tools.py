@@ -815,12 +815,18 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
 
     # ── create_reminder ───────────────────────────────────────────────────────
     elif name == "create_reminder":
-        from reminders import create_reminder
+        from reminders import create_reminder, normalize_time
         text = inp.get("text", "")
         if not text:
             return "Please specify what to be reminded about."
         entry = create_reminder(text, inp.get("time"), inp.get("days"))
-        return f"Reminder saved [id={entry['id']}]: {entry['text']}."
+        msg = f"Reminder saved [id={entry['id']}]: {entry['text']}."
+        if entry.get("time") and normalize_time(entry["time"]) is None:
+            msg += (f" Note: '{entry['time']}' isn't a clock time I can schedule (use e.g. "
+                    f"'09:00' or '9am'), so this reminder won't fire on its own.")
+        elif entry.get("time"):
+            msg += f" It will be delivered at {entry['time']} when the scheduler is running."
+        return msg
 
     # ── list_reminders ────────────────────────────────────────────────────────
     elif name == "list_reminders":
@@ -835,6 +841,63 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         if deleted:
             return f"Reminder '{reminder_id}' deleted."
         return f"No reminder with id '{reminder_id}' found."
+
+    # ── update_reminder ───────────────────────────────────────────────────────
+    elif name == "update_reminder":
+        from reminders import update_reminder
+        reminder_id = inp.get("reminder_id", "")
+        new_text, new_time, new_days = inp.get("text"), inp.get("time"), inp.get("days")
+        if new_text is None and new_time is None and new_days is None:
+            return "Nothing to change - give a new text, time and/or days."
+        try:
+            entry = update_reminder(reminder_id, text=new_text, time_str=new_time, days=new_days)
+        except ValueError as e:
+            return str(e)
+        if entry is None:
+            return f"No reminder with id '{reminder_id}' found."
+        return f"Reminder [id={entry['id']}] updated: {entry['text']}."
+
+    # ── pause_reminder ────────────────────────────────────────────────────────
+    elif name == "pause_reminder":
+        from reminders import set_reminder_enabled
+        reminder_id = inp.get("reminder_id", "")
+        entry = set_reminder_enabled(reminder_id, False)
+        if entry is None:
+            return f"No reminder with id '{reminder_id}' found."
+        return f"Reminder [id={reminder_id}] paused. Use resume_reminder to turn it back on."
+
+    # ── resume_reminder ───────────────────────────────────────────────────────
+    elif name == "resume_reminder":
+        from reminders import set_reminder_enabled
+        reminder_id = inp.get("reminder_id", "")
+        entry = set_reminder_enabled(reminder_id, True)
+        if entry is None:
+            return f"No reminder with id '{reminder_id}' found."
+        return f"Reminder [id={reminder_id}] resumed."
+
+    # ── get_todays_reminders ──────────────────────────────────────────────────
+    elif name == "get_todays_reminders":
+        from reminders import get_todays_reminders, format_todays_reminders
+        return format_todays_reminders(get_todays_reminders())
+
+    # ── get_budget_forecast ───────────────────────────────────────────────────
+    elif name == "get_budget_forecast":
+        from budgets import compute_budget_forecast, format_budget_forecast
+        return format_budget_forecast(compute_budget_forecast(inp.get("category")))
+
+    # ── get_budget_history ────────────────────────────────────────────────────
+    elif name == "get_budget_history":
+        from budgets import compute_budget_history, format_budget_history
+        try:
+            months = int(inp.get("months", 3))
+        except (TypeError, ValueError):
+            months = 3
+        return format_budget_history(compute_budget_history(months))
+
+    # ── get_unbudgeted_spending ───────────────────────────────────────────────
+    elif name == "get_unbudgeted_spending":
+        from budgets import compute_unbudgeted_spending, format_unbudgeted_spending
+        return format_unbudgeted_spending(compute_unbudgeted_spending())
 
     # ── get_on_this_day ──────────────────────────────────────────────────────
     elif name == "get_on_this_day":
@@ -2200,9 +2263,10 @@ TOOLS = [
         }, "required": ["category"]}}},
 
     {"type": "function", "function": {"name": "create_reminder",
-        "description": "Save a reminder/rule the user wants to be reminded about, e.g. 'stretch' at '09:00' "
-                        "on certain days. This saves the reminder for later reference via list_reminders - "
-                        "it does not itself send a live notification.",
+        "description": "Save a reminder the user wants, e.g. 'stretch' at '09:00' on certain days. "
+                        "Timed reminders (a clock time like '09:00' or '9am') are delivered through the "
+                        "notification channel while the scheduler is running; a reminder with no time is a "
+                        "day-level note shown by get_todays_reminders.",
         "parameters": {"type": "object", "properties": {
             "text": {"type": "string", "description": "What to be reminded about."},
             "time": {"type": "string", "description": "Optional time hint, e.g. '09:00'."},
@@ -2220,6 +2284,55 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "reminder_id": {"type": "string"},
         }, "required": ["reminder_id"]}}},
+
+    {"type": "function", "function": {"name": "update_reminder",
+        "description": "Change an existing reminder's text, time and/or days (find the id with list_reminders). "
+                        "Only the fields you pass are changed. Pass time as an empty string to remove the time, "
+                        "or days as an empty list to make it every day.",
+        "parameters": {"type": "object", "properties": {
+            "reminder_id": {"type": "string"},
+            "text": {"type": "string", "description": "New reminder text."},
+            "time": {"type": "string", "description": "New time, e.g. '18:30' or '6:30pm'. Empty string clears it."},
+            "days": {"type": "array", "items": {"type": "string"},
+                     "description": "New days (mon..sun). Empty list means every day."},
+        }, "required": ["reminder_id"]}}},
+
+    {"type": "function", "function": {"name": "pause_reminder",
+        "description": "Temporarily stop a reminder from firing without deleting it (e.g. while on holiday).",
+        "parameters": {"type": "object", "properties": {
+            "reminder_id": {"type": "string"},
+        }, "required": ["reminder_id"]}}},
+
+    {"type": "function", "function": {"name": "resume_reminder",
+        "description": "Turn a paused reminder back on.",
+        "parameters": {"type": "object", "properties": {
+            "reminder_id": {"type": "string"},
+        }, "required": ["reminder_id"]}}},
+
+    {"type": "function", "function": {"name": "get_todays_reminders",
+        "description": "List the active reminders that apply today, in time order (timed ones first, then "
+                        "day-level notes). Paused reminders are left out.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_budget_forecast",
+        "description": "Forecast month-end spending for each budget from this month's pace so far, and say how "
+                        "much can still be spent per remaining day to stay within the limit. Flags budgets "
+                        "already over or on pace to be exceeded.",
+        "parameters": {"type": "object", "properties": {
+            "category": {"type": "string", "description": "Optional - limit to just this category."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_budget_history",
+        "description": "Show how each budgeted category did over the last few completed months (spent per "
+                        "month, how many months went over), measured against the current limits.",
+        "parameters": {"type": "object", "properties": {
+            "months": {"type": "integer", "description": "How many completed months to look back (default 3, max 24)."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_unbudgeted_spending",
+        "description": "Show this month's spending in categories that have no budget set, so money going "
+                        "outside the plan is visible.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
 ]
 
 # ---------------------------------------------------------------------------

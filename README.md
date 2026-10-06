@@ -373,6 +373,13 @@ OpenAI client or network access. The 20:00 nudge check is LLM-free
 (see "Proactive Nudges" above) and stays silent when there's nothing
 worth flagging.
 
+Since v1.37.0 the scheduler loop also accepts a `dynamic_source` hook for
+things that are not a fixed (time, mode) pair. `run_scheduler.py` plugs
+in `reminders.scheduler_source`, so every timed reminder you create with
+`create_reminder` is delivered through the same notification channel at
+its saved time (see "Reminders" below), at most once per day, and a
+failing source or notifier never stops the loop.
+
 `demo/notifications.py` delivers briefings through a pluggable channel,
 selected via `HERMES_NOTIFY_CHANNEL`: `console` (default), `webhook`,
 `telegram`, or `email` (SMTP). All channels are stdlib-only. A failed
@@ -512,8 +519,8 @@ meeting-heavy days?" or check the dashboard's Correlations section.
 
 The scheduler (see above) includes a daily check (20:00 by default) that
 looks for anything worth flagging - an unusual day, a goal falling
-behind - using the same deterministic analysis as the tools above, with
-no LLM call needed. It stays silent on days with nothing notable, so it
+behind, a monthly budget that is over or nearly used up - using the same
+deterministic analysis as the tools above, with no LLM call needed. It stays silent on days with nothing notable, so it
 won't spam you.
 
 ## Data Export
@@ -1253,6 +1260,30 @@ no new tracking of its own) and flags any category that's over.
 Setting a budget for a category that already has one overwrites the
 limit rather than creating a duplicate.
 
+```
+"will I stay within my budgets this month?"
+"how did I do on my budgets over the last 3 months?"
+"where is my money going outside my budgets?"
+```
+
+Three more tools build on the same data (v1.37.0):
+
+- `get_budget_forecast` projects month-end spending from this month's
+  pace so far and says how much you can still spend per remaining day.
+  Each budget is `over`, `will_exceed` or `on_track`, and projections
+  made in the first days of the month are flagged as rough.
+- `get_budget_history` looks back over the last N completed months
+  (default 3, max 24) and shows spending per month and how many months
+  went over. Budgets are not versioned, so every month is measured
+  against the current limit.
+- `get_unbudgeted_spending` lists this month's spending in categories
+  that have no budget at all, biggest first.
+
+Spending categories now match budgets case-insensitively, so an expense
+logged as "Food" counts against a "food" budget (before, it was silently
+missed). Budgets that are over, or at least 80% used, also show up in the
+proactive nudge check and `get_nudges`.
+
 ## Reminders
 
 ```
@@ -1266,11 +1297,28 @@ for the first time - `scheduler.py`'s schedule was entirely hardcoded
 (morning/checkin/evening/weekly/nudge_check/backup), with no mechanism
 for a person to define their own. `create_reminder` saves free-text
 reminders with an optional time hint and optional days of the week;
-`list_reminders` and `delete_reminder` round out CRUD. This round is
-deliberately scoped to storage and retrieval only - it does not wire
-into `run_scheduler()` or `notifications.py`'s delivery machinery, so
-a saved reminder is not yet actually sent anywhere on a schedule; it's
-the foundation a later round can connect to real delivery.
+`list_reminders` and `delete_reminder` round out CRUD.
+
+As of v1.37.0 reminders are actually delivered. Times are normalized to
+24-hour `HH:MM` (`9am`, `9:30pm` and `17:30` all work; a bare `9` is
+ambiguous and rejected), and while `hermes-life-os-scheduler` is running
+each timed reminder is sent through your notification channel at its
+saved time on the days it applies to, once per day. A two-minute grace
+window means a slow poll cannot skip one. A reminder with no time is a
+day-level note, and one whose time cannot be understood is saved but
+never fires (the agent tells you so when you create it).
+
+```
+"change my stretch reminder to 6:30pm"
+"pause my stretch reminder while I'm away"
+"what reminders do I have today?"
+```
+
+- `update_reminder` changes the text, time and/or days of an existing
+  reminder (`time=""` removes the time, `days=[]` means every day).
+- `pause_reminder` / `resume_reminder` switch a reminder off and on
+  without deleting it. Paused reminders are marked in `list_reminders`.
+- `get_todays_reminders` lists what applies today in time order.
 
 ## Goal Deadlines
 
@@ -1512,6 +1560,26 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.37.0 - Live Reminders & Budget Forecasting**
+- **Reminders are delivered.** `scheduler.run_scheduler()` gained a
+  backwards-compatible `dynamic_source` hook and `run_scheduler.py`
+  wires `reminders.scheduler_source` into it, so timed reminders fire
+  through the configured notification channel (once per day, with a
+  small grace window; a broken source or notifier never stops the loop).
+- New reminder tools: `update_reminder`, `pause_reminder`,
+  `resume_reminder`, `get_todays_reminders`. Times are normalized to
+  24-hour `HH:MM` (`9am`, `9:30pm`), and `create_reminder` now tells the
+  user when a time cannot be scheduled.
+- New budget tools: `get_budget_forecast` (month-end projection and
+  per-day allowance), `get_budget_history` (last N completed months) and
+  `get_unbudgeted_spending` (spending outside any budget).
+- Over-budget and nearly-used-up budgets now appear in the proactive
+  nudge check and `get_nudges`.
+- **Fix:** spending categories now match budgets case-insensitively. An
+  expense logged as "Food" was previously not counted against a "food"
+  budget.
+- 151 new tests - suite grew from 1354 to 1505.
 
 **v1.36.0 - Budgets & Reminders**
 - New **Budget Layer** (`demo/budgets.py`, `set_budget`/

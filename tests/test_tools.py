@@ -1629,5 +1629,139 @@ class TestReminderTools:
         assert "No reminder" in result
 
 
+def _reminder_id(result):
+    return result.split("id=")[1].split("]")[0]
+
+
+class TestReminderToolsV137:
+    def test_create_reminder_confirms_delivery_for_valid_time(self, tools):
+        result = tools.dispatch_tool("create_reminder", {"text": "stretch", "time": "9am"})
+        assert "09:00" in result
+        assert "scheduler is running" in result
+
+    def test_create_reminder_warns_for_unparseable_time(self, tools):
+        result = tools.dispatch_tool("create_reminder", {"text": "stretch", "time": "after lunch"})
+        assert "won't fire" in result
+
+    def test_create_reminder_no_time_has_no_delivery_note(self, tools):
+        result = tools.dispatch_tool("create_reminder", {"text": "stretch"})
+        assert "scheduler" not in result
+        assert "won't fire" not in result
+
+    def test_update_reminder(self, tools):
+        rid = _reminder_id(tools.dispatch_tool("create_reminder", {"text": "old", "time": "09:00"}))
+        result = tools.dispatch_tool("update_reminder", {"reminder_id": rid, "text": "new", "time": "6pm"})
+        assert "updated" in result
+        listing = tools.dispatch_tool("list_reminders", {})
+        assert "new" in listing and "18:00" in listing
+
+    def test_update_reminder_nothing_to_change(self, tools):
+        rid = _reminder_id(tools.dispatch_tool("create_reminder", {"text": "x"}))
+        assert "Nothing to change" in tools.dispatch_tool("update_reminder", {"reminder_id": rid})
+
+    def test_update_reminder_not_found(self, tools):
+        result = tools.dispatch_tool("update_reminder", {"reminder_id": "nope", "text": "x"})
+        assert "No reminder" in result
+
+    def test_update_reminder_blank_text_reports_error(self, tools):
+        rid = _reminder_id(tools.dispatch_tool("create_reminder", {"text": "x"}))
+        result = tools.dispatch_tool("update_reminder", {"reminder_id": rid, "text": "  "})
+        assert "cannot be empty" in result
+
+    def test_pause_and_resume(self, tools):
+        rid = _reminder_id(tools.dispatch_tool("create_reminder", {"text": "x", "time": "09:00"}))
+        assert "paused" in tools.dispatch_tool("pause_reminder", {"reminder_id": rid})
+        assert "[paused]" in tools.dispatch_tool("list_reminders", {})
+        assert "resumed" in tools.dispatch_tool("resume_reminder", {"reminder_id": rid})
+        assert "[paused]" not in tools.dispatch_tool("list_reminders", {})
+
+    def test_pause_and_resume_not_found(self, tools):
+        assert "No reminder" in tools.dispatch_tool("pause_reminder", {"reminder_id": "nope"})
+        assert "No reminder" in tools.dispatch_tool("resume_reminder", {"reminder_id": "nope"})
+
+    def test_get_todays_reminders_empty(self, tools):
+        assert tools.dispatch_tool("get_todays_reminders", {}) == "No reminders for today."
+
+    def test_get_todays_reminders_lists_daily_reminder(self, tools):
+        tools.dispatch_tool("create_reminder", {"text": "stretch", "time": "09:00"})
+        out = tools.dispatch_tool("get_todays_reminders", {})
+        assert "09:00: stretch" in out
+
+    def test_get_todays_reminders_excludes_paused(self, tools):
+        rid = _reminder_id(tools.dispatch_tool("create_reminder", {"text": "stretch", "time": "09:00"}))
+        tools.dispatch_tool("pause_reminder", {"reminder_id": rid})
+        assert tools.dispatch_tool("get_todays_reminders", {}) == "No reminders for today."
+
+
+class TestBudgetToolsV137:
+    def test_forecast_no_budgets(self, tools):
+        assert tools.dispatch_tool("get_budget_forecast", {}) == "No budgets set yet."
+
+    def test_forecast_with_spending(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 100})
+        tools.dispatch_tool("log_expense", {"amount": 30, "category": "food"})
+        out = tools.dispatch_tool("get_budget_forecast", {})
+        assert "food" in out and "30" in out
+
+    def test_forecast_filters_by_category(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 100})
+        tools.dispatch_tool("set_budget", {"category": "fun", "limit": 50})
+        out = tools.dispatch_tool("get_budget_forecast", {"category": "fun"})
+        assert "fun" in out and "food" not in out
+
+    def test_status_counts_differently_cased_expense(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 100})
+        tools.dispatch_tool("log_expense", {"amount": 40, "category": "Food"})
+        out = tools.dispatch_tool("get_budget_status", {})
+        assert "40.0 / 100" in out
+
+    def test_history_no_budgets(self, tools):
+        assert tools.dispatch_tool("get_budget_history", {}) == "No budgets set yet."
+
+    def test_history_with_budget(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 100})
+        out = tools.dispatch_tool("get_budget_history", {"months": 2})
+        assert "last 2 completed month(s)" in out
+
+    def test_history_bad_months_falls_back_to_default(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 100})
+        out = tools.dispatch_tool("get_budget_history", {"months": "lots"})
+        assert "last 3 completed month(s)" in out
+
+    def test_unbudgeted_spending_none(self, tools):
+        assert "No spending outside" in tools.dispatch_tool("get_unbudgeted_spending", {})
+
+    def test_unbudgeted_spending_lists_category(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 100})
+        tools.dispatch_tool("log_expense", {"amount": 40, "category": "food"})
+        tools.dispatch_tool("log_expense", {"amount": 25, "category": "gifts"})
+        out = tools.dispatch_tool("get_unbudgeted_spending", {})
+        assert "gifts: 25.0" in out
+        assert "food" not in out
+
+
+class TestNewToolSchemas:
+    NEW = ["update_reminder", "pause_reminder", "resume_reminder", "get_todays_reminders",
+           "get_budget_forecast", "get_budget_history", "get_unbudgeted_spending"]
+
+    def test_all_new_tools_are_declared_once(self, tools):
+        names = [t["function"]["name"] for t in tools.TOOLS]
+        for n in self.NEW:
+            assert names.count(n) == 1
+
+    def test_required_fields_exist_in_properties(self, tools):
+        by_name = {t["function"]["name"]: t["function"] for t in tools.TOOLS}
+        for n in self.NEW:
+            params = by_name[n]["parameters"]
+            assert params["type"] == "object"
+            for req in params["required"]:
+                assert req in params["properties"]
+
+    def test_all_new_tools_are_dispatchable(self, tools):
+        for n in self.NEW:
+            out = tools.dispatch_tool(n, {})
+            assert not out.startswith("Unknown tool"), n
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

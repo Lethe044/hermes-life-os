@@ -186,3 +186,92 @@ class TestRunScheduler:
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__, "-v"])
+
+
+class TestDynamicSource:
+    def _run(self, source, notifier, times, schedule=None, runner=None):
+        it = iter(times)
+        return run_scheduler(
+            schedule=schedule if schedule is not None else [],
+            runner=runner, notifier=notifier,
+            max_iterations=len(times), clock=lambda: next(it), sleeper=lambda s: None,
+            dynamic_source=source,
+        )
+
+    def test_items_are_delivered(self):
+        notified = []
+        self._run(lambda now: [("k1", "Title", "Body")],
+                  lambda t, m: notified.append((t, m)), [datetime(2026, 7, 17, 9, 0)])
+        assert notified == [("Title", "Body")]
+
+    def test_deduped_per_key_per_day(self):
+        notified = []
+        self._run(lambda now: [("k1", "T", "B")], lambda t, m: notified.append(m),
+                  [datetime(2026, 7, 17, 9, 0), datetime(2026, 7, 17, 9, 1)])
+        assert notified == ["B"]
+
+    def test_fires_again_next_day(self):
+        notified = []
+        self._run(lambda now: [("k1", "T", "B")], lambda t, m: notified.append(m),
+                  [datetime(2026, 7, 17, 9, 0), datetime(2026, 7, 18, 9, 0)])
+        assert notified == ["B", "B"]
+
+    def test_different_keys_both_delivered(self):
+        notified = []
+        self._run(lambda now: [("a", "T", "one"), ("b", "T", "two")],
+                  lambda t, m: notified.append(m), [datetime(2026, 7, 17, 9, 0)])
+        assert notified == ["one", "two"]
+
+    def test_empty_message_skipped(self):
+        notified = []
+        self._run(lambda now: [("k", "T", "")], lambda t, m: notified.append(m),
+                  [datetime(2026, 7, 17, 9, 0)])
+        assert notified == []
+
+    def test_source_exception_does_not_crash_loop(self, capsys):
+        calls = []
+
+        def bad_source(now):
+            calls.append(now)
+            raise RuntimeError("boom")
+
+        self._run(bad_source, lambda t, m: None,
+                  [datetime(2026, 7, 17, 9, 0), datetime(2026, 7, 17, 9, 1)])
+        assert len(calls) == 2
+        assert "dynamic source failed" in capsys.readouterr().err
+
+    def test_notifier_exception_does_not_crash_loop(self, capsys):
+        seen = []
+
+        def bad_notifier(t, m):
+            seen.append(m)
+            raise RuntimeError("down")
+
+        self._run(lambda now: [("a", "T", "one"), ("b", "T", "two")], bad_notifier,
+                  [datetime(2026, 7, 17, 9, 0)])
+        assert seen == ["one", "two"]
+        assert "notifier failed" in capsys.readouterr().err
+
+    def test_no_notifier_does_not_crash(self):
+        self._run(lambda now: [("a", "T", "one")], None, [datetime(2026, 7, 17, 9, 0)])
+
+    def test_dynamic_items_not_in_last_run(self):
+        result = self._run(lambda now: [("a", "T", "one")], lambda t, m: None,
+                           [datetime(2026, 7, 17, 9, 0)])
+        assert result == {}
+
+    def test_works_alongside_fixed_schedule(self):
+        notified = []
+        self._run(lambda now: [("a", "T", "reminder")],
+                  lambda t, m: notified.append(m), [datetime(2026, 7, 17, 7, 0)],
+                  schedule=[ScheduleEntry("07:00", "morning")], runner=lambda mode: "briefing")
+        assert notified == ["briefing", "reminder"]
+
+    def test_omitting_source_keeps_old_behavior(self):
+        notified = []
+        run_scheduler(
+            schedule=[ScheduleEntry("07:00", "morning")], runner=lambda m: "x",
+            notifier=lambda t, c: notified.append(c), max_iterations=1,
+            clock=lambda: datetime(2026, 7, 17, 7, 0), sleeper=lambda s: None,
+        )
+        assert notified == ["x"]

@@ -12,6 +12,8 @@ implementing the "Daily Rhythm" cron table from skills/life-os/SKILL.md:
     Monday 08:00    weekly review
     20:00           proactive nudge check (LLM-free, silent if nothing stands out)
     20:30           automatic backup (LLM-free, silent on success)
+    any HH:MM       user-defined reminders (create_reminder), delivered at
+                    their saved time (LLM-free)
 
 Usage:
     Set one provider's key (or run a local Ollama server - no key needed):
@@ -40,6 +42,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from scheduler import default_schedule, run_scheduler
 from notifications import send_notification
+
+
+def build_dynamic_source():
+    """The scheduler's `dynamic_source`: delivers user-defined reminders
+    (create_reminder) at their saved time, LLM-free and deterministic.
+    Imported lazily so storage is only touched once the active profile
+    has been set."""
+    from reminders import scheduler_source
+
+    return scheduler_source
 
 
 def make_runner(client, model: str):
@@ -101,6 +113,9 @@ def main():
     for entry in schedule:
         days = ",".join(entry.days) if entry.days else "daily"
         print(f"  {entry.time_str}  {entry.mode:<10}  ({days})")
+    from reminders import list_reminders, is_enabled
+    active = [r for r in list_reminders() if is_enabled(r) and r.get("time")]
+    print(f"Reminders: {len(active)} timed reminder(s) will be delivered.")
     print("Press Ctrl+C to stop.\n")
 
     runner = make_runner(client, model)
@@ -109,7 +124,8 @@ def main():
         send_notification(title, content)
 
     try:
-        run_scheduler(schedule, runner=runner, notifier=notifier, poll_seconds=60)
+        run_scheduler(schedule, runner=runner, notifier=notifier, poll_seconds=60,
+                      dynamic_source=build_dynamic_source())
     except KeyboardInterrupt:
         print("\nScheduler stopped.")
 
