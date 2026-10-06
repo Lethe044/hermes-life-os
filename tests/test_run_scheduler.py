@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "demo"))
 def run_scheduler_module(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ("storage", "nudges", "backup", "run_scheduler"):
+    for mod in ("storage", "budgets", "reminders", "nudges", "backup", "run_scheduler"):
         if mod in sys.modules:
             del sys.modules[mod]
     import run_scheduler as rs
@@ -90,3 +90,32 @@ class TestMakeRunnerBackup:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestBuildDynamicSource:
+    def test_returns_reminders_scheduler_source(self, run_scheduler_module):
+        import reminders
+        assert run_scheduler_module.build_dynamic_source() is reminders.scheduler_source
+
+    def test_delivers_due_reminder_through_scheduler(self, run_scheduler_module):
+        import reminders
+        from scheduler import run_scheduler
+        reminders.create_reminder("drink water", "14:00")
+        notified = []
+        run_scheduler(
+            schedule=[], notifier=lambda t, m: notified.append((t, m)),
+            max_iterations=1, clock=lambda: datetime(2026, 10, 5, 14, 0),
+            sleeper=lambda s: None,
+            dynamic_source=run_scheduler_module.build_dynamic_source(),
+        )
+        assert notified == [("Hermes Life OS - Reminder", "drink water")]
+
+
+class TestMakeRunnerBudgetNudge:
+    def test_nudge_check_surfaces_over_budget(self, run_scheduler_module):
+        import storage
+        storage.save_budgets([{"category": "food", "limit": 10}])
+        storage.save_spending([{"date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                                "category": "food", "amount": 50}])
+        runner = run_scheduler_module.make_runner(client=None, model="unused")
+        assert "food" in runner("nudge_check")

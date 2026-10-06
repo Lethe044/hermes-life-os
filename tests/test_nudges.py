@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "demo"))
 def nudges(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ("storage", "analytics", "nudges"):
+    for mod in ("storage", "analytics", "budgets", "nudges"):
         if mod in sys.modules:
             del sys.modules[mod]
     import nudges as n
@@ -82,6 +82,45 @@ class TestGenerateNudges:
         storage.save_goals([{"name": "Read more", "progress": 5}])  # no metric linkage
         result = nudges.generate_nudges()
         assert not any("Read more" in n for n in result)
+
+
+class TestBudgetNudges:
+    def _spend(self, storage, category, amount):
+        from datetime import datetime
+        storage.save_spending([{"date": datetime.utcnow().strftime("%Y-%m-%d"),
+                                "category": category, "amount": amount}])
+
+    def test_over_budget_nudge(self, nudges):
+        import storage
+        storage.save_budgets([{"category": "food", "limit": 100}])
+        self._spend(storage, "food", 150)
+        result = nudges.generate_nudges()
+        assert any("food" in n and "over" in n for n in result)
+
+    def test_nearly_used_budget_nudge(self, nudges):
+        import storage
+        storage.save_budgets([{"category": "food", "limit": 100}])
+        self._spend(storage, "food", 90)
+        assert any("90.0% used" in n for n in nudges.generate_nudges())
+
+    def test_comfortable_budget_no_nudge(self, nudges):
+        import storage
+        storage.save_budgets([{"category": "food", "limit": 100}])
+        self._spend(storage, "food", 10)
+        assert not any("food" in n for n in nudges.generate_nudges())
+
+    def test_no_budgets_no_budget_nudge(self, nudges):
+        assert nudges.generate_nudges() == []
+
+    def test_budget_nudges_capped(self, nudges):
+        import storage
+        from datetime import datetime
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        cats = ["a", "b", "c", "d"]
+        storage.save_budgets([{"category": c, "limit": 10} for c in cats])
+        storage.save_spending([{"date": today, "category": c, "amount": 50} for c in cats])
+        result = nudges.generate_nudges(max_nudges=10)
+        assert sum(1 for n in result if n.startswith("Budget ")) == nudges.MAX_BUDGET_NUDGES
 
 
 if __name__ == "__main__":

@@ -32,10 +32,11 @@ Usage (see demo/run_scheduler.py for the wired-up production entry point):
 
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 DEFAULT_SCHEDULE_DEF = [
     ("07:00", "morning", None),
@@ -113,6 +114,7 @@ def run_scheduler(
     max_iterations: Optional[int] = None,
     clock: Optional[Callable[[], datetime]] = None,
     sleeper: Optional[Callable[[float], None]] = None,
+    dynamic_source: Optional[Callable[[datetime], List[Tuple[str, str, str]]]] = None,
 ) -> Dict[str, str]:
     """
     Blocking loop that polls the clock every `poll_seconds` and fires
@@ -126,11 +128,19 @@ def run_scheduler(
     - max_iterations: if set, the loop stops after this many polls
       instead of running forever (used by tests and for dry-runs).
     - clock/sleeper: injectable for deterministic testing.
+    - dynamic_source(now) -> [(key, title, message), ...]: optional hook
+      for things that aren't a fixed (time, mode) pair, such as
+      user-defined reminders (see reminders.scheduler_source). Called
+      once per poll; each returned item is delivered through `notifier`
+      at most once per day per `key`. A failing source or notifier is
+      reported on stderr and never stops the loop. These deliveries are
+      tracked separately and are NOT part of the returned last_run map.
     """
     schedule = schedule if schedule is not None else default_schedule()
     clock = clock or datetime.now
     sleeper = sleeper or time.sleep
     last_run: Dict[str, str] = {}
+    dynamic_last_run: Dict[str, str] = {}
 
     iterations = 0
     while max_iterations is None or iterations < max_iterations:
@@ -146,6 +156,23 @@ def run_scheduler(
             if notifier is not None and content:
                 title = f"Hermes Life OS - {entry.mode.title()}"
                 notifier(title, content)
+
+        if dynamic_source is not None:
+            today = now.strftime("%Y-%m-%d")
+            try:
+                items = dynamic_source(now)
+            except Exception as e:  # noqa: BLE001 - a broken source must not kill the loop
+                print(f"[scheduler] dynamic source failed: {e}", file=sys.stderr)
+                items = []
+            for key, title, message in items:
+                if dynamic_last_run.get(key) == today:
+                    continue
+                dynamic_last_run[key] = today
+                if notifier is not None and message:
+                    try:
+                        notifier(title, message)
+                    except Exception as e:  # noqa: BLE001
+                        print(f"[scheduler] notifier failed for '{key}': {e}", file=sys.stderr)
         iterations += 1
         if max_iterations is None or iterations < max_iterations:
             sleeper(poll_seconds)
