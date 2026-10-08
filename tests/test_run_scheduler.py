@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "demo"))
 def run_scheduler_module(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ("storage", "budgets", "reminders", "nudges", "backup", "run_scheduler"):
+    for mod in ("storage", "budgets", "reminders", "data_export", "nudges", "backup", "run_scheduler"):
         if mod in sys.modules:
             del sys.modules[mod]
     import run_scheduler as rs

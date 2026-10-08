@@ -160,3 +160,141 @@ class TestLoadSaveRoundtripDefaults:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def _sample_for(storage, name):
+    """A small, valid, non-default value for a registered store."""
+    expected = storage.DATA_STORES[name][3]
+    return {"sample": name, "n": 1} if expected is dict else [{"sample": name}]
+
+
+class TestDataStoreRegistry:
+    def test_registry_has_every_expected_store(self, storage):
+        assert set(storage.data_store_names()) == {
+            "profile", "habits", "goals", "nutrition", "sleep", "hydration", "fitness",
+            "focus", "mental", "spending", "social", "substance", "reading", "medication",
+            "achievements", "templates", "budgets", "reminders",
+        }
+
+    def test_every_file_constant_is_registered(self, storage):
+        """Drift guard: adding a new *_FILE path to storage.py without
+        registering it in DATA_STORES would leave it out of backups,
+        restore and rekey."""
+        file_attrs = {n for n in dir(storage) if n.endswith("_FILE") and n != "MEMORY_FILE"}
+        registered = {entry[0] for entry in storage.DATA_STORES.values()}
+        assert file_attrs == registered
+
+    def test_registry_entries_are_wired_correctly(self, storage):
+        for name, (file_attr, loader, saver, expected) in storage.DATA_STORES.items():
+            assert isinstance(getattr(storage, file_attr), Path), name
+            assert callable(getattr(storage, loader)), name
+            assert callable(getattr(storage, saver)), name
+            assert expected in (list, dict), name
+
+    def test_loader_default_matches_declared_type(self, storage):
+        for name in storage.data_store_names():
+            assert isinstance(storage.load_store(name), storage.DATA_STORES[name][3]), name
+
+    def test_save_and_load_by_name_round_trip(self, storage):
+        for name in storage.data_store_names():
+            value = _sample_for(storage, name)
+            storage.save_store(name, value)
+            assert storage.load_store(name) == value, name
+
+    def test_save_by_name_uses_the_real_saver(self, storage):
+        storage.save_store("spending", [{"amount": 5}])
+        assert storage.load_spending() == [{"amount": 5}]
+
+    def test_store_paths_are_distinct_and_in_data_dir(self, storage):
+        paths = storage.data_store_paths()
+        assert len(set(paths)) == len(paths) == len(storage.DATA_STORES)
+        assert all(p.parent == storage.HERMES_DIR for p in paths)
+
+    def test_store_path_follows_active_profile(self, storage):
+        default_path = storage.data_store_path("budgets")
+        storage.set_active_profile("alex")
+        assert storage.data_store_path("budgets") != default_path
+        assert "alex" in str(storage.data_store_path("budgets"))
+
+    def test_unknown_store_raises_keyerror(self, storage):
+        with pytest.raises(KeyError):
+            storage.load_store("nope")
+        with pytest.raises(KeyError):
+            storage.save_store("nope", [])
+        with pytest.raises(KeyError):
+            storage.data_store_path("nope")
+
+
+class TestReplaceAllMemory:
+    def test_replaces_everything(self, storage):
+        storage.write_memory({"type": "old", "content": "gone"})
+        n = storage.replace_all_memory([{"id": "a1", "type": "new", "timestamp": "2026-01-01T00:00:00Z"}])
+        assert n == 1
+        entries = storage.get_all_memory()
+        assert [e["id"] for e in entries] == ["a1"]
+
+    def test_empty_list_clears_memory(self, storage):
+        storage.write_memory({"type": "old"})
+        assert storage.replace_all_memory([]) == 0
+        assert storage.get_all_memory() == []
+
+    def test_works_when_no_memory_file_exists_yet(self, storage):
+        assert storage.replace_all_memory([{"id": "x", "type": "t"}]) == 1
+        assert len(storage.get_all_memory()) == 1
+
+    def test_accepts_any_iterable(self, storage):
+        assert storage.replace_all_memory(iter([{"id": "x"}, {"id": "y"}])) == 2
+
+    def test_no_temp_file_left_behind(self, storage):
+        storage.replace_all_memory([{"id": "x"}])
+        assert not list(storage.HERMES_DIR.glob("*.tmp"))
+
+    def test_encrypted_under_active_key(self, storage, monkeypatch):
+        pytest.importorskip("cryptography")
+        monkeypatch.setenv("LIFE_OS_ENCRYPTION_KEY", "secret-passphrase")
+        storage.replace_all_memory([{"id": "x", "content": "private thought"}])
+        raw = storage.MEMORY_FILE.read_text(encoding="utf-8")
+        assert "private thought" not in raw
+        assert storage.get_all_memory()[0]["content"] == "private thought"
+
+
+class TestEncryptDecryptText:
+    def test_no_key_is_identity(self, storage, monkeypatch):
+        monkeypatch.delenv("LIFE_OS_ENCRYPTION_KEY", raising=False)
+        assert storage.encrypt_text("hello") == "hello"
+        assert storage.decrypt_text("hello") == "hello"
+
+    def test_round_trip_with_key(self, storage, monkeypatch):
+        pytest.importorskip("cryptography")
+        monkeypatch.setenv("LIFE_OS_ENCRYPTION_KEY", "pw")
+        token = storage.encrypt_text("secret text")
+        assert token != "secret text" and "secret" not in token
+        assert storage.decrypt_text(token) == "secret text"
+
+    def test_encryption_is_not_deterministic(self, storage, monkeypatch):
+        pytest.importorskip("cryptography")
+        monkeypatch.setenv("LIFE_OS_ENCRYPTION_KEY", "pw")
+        assert storage.encrypt_text("x") != storage.encrypt_text("x")
+
+    def test_plaintext_passes_through_decrypt_unchanged(self, storage, monkeypatch):
+        pytest.importorskip("cryptography")
+        monkeypatch.setenv("LIFE_OS_ENCRYPTION_KEY", "pw")
+        assert storage.decrypt_text('{"a": 1}') == '{"a": 1}'
+
+    def test_wrong_key_returns_input_unchanged(self, storage, monkeypatch):
+        pytest.importorskip("cryptography")
+        monkeypatch.setenv("LIFE_OS_ENCRYPTION_KEY", "right")
+        token = storage.encrypt_text("secret")
+        monkeypatch.setenv("LIFE_OS_ENCRYPTION_KEY", "wrong")
+        assert storage.decrypt_text(token) == token
+
+    def test_surrounding_whitespace_tolerated(self, storage, monkeypatch):
+        pytest.importorskip("cryptography")
+        monkeypatch.setenv("LIFE_OS_ENCRYPTION_KEY", "pw")
+        token = storage.encrypt_text("secret")
+        assert storage.decrypt_text("\n" + token + "\n") == "secret"
+
+    def test_non_ascii_garbage_does_not_raise(self, storage, monkeypatch):
+        pytest.importorskip("cryptography")
+        monkeypatch.setenv("LIFE_OS_ENCRYPTION_KEY", "pw")
+        assert storage.decrypt_text("güvenli yedek") == "güvenli yedek"

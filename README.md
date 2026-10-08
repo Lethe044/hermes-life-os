@@ -303,6 +303,13 @@ hermes-life-os-rekey --new-key "new pass"                # enable for the first 
 hermes-life-os-rekey --disable                           # decrypt everything back to plaintext
 ```
 
+As of v1.38.0 re-keying covers every data store (spending, social,
+substance, reading, medication, achievements, templates, budgets and
+reminders as well as the original nine). Before that fix it only
+re-encrypted nine files, so after a passphrase change the others could no
+longer be decrypted and silently read back as empty. Backups written while
+a passphrase is set are encrypted too (see "Automatic Backups").
+
 ## Project Structure
 
 ```mermaid
@@ -530,7 +537,10 @@ hermes-life-os-export --json backup.json --csv summary.csv
 ```
 
 Your data isn't locked in. `--json` writes a complete backup (every
-memory entry plus profile/habits/goals/logs, unmodified). `--csv` writes
+memory entry plus every data store - profile, habits, goals, all the logs,
+spending, budgets, reminders, templates and so on - unmodified, as readable
+JSON even when encryption is on, since you asked for a copy to take
+elsewhere). `--csv` writes
 a daily summary in the same shape `hermes-life-os-import --csv` expects -
 export, edit in a spreadsheet, and re-import elsewhere if you want.
 
@@ -1284,6 +1294,23 @@ logged as "Food" counts against a "food" budget (before, it was silently
 missed). Budgets that are over, or at least 80% used, also show up in the
 proactive nudge check and `get_nudges`.
 
+v1.38.0 adds two more things:
+
+```
+"set a 400 budget for groceries and warn me at 90%"
+"what should my budgets be?"
+```
+
+- `set_budget` takes an optional `alert_pct` (1-100) so a budget can warn
+  earlier or later than the default 80% (0 removes a custom value), and it
+  now rejects a negative, non-numeric or infinite limit instead of storing
+  it (a numeric string such as "400" is accepted and converted).
+- `suggest_budgets` proposes a monthly limit for every spending category
+  that has no budget yet: the average of the last few completed months
+  (default 3, months without spending count as zero) plus a 10% buffer
+  (`buffer_pct`), rounded up to a tidy number. It only suggests; use
+  `set_budget` to adopt one.
+
 ## Reminders
 
 ```
@@ -1319,6 +1346,24 @@ never fires (the agent tells you so when you create it).
 - `pause_reminder` / `resume_reminder` switch a reminder off and on
   without deleting it. Paused reminders are marked in `list_reminders`.
 - `get_todays_reminders` lists what applies today in time order.
+
+v1.38.0 adds one-off and short-term reminders:
+
+```
+"remind me on 2026-11-02 at 9am to renew my passport"
+"remind me in 20 minutes to check the oven"
+"snooze that reminder for 15 minutes"
+"clear my old one-off reminders"
+```
+
+- `create_reminder` and `update_reminder` accept an optional `date`
+  (`YYYY-MM-DD`), making a one-off reminder that applies on that date only
+  and ignores `days`.
+- `remind_me_in` sets a one-off reminder N minutes from now (1 to 1440).
+- `snooze_reminder` delays any reminder so it fires again in N minutes
+  (default 10); its normal time is suppressed until then.
+- `clear_past_reminders` deletes one-offs whose date has passed. Recurring
+  and upcoming reminders are never touched.
 
 ## Goal Deadlines
 
@@ -1443,13 +1488,83 @@ text-only models (like `llama3.1`) will simply ignore the image.
 Hermes takes a timestamped local backup of your data every day at
 20:30 (right after the evening nudge check), keeping the 7 most recent
 by default and pruning older ones. Backups live alongside your other
-data (`<profile dir>/backups/`) and are plain JSON - the same format
-`hermes-life-os-export --json` produces. Run it manually anytime:
+data (`<profile dir>/backups/`). Run it manually anytime:
 
 ```bash
 hermes-life-os-backup            # keep the default 7
 hermes-life-os-backup --keep 14  # keep the 14 most recent
 ```
+
+A backup holds the whole memory journal plus every data store registered
+in `storage.DATA_STORES` (18 of them), and a small `_meta` block with the
+format version. Before v1.38.0 only nine stores were included, so the
+nightly backup silently left out spending, reminders, budgets and more.
+Older backups still restore fine; they just lack those sections.
+
+If `LIFE_OS_ENCRYPTION_KEY` is set, backups are encrypted with it, so an
+encrypted profile no longer leaves a plaintext copy of itself in
+`backups/`. Keep the passphrase: an encrypted backup cannot be read
+without it.
+
+Through chat, `backup_now` takes a backup on demand and `get_backup_status`
+reports how many exist, when the newest was taken, its size, whether it is
+complete and whether it is encrypted. (`backup_now` always keeps at least
+one backup; a `keep` of 0 or a nonsense value from the agent used to be
+able to delete the backup it had just written.) If backups exist but the
+newest is 3 or more days old, or cannot be read, the proactive nudges
+say so.
+
+## Restore
+
+```bash
+hermes-life-os-restore --list                      # backups of this profile, newest first
+hermes-life-os-restore --latest --dry-run          # show exactly what would change
+hermes-life-os-restore --latest                    # asks for confirmation first
+hermes-life-os-restore backup-2026-10-01-203000.json --only spending,budgets --yes
+hermes-life-os-restore backup.json --profile alex
+```
+
+Until v1.38.0 backups could be written but never read back. Restoring is
+deliberately a command-line action, not a chat tool. It is built to be
+hard to get wrong:
+
+- The whole file is validated before anything is written - every section
+  must have the right shape and every `--only` name must exist. One
+  problem and nothing is touched.
+- Sections that are in the backup replace the current data; sections that
+  are not in it (for example spending, when restoring an old backup) are
+  left alone.
+- A safety copy of your current data is written to
+  `backups/pre-restore-<timestamp>.json` first. These files are never
+  rotated away, so a mistaken restore can itself be undone by restoring
+  the safety copy.
+- `--dry-run` shows the per-section before/after counts and writes
+  nothing. Without `--yes` you are asked to confirm.
+- Data goes through the normal storage functions, so with
+  `LIFE_OS_ENCRYPTION_KEY` set the restored files are encrypted. To restore
+  an encrypted backup, set the same passphrase it was written with.
+
+## Health Check (Doctor)
+
+```bash
+hermes-life-os-doctor
+hermes-life-os-doctor --profile alex --json
+hermes-life-os-doctor --strict       # warnings also fail (exit status 1)
+```
+
+Hermes' storage layer is deliberately forgiving: a file it cannot read
+(wrong passphrase, corruption) quietly loads as empty so the app keeps
+running, which also hides the problem until the data is overwritten. The
+doctor is a read-only check that makes such problems visible and never
+changes anything. It looks at every data store (readable, valid JSON,
+right shape, consistent with the encryption key), the memory journal
+(unreadable lines, duplicate ids), leftover `.tmp` files from an
+interrupted write, backups (any at all, age of the newest, readable,
+complete, older ones unreadable), reminders (a time that can never fire,
+clashing ids, past one-offs) and budgets (bad limits, duplicate
+categories, out-of-range alert thresholds). Exit status is 0 unless there
+is an error (or, with `--strict`, a warning). The same report is available
+in chat as `run_health_check`.
 
 ## Spending, Social & Substance Tracking
 
@@ -1560,6 +1675,39 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.38.0 - Data Safety: Complete Backups, Restore, Doctor**
+- **Fix (data loss):** `hermes-life-os-rekey` only re-encrypted 9 of the 18
+  data files. After a passphrase change the others (spending, reminders,
+  budgets, ...) could not be decrypted and read back as empty, and the old
+  key was unrecoverable once the salt rotated. Re-keying now covers every
+  store. A single registry (`storage.DATA_STORES`) drives backup, restore
+  and re-keying, and a test fails if a new data file is not registered.
+- **Fix:** backups and `export_data` json now include every data store, not
+  just nine, plus a `_meta` block. The nightly backup used to leave out
+  spending, social, substance, reading, medication, achievements,
+  templates, budgets and reminders.
+- New **`hermes-life-os-restore`**: restores a backup with up-front
+  validation, `--dry-run`, `--only`, `--list`/`--latest`, a never-rotated
+  `pre-restore-*` safety copy and a confirmation prompt. Old backups
+  restore without wiping the sections they lack.
+- Backups are **encrypted** when `LIFE_OS_ENCRYPTION_KEY` is set (before,
+  an encrypted profile left plaintext backups behind).
+- New **`hermes-life-os-doctor`** and `run_health_check`: a read-only
+  check of stores, the memory journal, leftover temp files, backups,
+  reminders and budgets.
+- New `get_backup_status` tool, and a proactive nudge when the newest
+  backup is 3 or more days old or unreadable.
+- **Fix:** `backup_now` could delete every backup, including the one it had
+  just written, if `keep` was 0 or invalid. It now always keeps at least one.
+- Reminders: one-off dated reminders, `remind_me_in`, `snooze_reminder`,
+  `clear_past_reminders`.
+- Budgets: per-budget `alert_pct`, input validation for `set_budget`, and
+  `suggest_budgets`.
+- **Fix (tests):** `test_with_data_surfaces_finding` failed every night
+  between 00:00 and the UTC offset (it mixed local and UTC dates); the
+  suite now passes in UTC+14, UTC-11 and UTC-8 as well as UTC and UTC+3.
+- 512 new tests - suite grew from 1505 to 2017.
 
 **v1.37.0 - Live Reminders & Budget Forecasting**
 - **Reminders are delivered.** `scheduler.run_scheduler()` gained a

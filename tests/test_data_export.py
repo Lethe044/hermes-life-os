@@ -41,6 +41,8 @@ class TestExportJson:
         assert set(payload.keys()) == {
             "profile", "habits", "goals", "nutrition", "sleep",
             "hydration", "fitness", "focus", "mental", "memory",
+            "spending", "social", "substance", "reading", "medication",
+            "achievements", "templates", "budgets", "reminders", "_meta",
         }
         assert payload["memory"] == []
 
@@ -217,6 +219,98 @@ class TestMainCli:
         sys.argv = ["data_export.py", "--markdown", str(out_dir)]
         data_export.main()
         assert len(list(out_dir.glob("*.md"))) == 2
+
+
+class TestExportJsonCompleteness:
+    """v1.38.0: the backup used to cover only nine stores."""
+
+    def test_every_registered_store_is_exported(self, data_export, tmp_path):
+        storage = data_export.storage
+        out = tmp_path / "backup.json"
+        data_export.export_json(str(out))
+        payload = json.loads(out.read_text(encoding="utf-8"))
+        for name in storage.data_store_names():
+            assert name in payload, name
+
+    def test_previously_missing_stores_carry_their_data(self, data_export, tmp_path):
+        storage = data_export.storage
+        storage.save_spending([{"date": "2026-10-01", "category": "food", "amount": 12}])
+        storage.save_budgets([{"category": "food", "limit": 100}])
+        storage.save_reminders([{"id": "r1", "text": "stretch", "time": "09:00", "days": []}])
+        storage.save_templates({"morning": [{"tool": "log_mood"}]})
+        storage.save_medication([{"name": "vitamin d"}])
+        storage.save_social([{"who": "Sam"}])
+        storage.save_substance([{"substance": "coffee"}])
+        storage.save_reading([{"title": "Dune"}])
+        storage.save_achievements([{"id": "first"}])
+        out = tmp_path / "backup.json"
+        data_export.export_json(str(out))
+        payload = json.loads(out.read_text(encoding="utf-8"))
+        assert payload["spending"][0]["amount"] == 12
+        assert payload["budgets"][0]["limit"] == 100
+        assert payload["reminders"][0]["text"] == "stretch"
+        assert payload["templates"] == {"morning": [{"tool": "log_mood"}]}
+        assert payload["medication"] == [{"name": "vitamin d"}]
+        assert payload["social"] == [{"who": "Sam"}]
+        assert payload["substance"] == [{"substance": "coffee"}]
+        assert payload["reading"] == [{"title": "Dune"}]
+        assert payload["achievements"] == [{"id": "first"}]
+
+    def test_meta_block(self, data_export, tmp_path):
+        out = tmp_path / "backup.json"
+        data_export.export_json(str(out))
+        meta = json.loads(out.read_text(encoding="utf-8"))["_meta"]
+        assert meta["format_version"] == data_export.EXPORT_FORMAT_VERSION == 2
+        assert meta["profile"] == "default"
+        assert meta["exported_at"].endswith("Z")
+
+    def test_meta_records_active_profile(self, data_export, tmp_path):
+        data_export.storage.set_active_profile("alex")
+        out = tmp_path / "backup.json"
+        data_export.export_json(str(out))
+        assert json.loads(out.read_text(encoding="utf-8"))["_meta"]["profile"] == "alex"
+
+    def test_build_backup_payload_matches_file(self, data_export, tmp_path):
+        data_export.storage.save_budgets([{"category": "x", "limit": 1}])
+        payload = data_export.build_backup_payload()
+        out = tmp_path / "backup.json"
+        data_export.export_json(str(out))
+        on_disk = json.loads(out.read_text(encoding="utf-8"))
+        payload["_meta"].pop("exported_at")
+        on_disk["_meta"].pop("exported_at")
+        assert payload == on_disk
+
+    def test_return_value_is_still_memory_count(self, data_export, tmp_path):
+        _seed(data_export.storage, n_days=2)
+        assert data_export.export_json(str(tmp_path / "b.json")) == 4
+
+
+class TestExportJsonEncryption:
+    def test_default_export_stays_plaintext_even_with_a_key(self, data_export, tmp_path, monkeypatch):
+        pytest.importorskip("cryptography")
+        monkeypatch.setenv("LIFE_OS_ENCRYPTION_KEY", "pw")
+        data_export.storage.save_habits([{"name": "visible"}])
+        out = tmp_path / "export.json"
+        data_export.export_json(str(out))
+        assert json.loads(out.read_text(encoding="utf-8"))["habits"] == [{"name": "visible"}]
+
+    def test_encrypt_true_with_key_writes_ciphertext(self, data_export, tmp_path, monkeypatch):
+        pytest.importorskip("cryptography")
+        monkeypatch.setenv("LIFE_OS_ENCRYPTION_KEY", "pw")
+        data_export.storage.save_habits([{"name": "hidden-habit"}])
+        out = tmp_path / "enc.json"
+        data_export.export_json(str(out), encrypt=True)
+        raw = out.read_text(encoding="utf-8")
+        assert "hidden-habit" not in raw
+        with pytest.raises(ValueError):
+            json.loads(raw)
+        assert json.loads(data_export.storage.decrypt_text(raw))["habits"] == [{"name": "hidden-habit"}]
+
+    def test_encrypt_true_without_key_is_plain_json(self, data_export, tmp_path, monkeypatch):
+        monkeypatch.delenv("LIFE_OS_ENCRYPTION_KEY", raising=False)
+        out = tmp_path / "plain.json"
+        data_export.export_json(str(out), encrypt=True)
+        assert "habits" in json.loads(out.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

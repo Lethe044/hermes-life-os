@@ -9,7 +9,7 @@ fully unit tested: it only reads what's already been logged and
 reasons over it with plain statistics (see analytics.py).
 
 Covers anomalies, goal progress, budgets that are over (or nearly
-used up) for the month, and correlations.
+used up) for the month, a backup that has gone stale, and correlations.
 
 Used by run_scheduler.py's "nudge_check" schedule entry to proactively
 notify about something worth knowing, instead of waiting for the user
@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from storage import get_recent_memory, load_goals
 from analytics import detect_anomalies, compute_goal_progress, compute_correlations, format_correlation_insights
 from budgets import budget_alerts
+from backup import backup_alert
 
 GOAL_REGRESSION_THRESHOLD = 50.0  # below this, a linked goal is worth flagging
 MAX_BUDGET_NUDGES = 2             # budget warnings per run, so they can't crowd out everything else
@@ -62,6 +63,10 @@ def generate_nudges(window_days: int = 7, max_nudges: int = 4) -> List[str]:
             )
 
     nudges.extend(budget_alerts()[:MAX_BUDGET_NUDGES])
+
+    stale_backup = backup_alert()
+    if stale_backup:
+        nudges.append(stale_backup)
 
     correlations = compute_correlations(entries)
     nudges.extend(format_correlation_insights(correlations, limit=1))

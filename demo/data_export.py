@@ -3,9 +3,10 @@ Hermes Life OS - Data Export
 ===============================
 Your data isn't locked in - export it any time.
 
-  - JSON: a complete backup (every memory entry plus profile, habits,
-    goals, and the nutrition/sleep/hydration/fitness/focus/mental logs),
-    unmodified.
+  - JSON: a complete backup (every memory entry plus every data store
+    registered in storage.DATA_STORES - profile, habits, goals, all the
+    logs, spending, budgets, reminders, templates, and so on), unmodified.
+    Restore it with restore.py (hermes-life-os-restore).
   - CSV: one row per day with columns (date, sleep_hours, mood, stress,
     energy, hydration) - the same shape health_import.py's --csv import
     expects, so you can export, edit in a spreadsheet, and re-import
@@ -30,6 +31,7 @@ import csv
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -48,26 +50,41 @@ _CSV_COLUMN_FOR_METRIC = {
 CSV_FIELDNAMES = ["date", "sleep_hours", "mood", "stress", "energy", "hydration"]
 
 
-def export_json(out_path: str) -> int:
-    """Writes a complete backup: every memory entry plus profile, habits,
-    goals, and every other tracked log. Returns the number of memory
-    entries included (the headline count; the other sections are
-    included in full regardless)."""
-    entries = storage.get_all_memory()
-    payload = {
-        "profile": storage.load_profile(),
-        "habits": storage.load_habits(),
-        "goals": storage.load_goals(),
-        "nutrition": storage.load_nutrition(),
-        "sleep": storage.load_sleep(),
-        "hydration": storage.load_hydration(),
-        "fitness": storage.load_fitness(),
-        "focus": storage.load_focus(),
-        "mental": storage.load_mental(),
-        "memory": entries,
+EXPORT_FORMAT_VERSION = 2  # 1 = the original 9 stores (no "_meta"); 2 = every registered store + "_meta"
+
+
+def build_backup_payload() -> dict:
+    """The full JSON backup as a dict: every store registered in
+    storage.DATA_STORES, the whole memory journal, and a small "_meta"
+    block. Version 1 backups (before v1.38.0) only had nine of the
+    stores and no "_meta"; restore.py still reads them."""
+    payload = {name: storage.load_store(name) for name in storage.data_store_names()}
+    payload["memory"] = storage.get_all_memory()
+    payload["_meta"] = {
+        "format_version": EXPORT_FORMAT_VERSION,
+        "exported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "profile": storage.ACTIVE_PROFILE,
     }
-    Path(out_path).write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    return len(entries)
+    return payload
+
+
+def export_json(out_path: str, encrypt: bool = False) -> int:
+    """Writes a complete backup: every memory entry plus every registered
+    data store (profile, habits, goals, spending, reminders, ...). Returns
+    the number of memory entries included (the headline count; the other
+    sections are included in full regardless).
+
+    With encrypt=True the file is encrypted under the active
+    LIFE_OS_ENCRYPTION_KEY (if one is set; otherwise it is plain JSON as
+    before). Rotating backups and restore safety copies use this so an
+    encrypted profile does not leave plaintext copies of itself lying
+    around; the user-facing --json / export_data export stays readable."""
+    payload = build_backup_payload()
+    text = json.dumps(payload, indent=2, ensure_ascii=False)
+    if encrypt:
+        text = storage.encrypt_text(text)
+    Path(out_path).write_text(text, encoding="utf-8")
+    return len(payload["memory"])
 
 
 def export_csv(out_path: str) -> int:

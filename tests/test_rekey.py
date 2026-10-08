@@ -182,7 +182,8 @@ class TestRekeyDisableEncryption:
 class TestRekeyEmptyProfile:
     def test_no_files_yet_returns_zero_counts(self, rekey_module):
         summary = rekey_module.rekey(None, "some-passphrase")
-        assert summary == {"config_files": 0, "memory_lines": 0}
+        assert summary == {"config_files": 0, "memory_lines": 0,
+                           "backup_files": 0, "backups_skipped": 0}
 
 
 class TestMainCLI:
@@ -230,6 +231,209 @@ class TestMainCLI:
         os.environ["LIFE_OS_ENCRYPTION_KEY"] = "new-pass"
         assert storage.load_profile()["name"] == "Alex"
         del os.environ["LIFE_OS_ENCRYPTION_KEY"]
+
+
+def _seed_every_store(storage):
+    """Writes a distinct, valid value into every registered store."""
+    seeded = {}
+    for name in storage.data_store_names():
+        expected = storage.DATA_STORES[name][3]
+        value = {"marker": name} if expected is dict else [{"marker": name}]
+        storage.save_store(name, value)
+        seeded[name] = value
+    return seeded
+
+
+class TestRekeyCoversEveryStore:
+    """Regression: rekey used to re-encrypt only 9 hard-coded files. The
+    others stayed on the old key, and once the salt rotated they read back
+    as empty - silent, unrecoverable data loss."""
+
+    def test_config_file_attrs_match_registry(self, rekey_module):
+        storage = rekey_module.storage
+        assert sorted(rekey_module.CONFIG_FILE_ATTRS) == sorted(e[0] for e in storage.DATA_STORES.values())
+
+    def test_every_store_survives_a_passphrase_change(self, rekey_module):
+        import os
+        storage = rekey_module.storage
+        os.environ["LIFE_OS_ENCRYPTION_KEY"] = "old-passphrase"
+        seeded = _seed_every_store(storage)
+        del os.environ["LIFE_OS_ENCRYPTION_KEY"]
+
+        summary = rekey_module.rekey("old-passphrase", "new-passphrase")
+        assert summary["config_files"] == len(seeded)
+
+        os.environ["LIFE_OS_ENCRYPTION_KEY"] = "new-passphrase"
+        try:
+            for name, value in seeded.items():
+                assert storage.load_store(name) == value, name
+        finally:
+            del os.environ["LIFE_OS_ENCRYPTION_KEY"]
+
+    def test_spending_and_reminders_specifically_survive(self, rekey_module):
+        import os
+        storage = rekey_module.storage
+        os.environ["LIFE_OS_ENCRYPTION_KEY"] = "a"
+        storage.save_spending([{"amount": 42, "category": "food", "date": "2026-10-01"}])
+        storage.save_reminders([{"id": "r1", "text": "stretch"}])
+        storage.save_budgets([{"category": "food", "limit": 100}])
+        del os.environ["LIFE_OS_ENCRYPTION_KEY"]
+
+        rekey_module.rekey("a", "b")
+
+        os.environ["LIFE_OS_ENCRYPTION_KEY"] = "b"
+        try:
+            assert storage.load_spending()[0]["amount"] == 42
+            assert storage.load_reminders()[0]["text"] == "stretch"
+            assert storage.load_budgets()[0]["limit"] == 100
+        finally:
+            del os.environ["LIFE_OS_ENCRYPTION_KEY"]
+
+    def test_plaintext_to_encrypted_encrypts_every_store(self, rekey_module):
+        import json
+        storage = rekey_module.storage
+        _seed_every_store(storage)
+        rekey_module.rekey(None, "new-passphrase")
+        for name in storage.data_store_names():
+            raw = storage.data_store_path(name).read_text(encoding="utf-8")
+            with pytest.raises(ValueError):
+                json.loads(raw)  # ciphertext, not plaintext JSON
+            assert "marker" not in raw  # plaintext content is not visible
+
+    def test_encrypted_to_plaintext_decrypts_every_store(self, rekey_module):
+        import json
+        import os
+        storage = rekey_module.storage
+        os.environ["LIFE_OS_ENCRYPTION_KEY"] = "pw"
+        seeded = _seed_every_store(storage)
+        del os.environ["LIFE_OS_ENCRYPTION_KEY"]
+
+        rekey_module.rekey("pw", None)
+
+        for name, value in seeded.items():
+            raw = storage.data_store_path(name).read_text(encoding="utf-8")
+            assert json.loads(raw) == value, name
+
+    def test_summary_counts_only_files_that_exist(self, rekey_module):
+        storage = rekey_module.storage
+        storage.save_spending([{"amount": 1}])
+        storage.save_reminders([{"id": "r"}])
+        summary = rekey_module.rekey(None, "pw")
+        assert summary["config_files"] == 2
+
+    def test_wrong_old_key_still_fails_before_writing_for_new_stores(self, rekey_module):
+        import os
+        storage = rekey_module.storage
+        os.environ["LIFE_OS_ENCRYPTION_KEY"] = "right"
+        storage.save_spending([{"amount": 9}])
+        path = storage.data_store_path("spending")
+        before = path.read_text(encoding="utf-8")
+        del os.environ["LIFE_OS_ENCRYPTION_KEY"]
+
+        with pytest.raises(rekey_module.RekeyError):
+            rekey_module.rekey("wrong", "new")
+        assert path.read_text(encoding="utf-8") == before
+
+
+class TestRekeyCoversBackups:
+    """Backups are written encrypted under the active key. Without rekey
+    handling them, a passphrase change would strand them for good."""
+
+    def _backup(self, rekey_module, key, name="backup-2026-10-01-203000.json"):
+        import os
+        import data_export
+        storage = rekey_module.storage
+        directory = storage.HERMES_DIR / "backups"
+        directory.mkdir(parents=True, exist_ok=True)
+        if key:
+            os.environ["LIFE_OS_ENCRYPTION_KEY"] = key
+        try:
+            storage.save_habits([{"name": "habit-in-backup"}])
+            importlib.reload(data_export)
+            data_export.export_json(str(directory / name), encrypt=True)
+        finally:
+            os.environ.pop("LIFE_OS_ENCRYPTION_KEY", None)
+        return directory / name
+
+    def _readable_with(self, rekey_module, path, key):
+        import json
+        import os
+        storage = rekey_module.storage
+        if key:
+            os.environ["LIFE_OS_ENCRYPTION_KEY"] = key
+        try:
+            raw = path.read_text(encoding="utf-8")
+            try:
+                return json.loads(raw)
+            except ValueError:
+                decrypted = storage.decrypt_text(raw)
+                return json.loads(decrypted) if decrypted != raw else None
+        finally:
+            os.environ.pop("LIFE_OS_ENCRYPTION_KEY", None)
+
+    def test_encrypted_backup_follows_a_passphrase_change(self, rekey_module):
+        path = self._backup(rekey_module, "old")
+        summary = rekey_module.rekey("old", "new")
+        assert summary["backup_files"] == 1
+        assert self._readable_with(rekey_module, path, "new")["habits"] == [{"name": "habit-in-backup"}]
+        assert self._readable_with(rekey_module, path, "old") is None
+
+    def test_plaintext_backup_is_encrypted_when_encryption_is_enabled(self, rekey_module):
+        path = self._backup(rekey_module, None)
+        assert "habit-in-backup" in path.read_text(encoding="utf-8")
+        rekey_module.rekey(None, "new")
+        assert "habit-in-backup" not in path.read_text(encoding="utf-8")
+        assert self._readable_with(rekey_module, path, "new")["habits"] == [{"name": "habit-in-backup"}]
+
+    def test_backups_are_decrypted_when_encryption_is_disabled(self, rekey_module):
+        import json
+        path = self._backup(rekey_module, "old")
+        rekey_module.rekey("old", None)
+        assert json.loads(path.read_text(encoding="utf-8"))["habits"] == [{"name": "habit-in-backup"}]
+
+    def test_restore_safety_copies_are_included(self, rekey_module):
+        path = self._backup(rekey_module, "old", name="pre-restore-2026-10-01-203000.json")
+        summary = rekey_module.rekey("old", "new")
+        assert summary["backup_files"] == 1
+        assert self._readable_with(rekey_module, path, "new") is not None
+
+    def test_corrupt_backup_is_skipped_and_does_not_block(self, rekey_module):
+        good = self._backup(rekey_module, "old")
+        bad = good.parent / "backup-2026-09-01-000000.json"
+        bad.write_text("not json and not a token", encoding="utf-8")
+        summary = rekey_module.rekey("old", "new")
+        assert summary["backup_files"] == 1
+        assert summary["backups_skipped"] == 1
+        assert bad.read_text(encoding="utf-8") == "not json and not a token"
+        assert self._readable_with(rekey_module, good, "new") is not None
+
+    def test_unrelated_files_in_backups_dir_are_untouched(self, rekey_module):
+        path = self._backup(rekey_module, "old")
+        notes = path.parent / "notes.txt"
+        notes.write_text("keep me", encoding="utf-8")
+        rekey_module.rekey("old", "new")
+        assert notes.read_text(encoding="utf-8") == "keep me"
+
+    def test_no_backups_dir_is_fine(self, rekey_module):
+        assert rekey_module.rekey(None, "pw")["backup_files"] == 0
+
+    def test_wrong_old_key_skips_backups_but_still_fails_on_configs(self, rekey_module):
+        import os
+        storage = rekey_module.storage
+        os.environ["LIFE_OS_ENCRYPTION_KEY"] = "right"
+        storage.save_profile({"name": "Alex"})
+        path = self._backup(rekey_module, "right")
+        before = path.read_text(encoding="utf-8")
+        os.environ.pop("LIFE_OS_ENCRYPTION_KEY", None)
+        with pytest.raises(rekey_module.RekeyError):
+            rekey_module.rekey("wrong", "new")
+        assert path.read_text(encoding="utf-8") == before
+
+    def test_cli_reports_backup_count(self, rekey_module, monkeypatch, capsys):
+        self._backup(rekey_module, None)
+        monkeypatch.setattr(sys, "argv", ["rekey.py", "--new-key", "pw", "--yes"])
+        rekey_module.main()
+        assert "1 backup file(s)" in capsys.readouterr().out
 
 
 if __name__ == "__main__":
