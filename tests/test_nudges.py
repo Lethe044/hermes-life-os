@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "demo"))
 def nudges(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ("storage", "analytics", "budgets", "nudges"):
+    for mod in ("storage", "analytics", "budgets", "data_export", "backup", "nudges"):
         if mod in sys.modules:
             del sys.modules[mod]
     import nudges as n
@@ -121,6 +121,54 @@ class TestBudgetNudges:
         storage.save_spending([{"date": today, "category": c, "amount": 50} for c in cats])
         result = nudges.generate_nudges(max_nudges=10)
         assert sum(1 for n in result if n.startswith("Budget ")) == nudges.MAX_BUDGET_NUDGES
+
+
+class TestBudgetNudgeThresholds:
+    def _spend(self, storage, category, amount):
+        from datetime import datetime
+        storage.save_spending([{"date": datetime.utcnow().strftime("%Y-%m-%d"),
+                                "category": category, "amount": amount}])
+
+    def test_custom_threshold_triggers_a_nudge_the_default_would_not(self, nudges):
+        import storage
+        storage.save_budgets([{"category": "food", "limit": 100, "alert_pct": 50}])
+        self._spend(storage, "food", 60)
+        assert any("60.0% used" in n for n in nudges.generate_nudges())
+
+    def test_custom_high_threshold_silences_the_default_nudge(self, nudges):
+        import storage
+        storage.save_budgets([{"category": "food", "limit": 100, "alert_pct": 95}])
+        self._spend(storage, "food", 85)
+        assert not any("food" in n for n in nudges.generate_nudges())
+
+
+class TestBackupNudge:
+    def _backup(self, nudges_module, when):
+        import backup
+        return backup.run_backup(now=when)
+
+    def test_no_backup_no_nudge(self, nudges):
+        assert not any("backup" in n.lower() for n in nudges.generate_nudges())
+
+    def test_stale_backup_nudges(self, nudges):
+        self._backup(nudges, datetime.now() - timedelta(days=10))
+        result = nudges.generate_nudges()
+        assert any("10 days old" in n for n in result)
+
+    def test_fresh_backup_no_nudge(self, nudges):
+        self._backup(nudges, datetime.now() - timedelta(hours=2))
+        assert not any("backup" in n.lower() for n in nudges.generate_nudges())
+
+    def test_unreadable_backup_nudges(self, nudges):
+        import backup
+        d = backup.backups_dir()
+        d.mkdir(parents=True)
+        (d / ("backup-" + datetime.now().strftime("%Y-%m-%d-%H%M%S") + ".json")).write_text("junk", encoding="utf-8")
+        assert any("could not be read" in n for n in nudges.generate_nudges())
+
+    def test_stale_backup_nudge_respects_max_nudges(self, nudges):
+        self._backup(nudges, datetime.now() - timedelta(days=10))
+        assert len(nudges.generate_nudges(max_nudges=1)) <= 1
 
 
 if __name__ == "__main__":

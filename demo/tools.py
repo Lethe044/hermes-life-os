@@ -701,9 +701,18 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
     # ── backup_now ────────────────────────────────────────────────────────────
     elif name == "backup_now":
         from backup import run_backup
-        keep = inp.get("keep", 7)
+        try:
+            keep = int(inp.get("keep", 7))
+        except (TypeError, ValueError):
+            keep = 7
+        keep = max(1, keep)  # never rotate away the backup we just wrote
         out_path = run_backup(keep=keep)
         return f"Backup written: {out_path} (keeping the {keep} most recent)."
+
+    # ── get_backup_status ─────────────────────────────────────────────────────
+    elif name == "get_backup_status":
+        from backup import format_backup_status
+        return format_backup_status()
 
     # ── get_reading_mood_impact ───────────────────────────────────────────────
     elif name == "get_reading_mood_impact":
@@ -790,8 +799,12 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         limit = inp.get("limit")
         if not category or limit is None:
             return "Please specify both a category and a limit."
-        entry = set_budget(category, limit)
-        return f"Budget set: {entry['category']} -> {entry['limit']} / month."
+        try:
+            entry = set_budget(category, limit, inp.get("alert_pct"))
+        except ValueError as e:
+            return str(e)
+        alert = f" (alerts at {entry['alert_pct']}% used)" if entry.get("alert_pct") else ""
+        return f"Budget set: {entry['category']} -> {entry['limit']} / month{alert}."
 
     # ── get_budget_status ─────────────────────────────────────────────────────
     elif name == "get_budget_status":
@@ -819,12 +832,21 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         text = inp.get("text", "")
         if not text:
             return "Please specify what to be reminded about."
-        entry = create_reminder(text, inp.get("time"), inp.get("days"))
+        try:
+            entry = create_reminder(text, inp.get("time"), inp.get("days"), inp.get("date"))
+        except ValueError as e:
+            return str(e)
         msg = f"Reminder saved [id={entry['id']}]: {entry['text']}."
-        if entry.get("time") and normalize_time(entry["time"]) is None:
+        valid_time = bool(entry.get("time")) and normalize_time(entry["time"]) is not None
+        if entry.get("time") and not valid_time:
             msg += (f" Note: '{entry['time']}' isn't a clock time I can schedule (use e.g. "
                     f"'09:00' or '9am'), so this reminder won't fire on its own.")
-        elif entry.get("time"):
+        elif entry.get("date") and valid_time:
+            msg += f" One-off: it will be delivered on {entry['date']} at {entry['time']} when the scheduler is running."
+        elif entry.get("date"):
+            msg += (f" One-off for {entry['date']}: with no time it only shows up in "
+                    f"get_todays_reminders on that day.")
+        elif valid_time:
             msg += f" It will be delivered at {entry['time']} when the scheduler is running."
         return msg
 
@@ -847,10 +869,12 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         from reminders import update_reminder
         reminder_id = inp.get("reminder_id", "")
         new_text, new_time, new_days = inp.get("text"), inp.get("time"), inp.get("days")
-        if new_text is None and new_time is None and new_days is None:
-            return "Nothing to change - give a new text, time and/or days."
+        new_date = inp.get("date")
+        if new_text is None and new_time is None and new_days is None and new_date is None:
+            return "Nothing to change - give a new text, time, days and/or date."
         try:
-            entry = update_reminder(reminder_id, text=new_text, time_str=new_time, days=new_days)
+            entry = update_reminder(reminder_id, text=new_text, time_str=new_time,
+                                    days=new_days, date=new_date)
         except ValueError as e:
             return str(e)
         if entry is None:
@@ -875,6 +899,39 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             return f"No reminder with id '{reminder_id}' found."
         return f"Reminder [id={reminder_id}] resumed."
 
+    # ── remind_me_in ──────────────────────────────────────────────────────────
+    elif name == "remind_me_in":
+        from reminders import remind_me_in
+        try:
+            entry = remind_me_in(inp.get("text", ""), inp.get("minutes"))
+        except ValueError as e:
+            return str(e)
+        return (f"Okay - I'll remind you at {entry['time']} on {entry['date']} [id={entry['id']}]: "
+                f"{entry['text']}. It is delivered while the scheduler is running.")
+
+    # ── snooze_reminder ───────────────────────────────────────────────────────
+    elif name == "snooze_reminder":
+        from reminders import snooze_reminder
+        reminder_id = inp.get("reminder_id", "")
+        minutes = inp.get("minutes")
+        if minutes is None:
+            minutes = 10
+        try:
+            entry = snooze_reminder(reminder_id, minutes)
+        except ValueError as e:
+            return str(e)
+        if entry is None:
+            return f"No reminder with id '{reminder_id}' found."
+        return f"Reminder [id={reminder_id}] snoozed until {entry['snoozed_until'].replace('T', ' ')}."
+
+    # ── clear_past_reminders ──────────────────────────────────────────────────
+    elif name == "clear_past_reminders":
+        from reminders import clear_past_reminders
+        removed = clear_past_reminders()
+        if not removed:
+            return "No past one-off reminders to clear."
+        return f"Removed {removed} past one-off reminder(s)."
+
     # ── get_todays_reminders ──────────────────────────────────────────────────
     elif name == "get_todays_reminders":
         from reminders import get_todays_reminders, format_todays_reminders
@@ -893,6 +950,27 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         except (TypeError, ValueError):
             months = 3
         return format_budget_history(compute_budget_history(months))
+
+    # ── run_health_check ──────────────────────────────────────────────────────
+    elif name == "run_health_check":
+        from doctor import run_checks, format_report
+        return format_report(run_checks())
+
+    # ── suggest_budgets ───────────────────────────────────────────────────────
+    elif name == "suggest_budgets":
+        from budgets import (compute_budget_suggestions, format_budget_suggestions,
+                             DEFAULT_SUGGESTION_BUFFER_PCT)
+        try:
+            months = int(inp.get("months", 3))
+        except (TypeError, ValueError):
+            months = 3
+        buffer_pct = inp.get("buffer_pct")
+        if buffer_pct is None:
+            buffer_pct = DEFAULT_SUGGESTION_BUFFER_PCT
+        try:
+            return format_budget_suggestions(compute_budget_suggestions(months, buffer_pct))
+        except ValueError as e:
+            return str(e)
 
     # ── get_unbudgeted_spending ───────────────────────────────────────────────
     elif name == "get_unbudgeted_spending":
@@ -1974,6 +2052,13 @@ TOOLS = [
                                                           "Default 7."},
         }, "required": []}}},
 
+    {"type": "function", "function": {"name": "get_backup_status",
+        "description": "Show the state of the user's backups: how many exist, when the newest was "
+                        "taken, its size, and whether it is complete. Use when the user asks if their "
+                        "data is backed up or when the last backup was. Restoring a backup is only "
+                        "available from the command line, not from chat.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
     {"type": "function", "function": {"name": "get_reading_mood_impact",
         "description": "Compare average mood on days a reading session was logged versus days "
                         "without one. Use when the user asks whether reading affects their mood.",
@@ -2243,6 +2328,9 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "category": {"type": "string", "description": "Spending category, e.g. groceries, dining, transport."},
             "limit":    {"type": "number", "description": "Monthly limit for this category."},
+            "alert_pct": {"type": "number",
+                          "description": "Optional 1-100: warn in the proactive nudges once this much "
+                                         "of the limit is used (default 80). 0 removes a custom value."},
         }, "required": ["category", "limit"]}}},
 
     {"type": "function", "function": {"name": "get_budget_status",
@@ -2273,6 +2361,9 @@ TOOLS = [
             "days": {"type": "array", "items": {"type": "string"},
                      "description": "Optional list of days (mon, tue, wed, thu, fri, sat, sun). "
                                     "Omit or leave empty for every day."},
+            "date": {"type": "string",
+                     "description": "Optional YYYY-MM-DD for a one-off reminder on that date only "
+                                    "(days is then ignored)."},
         }, "required": ["text"]}}},
 
     {"type": "function", "function": {"name": "list_reminders",
@@ -2295,6 +2386,9 @@ TOOLS = [
             "time": {"type": "string", "description": "New time, e.g. '18:30' or '6:30pm'. Empty string clears it."},
             "days": {"type": "array", "items": {"type": "string"},
                      "description": "New days (mon..sun). Empty list means every day."},
+            "date": {"type": "string",
+                     "description": "New YYYY-MM-DD to make it a one-off on that date. Empty string "
+                                    "removes the date so it recurs again."},
         }, "required": ["reminder_id"]}}},
 
     {"type": "function", "function": {"name": "pause_reminder",
@@ -2308,6 +2402,28 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "reminder_id": {"type": "string"},
         }, "required": ["reminder_id"]}}},
+
+    {"type": "function", "function": {"name": "remind_me_in",
+        "description": "Set a one-off reminder for a number of minutes from now, e.g. 'remind me in 20 "
+                        "minutes to check the oven'. Delivered through the notification channel while "
+                        "the scheduler is running. Use create_reminder for recurring or dated reminders.",
+        "parameters": {"type": "object", "properties": {
+            "text": {"type": "string", "description": "What to be reminded about."},
+            "minutes": {"type": "integer", "description": "Minutes from now, 1 to 1440 (24 hours)."},
+        }, "required": ["text", "minutes"]}}},
+
+    {"type": "function", "function": {"name": "snooze_reminder",
+        "description": "Delay a reminder so it fires again in a few minutes (default 10) instead of "
+                        "at its normal time. Find the id with list_reminders or get_todays_reminders.",
+        "parameters": {"type": "object", "properties": {
+            "reminder_id": {"type": "string"},
+            "minutes": {"type": "integer", "description": "Minutes from now, 1 to 1440. Default 10."},
+        }, "required": ["reminder_id"]}}},
+
+    {"type": "function", "function": {"name": "clear_past_reminders",
+        "description": "Delete one-off (dated) reminders whose date has already passed. Recurring and "
+                        "upcoming reminders are kept.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
 
     {"type": "function", "function": {"name": "get_todays_reminders",
         "description": "List the active reminders that apply today, in time order (timed ones first, then "
@@ -2327,6 +2443,22 @@ TOOLS = [
                         "month, how many months went over), measured against the current limits.",
         "parameters": {"type": "object", "properties": {
             "months": {"type": "integer", "description": "How many completed months to look back (default 3, max 24)."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "run_health_check",
+        "description": "Run a read-only health check of the user's data: unreadable or corrupt files, "
+                        "wrong encryption passphrase, damaged memory entries, backup freshness, and "
+                        "reminders or budgets that are misconfigured. Use when the user asks whether "
+                        "their data is OK, or when something seems to be missing.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+
+    {"type": "function", "function": {"name": "suggest_budgets",
+        "description": "Suggest a monthly limit for each spending category that has no budget yet, based on "
+                        "the average of the last few completed months plus a small buffer. Use when the user "
+                        "asks what their budgets should be or wants help getting started with budgets.",
+        "parameters": {"type": "object", "properties": {
+            "months": {"type": "integer", "description": "How many completed months to average (default 3, max 24)."},
+            "buffer_pct": {"type": "number", "description": "Extra headroom added to the average, 0-100 (default 10)."},
         }, "required": []}}},
 
     {"type": "function", "function": {"name": "get_unbudgeted_spending",

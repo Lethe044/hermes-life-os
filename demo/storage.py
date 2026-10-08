@@ -181,6 +181,28 @@ def _save(path: Path, data):
         raw = f.encrypt(raw.encode("utf-8")).decode("ascii")
     path.write_text(raw, encoding="utf-8")
 
+def encrypt_text(raw: str) -> str:
+    """Encrypts `raw` under the active key (LIFE_OS_ENCRYPTION_KEY), or
+    returns it unchanged when no key is set. Used for whole-file payloads
+    such as backups."""
+    f = _fernet()
+    if f is None:
+        return raw
+    return f.encrypt(raw.encode("utf-8")).decode("ascii")
+
+def decrypt_text(raw: str) -> str:
+    """Inverse of encrypt_text. Tolerant like _load(): if there is no key,
+    or `raw` is not a token this key can decrypt (e.g. it is still
+    plaintext), `raw` is returned unchanged, so the caller's own parsing
+    decides whether it is usable."""
+    f = _fernet()
+    if f is None:
+        return raw
+    try:
+        return f.decrypt(raw.strip().encode("ascii")).decode("utf-8")
+    except Exception:
+        return raw
+
 def load_profile() -> Dict:    return _load(PROFILE_FILE, {"name": "friend", "onboarded": False})
 def save_profile(p):           _save(PROFILE_FILE, p)
 def load_habits() -> List:     return _load(HABITS_FILE, [])
@@ -217,6 +239,79 @@ def load_budgets() -> List:      return _load(BUDGETS_FILE, [])
 def save_budgets(b):             _save(BUDGETS_FILE, b)
 def load_reminders() -> List:    return _load(REMINDERS_FILE, [])
 def save_reminders(r):           _save(REMINDERS_FILE, r)
+
+
+# ---------------------------------------------------------------------------
+# Data store registry
+# ---------------------------------------------------------------------------
+#
+# The single list of every per-profile JSON data store (everything except
+# the append-only memory.jsonl, which has its own line-by-line handling).
+# Backup/export (data_export.py), restore (restore.py) and re-keying
+# (rekey.py) all derive their file lists from this, so a new data type only
+# has to be registered here once - before this existed each of those kept
+# its own hand-written list and drifted out of sync (rekey silently skipped
+# half the stores). tests/test_storage.py fails if a *_FILE path exists
+# above that is not registered here.
+#
+# name -> (file attribute, loader function, saver function, expected type).
+# Attribute/function names are strings resolved at call time, so switching
+# profiles or reloading this module never leaves a stale reference.
+
+DATA_STORES: Dict[str, tuple] = {
+    "profile":      ("PROFILE_FILE",      "load_profile",      "save_profile",      dict),
+    "habits":       ("HABITS_FILE",       "load_habits",       "save_habits",       list),
+    "goals":        ("GOALS_FILE",        "load_goals",        "save_goals",        list),
+    "nutrition":    ("NUTRITION_FILE",    "load_nutrition",    "save_nutrition",    list),
+    "sleep":        ("SLEEP_FILE",        "load_sleep",        "save_sleep",        list),
+    "hydration":    ("HYDRATION_FILE",    "load_hydration",    "save_hydration",    dict),
+    "fitness":      ("FITNESS_FILE",      "load_fitness",      "save_fitness",      list),
+    "focus":        ("FOCUS_FILE",        "load_focus",        "save_focus",        list),
+    "mental":       ("MENTAL_FILE",       "load_mental",       "save_mental",       list),
+    "spending":     ("SPENDING_FILE",     "load_spending",     "save_spending",     list),
+    "social":       ("SOCIAL_FILE",       "load_social",       "save_social",       list),
+    "substance":    ("SUBSTANCE_FILE",    "load_substance",    "save_substance",    list),
+    "reading":      ("READING_FILE",      "load_reading",      "save_reading",      list),
+    "medication":   ("MEDICATION_FILE",   "load_medication",   "save_medication",   list),
+    "achievements": ("ACHIEVEMENTS_FILE", "load_achievements", "save_achievements", list),
+    "templates":    ("TEMPLATES_FILE",    "load_templates",    "save_templates",    dict),
+    "budgets":      ("BUDGETS_FILE",      "load_budgets",      "save_budgets",      list),
+    "reminders":    ("REMINDERS_FILE",    "load_reminders",    "save_reminders",    list),
+}
+
+
+def data_store_names() -> List[str]:
+    """Names of every registered data store, in registry order."""
+    return list(DATA_STORES)
+
+
+def data_store_path(name: str) -> Path:
+    """Current file path of a registered store (follows the active profile)."""
+    return globals()[DATA_STORES[name][0]]
+
+
+def data_store_paths() -> List[Path]:
+    """Current file paths of every registered store."""
+    return [data_store_path(n) for n in DATA_STORES]
+
+
+def load_store(name: str):
+    """Load a registered store by name."""
+    return globals()[DATA_STORES[name][1]]()
+
+
+def save_store(name: str, data) -> None:
+    """Save a registered store by name (encrypted if a key is active)."""
+    globals()[DATA_STORES[name][2]](data)
+
+
+def replace_all_memory(entries: List[Dict]) -> int:
+    """Atomically replace the whole memory journal with exactly these
+    entries (re-encrypted under the active key, if any). Used by restore.
+    Returns the number of entries written."""
+    entries = list(entries)
+    _rewrite_all_memory_entries(entries)
+    return len(entries)
 
 # --- memory.jsonl: each line is independently encrypted, so the file
 # stays append-only and line-readable even under encryption. ---------

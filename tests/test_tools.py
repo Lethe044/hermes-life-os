@@ -15,7 +15,7 @@ def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "social_insights", "social_correlation", "medication_streak", "workout_correlation", "export_tool", "data_export", "backup", "correlation_utils", "reading_correlation", "insights_digest", "nudges", "wrapped", "dashboard", "life_review", "budgets", "reminders", "templates", "tools"]:
+    for mod in ["storage", "patterns", "life_score", "achievements", "recommendations", "leaderboard", "moon", "sleep_debt", "day_of_week", "habit_milestones", "goal_deadlines", "consistency", "time_of_day", "monthly_summary", "habit_pb", "workout_summary", "meditation_summary", "gratitude_recap", "meal_summary", "hydration_summary", "focus_summary", "dream_recap", "stress_summary", "habit_consistency", "habit_correlation", "habit_overview", "reading_pace", "spending_trends", "substance_correlation", "social_insights", "social_correlation", "medication_streak", "workout_correlation", "export_tool", "data_export", "backup", "correlation_utils", "reading_correlation", "insights_digest", "nudges", "wrapped", "dashboard", "life_review", "budgets", "reminders", "doctor", "templates", "tools"]:
         if mod in sys.modules:
             del sys.modules[mod]
     import tools as t
@@ -615,8 +615,12 @@ class TestGetInsightsDigestTool:
 
     def test_with_data_surfaces_finding(self, tools):
         from datetime import datetime, timedelta
-        today = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        two_days_ago = (datetime.utcnow() - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # log_workout files the session under the LOCAL date, so the mood
+        # entries must use local dates too. With utcnow() this failed every
+        # night between 00:00 and the UTC offset (e.g. 00:00-03:00 in UTC+3),
+        # when the local and UTC dates differ.
+        today = datetime.now().strftime("%Y-%m-%dT12:00:00Z")
+        two_days_ago = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%dT12:00:00Z")
         tools.dispatch_tool("log_workout", {"workout_type": "run", "duration_min": 30})
         tools.dispatch_tool("remember", {"type": "mood", "score": 9, "timestamp": today})
         tools.dispatch_tool("remember", {"type": "mood", "score": 2, "timestamp": two_days_ago})
@@ -1761,6 +1765,265 @@ class TestNewToolSchemas:
         for n in self.NEW:
             out = tools.dispatch_tool(n, {})
             assert not out.startswith("Unknown tool"), n
+
+
+class TestBackupTools:
+    def test_status_with_no_backups(self, tools):
+        assert "No backups yet" in tools.dispatch_tool("get_backup_status", {})
+
+    def test_status_after_backup_now(self, tools):
+        tools.dispatch_tool("backup_now", {})
+        out = tools.dispatch_tool("get_backup_status", {})
+        assert "1 backup(s) saved" in out
+        assert "less than an hour ago" in out
+
+    def test_backup_now_includes_every_store(self, tools):
+        import json
+        import re
+        tools.dispatch_tool("log_expense", {"amount": 12, "category": "food"})
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 100})
+        tools.dispatch_tool("create_reminder", {"text": "stretch", "time": "09:00"})
+        result = tools.dispatch_tool("backup_now", {})
+        path = re.search(r"Backup written: (\S+)", result).group(1)
+        payload = json.loads(open(path, encoding="utf-8").read())
+        assert payload["spending"][0]["amount"] == 12.0
+        assert payload["budgets"][0]["limit"] == 100
+        assert payload["reminders"][0]["text"] == "stretch"
+
+    def test_backup_now_keep_zero_does_not_delete_the_new_backup(self, tools):
+        result = tools.dispatch_tool("backup_now", {"keep": 0})
+        assert "keeping the 1 most recent" in result
+        assert "1 backup(s) saved" in tools.dispatch_tool("get_backup_status", {})
+
+    def test_backup_now_negative_keep_is_clamped(self, tools):
+        assert "keeping the 1 most recent" in tools.dispatch_tool("backup_now", {"keep": -3})
+
+    def test_backup_now_non_numeric_keep_falls_back_to_default(self, tools):
+        assert "keeping the 7 most recent" in tools.dispatch_tool("backup_now", {"keep": "lots"})
+
+    def test_backup_now_none_keep_falls_back_to_default(self, tools):
+        assert "keeping the 7 most recent" in tools.dispatch_tool("backup_now", {"keep": None})
+
+    def test_get_backup_status_schema(self, tools):
+        entry = next(t["function"] for t in tools.TOOLS if t["function"]["name"] == "get_backup_status")
+        assert entry["parameters"]["required"] == []
+        assert "command line" in entry["description"]
+
+
+class TestReminderToolsV138:
+    def test_create_dated_reminder_confirms_delivery(self, tools):
+        out = tools.dispatch_tool("create_reminder", {"text": "passport", "time": "9am", "date": "2030-11-02"})
+        assert "One-off" in out and "2030-11-02 at 09:00" in out
+
+    def test_create_dated_reminder_without_time_explains(self, tools):
+        out = tools.dispatch_tool("create_reminder", {"text": "birthday", "date": "2030-11-02"})
+        assert "only shows up in get_todays_reminders" in out
+
+    def test_create_with_invalid_date_reports_and_saves_nothing(self, tools):
+        out = tools.dispatch_tool("create_reminder", {"text": "x", "time": "09:00", "date": "2030-02-30"})
+        assert "YYYY-MM-DD" in out
+        assert tools.dispatch_tool("list_reminders", {}) == "No reminders set yet."
+
+    def test_dated_reminder_shows_date_in_list(self, tools):
+        tools.dispatch_tool("create_reminder", {"text": "passport", "time": "09:00", "date": "2030-11-02"})
+        assert "2030-11-02" in tools.dispatch_tool("list_reminders", {})
+
+    def test_update_reminder_date(self, tools):
+        rid = _reminder_id(tools.dispatch_tool("create_reminder", {"text": "x", "time": "09:00"}))
+        out = tools.dispatch_tool("update_reminder", {"reminder_id": rid, "date": "2030-11-02"})
+        assert "updated" in out
+        assert "2030-11-02" in tools.dispatch_tool("list_reminders", {})
+
+    def test_update_reminder_invalid_date(self, tools):
+        rid = _reminder_id(tools.dispatch_tool("create_reminder", {"text": "x"}))
+        assert "YYYY-MM-DD" in tools.dispatch_tool("update_reminder", {"reminder_id": rid, "date": "soon"})
+
+    def test_update_with_only_a_date_is_not_nothing_to_change(self, tools):
+        rid = _reminder_id(tools.dispatch_tool("create_reminder", {"text": "x"}))
+        out = tools.dispatch_tool("update_reminder", {"reminder_id": rid, "date": "2030-11-02"})
+        assert "Nothing to change" not in out
+
+    def test_remind_me_in(self, tools):
+        out = tools.dispatch_tool("remind_me_in", {"text": "check the oven", "minutes": 20})
+        assert "I'll remind you at" in out and "check the oven" in out and "id=" in out
+        assert "check the oven" in tools.dispatch_tool("list_reminders", {})
+
+    @pytest.mark.parametrize("minutes", [0, 5000, "abc", None])
+    def test_remind_me_in_invalid_minutes(self, tools, minutes):
+        out = tools.dispatch_tool("remind_me_in", {"text": "x", "minutes": minutes})
+        assert "minutes must be" in out
+        assert tools.dispatch_tool("list_reminders", {}) == "No reminders set yet."
+
+    def test_remind_me_in_blank_text(self, tools):
+        assert "what to be reminded" in tools.dispatch_tool("remind_me_in", {"text": "", "minutes": 5})
+
+    def test_snooze_reminder(self, tools):
+        rid = _reminder_id(tools.dispatch_tool("create_reminder", {"text": "x", "time": "09:00"}))
+        out = tools.dispatch_tool("snooze_reminder", {"reminder_id": rid, "minutes": 15})
+        assert "snoozed until" in out
+        assert "[snoozed until" in tools.dispatch_tool("list_reminders", {})
+
+    def test_snooze_defaults_to_ten_minutes(self, tools):
+        rid = _reminder_id(tools.dispatch_tool("create_reminder", {"text": "x"}))
+        assert "snoozed until" in tools.dispatch_tool("snooze_reminder", {"reminder_id": rid})
+
+    def test_snooze_not_found(self, tools):
+        assert "No reminder" in tools.dispatch_tool("snooze_reminder", {"reminder_id": "nope"})
+
+    def test_snooze_invalid_minutes(self, tools):
+        rid = _reminder_id(tools.dispatch_tool("create_reminder", {"text": "x"}))
+        assert "minutes must be" in tools.dispatch_tool("snooze_reminder", {"reminder_id": rid, "minutes": 0})
+
+    def test_clear_past_reminders(self, tools):
+        tools.dispatch_tool("create_reminder", {"text": "old", "time": "09:00", "date": "2020-01-01"})
+        tools.dispatch_tool("create_reminder", {"text": "future", "time": "09:00", "date": "2099-01-01"})
+        out = tools.dispatch_tool("clear_past_reminders", {})
+        assert "Removed 1 past" in out
+        listing = tools.dispatch_tool("list_reminders", {})
+        assert "future" in listing and "old" not in listing
+
+    def test_clear_past_reminders_nothing_to_do(self, tools):
+        assert "No past one-off" in tools.dispatch_tool("clear_past_reminders", {})
+
+    def test_new_reminder_tools_are_declared_and_dispatchable(self, tools):
+        names = [t["function"]["name"] for t in tools.TOOLS]
+        for n in ("remind_me_in", "snooze_reminder", "clear_past_reminders"):
+            assert names.count(n) == 1
+            assert not tools.dispatch_tool(n, {}).startswith("Unknown tool")
+
+    def test_date_property_declared_on_create_and_update(self, tools):
+        by_name = {t["function"]["name"]: t["function"] for t in tools.TOOLS}
+        assert "date" in by_name["create_reminder"]["parameters"]["properties"]
+        assert "date" in by_name["update_reminder"]["parameters"]["properties"]
+        assert by_name["remind_me_in"]["parameters"]["required"] == ["text", "minutes"]
+
+
+class TestBudgetAlertPctTool:
+    def test_set_budget_with_alert_pct(self, tools):
+        out = tools.dispatch_tool("set_budget", {"category": "food", "limit": 400, "alert_pct": 90})
+        assert "alerts at 90% used" in out
+
+    def test_set_budget_without_alert_pct_has_no_alert_text(self, tools):
+        assert "alerts at" not in tools.dispatch_tool("set_budget", {"category": "food", "limit": 400})
+
+    def test_invalid_alert_pct_reports_and_saves_nothing(self, tools):
+        out = tools.dispatch_tool("set_budget", {"category": "food", "limit": 400, "alert_pct": 500})
+        assert "alert_pct must be" in out
+        assert tools.dispatch_tool("list_budgets", {}) == "No budgets set yet."
+
+    def test_list_budgets_shows_threshold(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 400, "alert_pct": 90})
+        assert "(alert at 90%)" in tools.dispatch_tool("list_budgets", {})
+
+    def test_zero_removes_threshold_through_the_tool(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 400, "alert_pct": 90})
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 400, "alert_pct": 0})
+        assert "alert at" not in tools.dispatch_tool("list_budgets", {})
+
+    def test_get_nudges_uses_the_custom_threshold(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 100, "alert_pct": 50})
+        tools.dispatch_tool("log_expense", {"amount": 60, "category": "food"})
+        assert "food" in tools.dispatch_tool("get_nudges", {})
+
+    def test_schema_declares_alert_pct(self, tools):
+        entry = next(t["function"] for t in tools.TOOLS if t["function"]["name"] == "set_budget")
+        assert "alert_pct" in entry["parameters"]["properties"]
+        assert "alert_pct" not in entry["parameters"]["required"]
+
+
+class TestHealthCheckTool:
+    def test_fresh_profile_is_healthy_after_a_backup(self, tools):
+        tools.dispatch_tool("backup_now", {})
+        out = tools.dispatch_tool("run_health_check", {})
+        assert "health check" in out and "Everything looks healthy." in out
+
+    def test_reports_a_corrupt_data_file(self, tools):
+        import storage
+        storage.save_habits([{"name": "a"}])
+        storage.data_store_path("habits").write_text("{broken", encoding="utf-8")
+        out = tools.dispatch_tool("run_health_check", {})
+        assert "[ERROR]" in out and "habits" in out
+
+    def test_warns_when_data_has_no_backup(self, tools):
+        tools.dispatch_tool("log_expense", {"amount": 5, "category": "food"})
+        out = tools.dispatch_tool("run_health_check", {})
+        assert "[WARN]" in out and "No backups yet" in out
+
+    def test_is_read_only(self, tools):
+        import storage
+        tools.dispatch_tool("log_expense", {"amount": 5, "category": "food"})
+        before = storage.load_spending()
+        tools.dispatch_tool("run_health_check", {})
+        assert storage.load_spending() == before
+
+    def test_schema(self, tools):
+        entry = next(t["function"] for t in tools.TOOLS if t["function"]["name"] == "run_health_check")
+        assert entry["parameters"]["required"] == []
+
+
+class TestBudgetLimitValidationTool:
+    def test_numeric_string_limit_is_accepted(self, tools):
+        out = tools.dispatch_tool("set_budget", {"category": "food", "limit": "400"})
+        assert "food -> 400 / month" in out
+
+    def test_text_limit_is_rejected_with_a_message(self, tools):
+        out = tools.dispatch_tool("set_budget", {"category": "food", "limit": "lots"})
+        assert "limit must be" in out
+        assert tools.dispatch_tool("list_budgets", {}) == "No budgets set yet."
+
+    def test_negative_limit_is_rejected(self, tools):
+        assert "limit must be" in tools.dispatch_tool("set_budget", {"category": "food", "limit": -10})
+
+    def test_zero_limit_is_allowed(self, tools):
+        assert "food -> 0 / month" in tools.dispatch_tool("set_budget", {"category": "food", "limit": 0})
+
+    def test_string_limit_does_not_break_later_status_calls(self, tools):
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": "100"})
+        tools.dispatch_tool("log_expense", {"amount": 30, "category": "food"})
+        assert "30" in tools.dispatch_tool("get_budget_status", {})
+        assert "food" in tools.dispatch_tool("get_budget_forecast", {})
+        tools.dispatch_tool("get_nudges", {})  # must not raise
+
+
+class TestSuggestBudgetsTool:
+    def _spend_last_month(self, tools, category, amount):
+        from datetime import datetime
+        first = datetime.now().replace(day=1)
+        last_month = (first.replace(day=1) - __import__("datetime").timedelta(days=1)).replace(day=15)
+        import storage
+        rows = storage.load_spending()
+        rows.append({"date": last_month.strftime("%Y-%m-%d"), "category": category, "amount": amount})
+        storage.save_spending(rows)
+
+    def test_nothing_to_suggest(self, tools):
+        assert "Nothing to suggest" in tools.dispatch_tool("suggest_budgets", {})
+
+    def test_suggests_from_history(self, tools):
+        self._spend_last_month(tools, "food", 300)
+        out = tools.dispatch_tool("suggest_budgets", {"months": 1, "buffer_pct": 0})
+        assert "- food: 300" in out
+        assert "set_budget" in out
+
+    def test_default_buffer_is_ten_percent(self, tools):
+        self._spend_last_month(tools, "food", 300)
+        assert "- food: 330" in tools.dispatch_tool("suggest_budgets", {"months": 1})
+
+    def test_budgeted_category_not_suggested(self, tools):
+        self._spend_last_month(tools, "food", 300)
+        tools.dispatch_tool("set_budget", {"category": "food", "limit": 100})
+        assert "Nothing to suggest" in tools.dispatch_tool("suggest_budgets", {"months": 1})
+
+    def test_bad_months_falls_back(self, tools):
+        assert "3 completed month(s)" in tools.dispatch_tool("suggest_budgets", {"months": "lots"})
+
+    def test_bad_buffer_is_reported_not_raised(self, tools):
+        assert "buffer_pct" in tools.dispatch_tool("suggest_budgets", {"buffer_pct": 500})
+        assert "buffer_pct" in tools.dispatch_tool("suggest_budgets", {"buffer_pct": "lots"})
+
+    def test_schema(self, tools):
+        entry = next(t["function"] for t in tools.TOOLS if t["function"]["name"] == "suggest_budgets")
+        assert entry["parameters"]["required"] == []
+        assert set(entry["parameters"]["properties"]) == {"months", "buffer_pct"}
 
 
 if __name__ == "__main__":

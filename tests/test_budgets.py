@@ -479,3 +479,291 @@ class TestBudgetAlerts:
     def test_zero_limit_without_spending_no_alert(self, budgets):
         budgets.set_budget("food", 0)
         assert budgets.budget_alerts(today=_dt(2026, 10, 10)) == []
+
+
+class TestAlertPct:
+    def test_stored_when_given(self, budgets):
+        assert budgets.set_budget("food", 100, alert_pct=90) == {"category": "food", "limit": 100, "alert_pct": 90}
+
+    def test_not_stored_when_omitted(self, budgets):
+        assert "alert_pct" not in budgets.set_budget("food", 100)
+
+    def test_float_threshold_allowed(self, budgets):
+        assert budgets.set_budget("food", 100, alert_pct=87.5)["alert_pct"] == 87.5
+
+    def test_whole_float_stored_as_int(self, budgets):
+        assert budgets.set_budget("food", 100, alert_pct=90.0)["alert_pct"] == 90
+
+    def test_numeric_string_accepted(self, budgets):
+        assert budgets.set_budget("food", 100, alert_pct="75")["alert_pct"] == 75
+
+    def test_overwrite_without_alert_keeps_existing_threshold(self, budgets):
+        budgets.set_budget("food", 100, alert_pct=90)
+        entry = budgets.set_budget("Food", 200)
+        assert entry["limit"] == 200 and entry["alert_pct"] == 90
+
+    def test_overwrite_changes_threshold(self, budgets):
+        budgets.set_budget("food", 100, alert_pct=90)
+        assert budgets.set_budget("food", 100, alert_pct=60)["alert_pct"] == 60
+
+    def test_zero_removes_a_custom_threshold(self, budgets):
+        budgets.set_budget("food", 100, alert_pct=90)
+        entry = budgets.set_budget("food", 100, alert_pct=0)
+        assert "alert_pct" not in entry
+        assert "alert_pct" not in budgets.list_budgets()[0]
+
+    def test_zero_on_a_new_budget_stores_nothing(self, budgets):
+        assert "alert_pct" not in budgets.set_budget("food", 100, alert_pct=0)
+
+    @pytest.mark.parametrize("bad", [-1, 101, 0.5, "abc", True, [], 1000])
+    def test_invalid_values_raise(self, budgets, bad):
+        with pytest.raises(ValueError, match="alert_pct"):
+            budgets.set_budget("food", 100, alert_pct=bad)
+        assert budgets.list_budgets() == []
+
+    def test_invalid_value_leaves_an_existing_budget_untouched(self, budgets):
+        budgets.set_budget("food", 100, alert_pct=90)
+        with pytest.raises(ValueError):
+            budgets.set_budget("food", 999, alert_pct=500)
+        stored = budgets.list_budgets()[0]
+        assert stored["limit"] == 100 and stored["alert_pct"] == 90
+
+    def test_boundaries_accepted(self, budgets):
+        assert budgets.set_budget("a", 1, alert_pct=1)["alert_pct"] == 1
+        assert budgets.set_budget("b", 1, alert_pct=100)["alert_pct"] == 100
+
+    def test_persists(self, budgets):
+        budgets.set_budget("food", 100, alert_pct=90)
+        from storage import load_budgets
+        assert load_budgets()[0]["alert_pct"] == 90
+
+    def test_list_format_shows_threshold(self, budgets):
+        out = budgets.format_budget_list(budgets.list_budgets() or [{"category": "food", "limit": 100, "alert_pct": 90}])
+        assert "(alert at 90%)" in out
+
+    def test_list_format_without_threshold_has_no_suffix(self, budgets):
+        assert "alert at" not in budgets.format_budget_list([{"category": "food", "limit": 100}])
+
+
+class TestBudgetAlertsWithThresholds:
+    def _spend(self, budgets, category, amount):
+        from storage import save_spending
+        save_spending([{"date": "2026-10-04", "category": category, "amount": amount}])
+
+    def test_custom_low_threshold_alerts_earlier(self, budgets):
+        budgets.set_budget("food", 100, alert_pct=50)
+        self._spend(budgets, "food", 60)
+        assert len(budgets.budget_alerts(today=_dt(2026, 10, 10))) == 1
+
+    def test_default_would_not_have_alerted_at_that_level(self, budgets):
+        budgets.set_budget("food", 100)
+        self._spend(budgets, "food", 60)
+        assert budgets.budget_alerts(today=_dt(2026, 10, 10)) == []
+
+    def test_custom_high_threshold_suppresses_the_default_alert(self, budgets):
+        budgets.set_budget("food", 100, alert_pct=95)
+        self._spend(budgets, "food", 85)
+        assert budgets.budget_alerts(today=_dt(2026, 10, 10)) == []
+
+    def test_over_budget_always_alerts_whatever_the_threshold(self, budgets):
+        budgets.set_budget("food", 100, alert_pct=100)
+        self._spend(budgets, "food", 150)
+        assert "is over" in budgets.budget_alerts(today=_dt(2026, 10, 10))[0]
+
+    def test_explicit_threshold_overrides_every_budget(self, budgets):
+        budgets.set_budget("food", 100, alert_pct=95)
+        self._spend(budgets, "food", 60)
+        assert budgets.budget_alerts(today=_dt(2026, 10, 10)) == []
+        assert len(budgets.budget_alerts(threshold_pct=50, today=_dt(2026, 10, 10))) == 1
+
+    def test_thresholds_are_per_category(self, budgets):
+        from storage import save_spending
+        budgets.set_budget("food", 100, alert_pct=50)
+        budgets.set_budget("fun", 100)
+        save_spending([
+            {"date": "2026-10-04", "category": "food", "amount": 60},
+            {"date": "2026-10-04", "category": "fun", "amount": 60},
+        ])
+        alerts = budgets.budget_alerts(today=_dt(2026, 10, 10))
+        assert len(alerts) == 1 and "'food'" in alerts[0]
+
+    def test_threshold_lookup_is_exact_on_the_stored_category_case(self, budgets):
+        budgets.set_budget("Food", 100, alert_pct=50)
+        self._spend(budgets, "food", 60)  # spending in another case still counts
+        assert len(budgets.budget_alerts(today=_dt(2026, 10, 10))) == 1
+
+    def test_removed_threshold_falls_back_to_default(self, budgets):
+        budgets.set_budget("food", 100, alert_pct=50)
+        budgets.set_budget("food", 100, alert_pct=0)
+        self._spend(budgets, "food", 60)
+        assert budgets.budget_alerts(today=_dt(2026, 10, 10)) == []
+
+
+
+
+class TestLimitValidation:
+    """A limit stored as text (the agent sometimes sends "400") used to be
+    saved as-is and then crashed every later status/forecast/nudge call."""
+
+    @pytest.mark.parametrize("raw,expected", [
+        (400, 400), (400.0, 400), (400.5, 400.5), ("400", 400), (" 250 ", 250),
+        ("99.5", 99.5), (0, 0), ("0", 0), (1e3, 1000),
+    ])
+    def test_accepted_and_normalized(self, budgets, raw, expected):
+        entry = budgets.set_budget("food", raw)
+        assert entry["limit"] == expected
+        assert isinstance(entry["limit"], (int, float)) and not isinstance(entry["limit"], bool)
+
+    @pytest.mark.parametrize("bad", ["abc", "", None, True, False, [], {}, -1, "-5", float("nan"),
+                                     float("inf"), "inf", "nan"])
+    def test_rejected(self, budgets, bad):
+        with pytest.raises(ValueError, match="limit must be"):
+            budgets.set_budget("food", bad)
+        assert budgets.list_budgets() == []
+
+    def test_rejected_limit_leaves_an_existing_budget_alone(self, budgets):
+        budgets.set_budget("food", 100, alert_pct=90)
+        with pytest.raises(ValueError):
+            budgets.set_budget("food", "lots")
+        assert budgets.list_budgets()[0]["limit"] == 100
+
+    def test_string_limit_works_end_to_end(self, budgets):
+        from storage import save_spending
+        budgets.set_budget("food", "100")
+        save_spending([{"date": "2026-10-04", "category": "food", "amount": 40}])
+        r = budgets.compute_budget_status(today=_dt(2026, 10, 10))[0]
+        assert r["remaining"] == 60 and r["pct_used"] == 40.0
+
+
+class TestBudgetAlertsIgnoreJunkThresholds:
+    @pytest.mark.parametrize("junk", ["abc", 500, 0, True, None, [], -5])
+    def test_hand_edited_alert_pct_falls_back_to_the_default(self, budgets, junk):
+        from storage import save_budgets, save_spending
+        save_budgets([{"category": "food", "limit": 100, "alert_pct": junk}])
+        save_spending([{"date": "2026-10-04", "category": "food", "amount": 85}])
+        alerts = budgets.budget_alerts(today=_dt(2026, 10, 10))  # must not raise
+        assert len(alerts) == 1 and "85.0% used" in alerts[0]
+
+    def test_valid_alert_pct_helper(self, budgets):
+        assert budgets.valid_alert_pct(1) and budgets.valid_alert_pct(100) and budgets.valid_alert_pct(87.5)
+        for bad in (0, 101, -1, "50", None, True, [], float("nan")):
+            assert not budgets.valid_alert_pct(bad)
+
+
+class TestRoundUpLimit:
+    @pytest.mark.parametrize("value,expected", [
+        (0.4, 1), (1, 1), (7.2, 8), (19.9, 20), (20, 20), (21, 25), (199, 200),
+        (200, 200), (201, 210), (999, 1000), (1000, 1000), (1001, 1050), (4321, 4350),
+    ])
+    def test_tidy_rounding(self, budgets, value, expected):
+        assert budgets._round_up_limit(value) == expected
+
+
+class TestRoundUpLimitFloatNoise:
+    """Regression: 200 * 1.1 is 220.00000000000003 in floating point, which
+    used to round up to 230 instead of staying at 220."""
+
+    @pytest.mark.parametrize("avg,buffer,expected", [
+        (200, 10, 220), (300, 10, 330), (100, 10, 110), (50, 10, 55), (10, 10, 11),
+        (1000, 10, 1100), (500, 20, 600), (30, 50, 45),
+    ])
+    def test_exact_multiples_do_not_jump_a_step(self, budgets, avg, buffer, expected):
+        assert budgets._round_up_limit(avg * (1 + buffer / 100.0)) == expected
+
+    def test_float_noise_value_directly(self, budgets):
+        assert budgets._round_up_limit(220.00000000000003) == 220
+
+
+class TestBudgetSuggestions:
+    def _spend(self, rows):
+        from storage import save_spending
+        save_spending([{"date": d, "category": c, "amount": a} for d, c, a in rows])
+
+    def test_no_spending(self, budgets):
+        r = budgets.compute_budget_suggestions(today=_dt(2026, 10, 15))
+        assert r["suggestions"] == []
+        assert r["months"] == ["2026-07", "2026-08", "2026-09"]
+
+    def test_average_over_the_whole_window_plus_buffer(self, budgets):
+        self._spend([("2026-07-05", "food", 300), ("2026-08-05", "food", 300), ("2026-09-05", "food", 300)])
+        r = budgets.compute_budget_suggestions(3, 10, today=_dt(2026, 10, 15))
+        s = r["suggestions"][0]
+        assert s["category"] == "food"
+        assert s["avg_spent"] == 300.0
+        assert s["suggested_limit"] == 330
+        assert s["months_with_spending"] == 3
+        assert s["last_month_spent"] == 300.0
+
+    def test_empty_months_count_as_zero(self, budgets):
+        self._spend([("2026-09-05", "gifts", 300)])
+        s = budgets.compute_budget_suggestions(3, 0, today=_dt(2026, 10, 15))["suggestions"][0]
+        assert s["avg_spent"] == 100.0
+        assert s["suggested_limit"] == 100
+        assert s["months_with_spending"] == 1
+
+    def test_current_month_is_excluded(self, budgets):
+        self._spend([("2026-10-05", "food", 999)])
+        assert budgets.compute_budget_suggestions(today=_dt(2026, 10, 15))["suggestions"] == []
+
+    def test_categories_with_a_budget_are_skipped_case_insensitively(self, budgets):
+        budgets.set_budget("Food", 100)
+        self._spend([("2026-09-05", "food", 50), ("2026-09-06", "fun", 40)])
+        cats = [x["category"] for x in budgets.compute_budget_suggestions(1, today=_dt(2026, 10, 15))["suggestions"]]
+        assert cats == ["fun"]
+
+    def test_categories_merged_case_insensitively(self, budgets):
+        self._spend([("2026-09-05", "Food", 30), ("2026-09-06", "FOOD", 20)])
+        s = budgets.compute_budget_suggestions(1, 0, today=_dt(2026, 10, 15))["suggestions"]
+        assert len(s) == 1 and s[0]["avg_spent"] == 50.0
+
+    def test_sorted_biggest_first_then_name(self, budgets):
+        self._spend([("2026-09-05", "b", 50), ("2026-09-05", "a", 50), ("2026-09-05", "z", 500)])
+        cats = [x["category"] for x in budgets.compute_budget_suggestions(1, today=_dt(2026, 10, 15))["suggestions"]]
+        assert cats == ["z", "a", "b"]
+
+    def test_zero_amount_category_ignored(self, budgets):
+        self._spend([("2026-09-05", "food", 0)])
+        assert budgets.compute_budget_suggestions(1, today=_dt(2026, 10, 15))["suggestions"] == []
+
+    def test_months_clamped(self, budgets):
+        assert len(budgets.compute_budget_suggestions(0, today=_dt(2026, 10, 15))["months"]) == 1
+        assert len(budgets.compute_budget_suggestions(99, today=_dt(2026, 10, 15))["months"]) == 24
+
+    def test_year_rollover(self, budgets):
+        r = budgets.compute_budget_suggestions(3, today=_dt(2026, 2, 10))
+        assert r["months"] == ["2025-11", "2025-12", "2026-01"]
+
+    @pytest.mark.parametrize("bad", [-1, 101, "lots", None, True, float("nan")])
+    def test_bad_buffer_rejected(self, budgets, bad):
+        with pytest.raises(ValueError, match="buffer_pct"):
+            budgets.compute_budget_suggestions(buffer_pct=bad, today=_dt(2026, 10, 15))
+
+    def test_buffer_bounds_accepted(self, budgets):
+        self._spend([("2026-09-05", "food", 100)])
+        assert budgets.compute_budget_suggestions(1, 0, today=_dt(2026, 10, 15))["suggestions"][0]["suggested_limit"] == 100
+        assert budgets.compute_budget_suggestions(1, 100, today=_dt(2026, 10, 15))["suggestions"][0]["suggested_limit"] == 200
+
+    def test_numeric_string_buffer_accepted(self, budgets):
+        self._spend([("2026-09-05", "food", 100)])
+        assert budgets.compute_budget_suggestions(1, "50", today=_dt(2026, 10, 15))["suggestions"][0]["suggested_limit"] == 150
+
+    def test_suggestion_does_not_change_anything(self, budgets):
+        self._spend([("2026-09-05", "food", 100)])
+        budgets.compute_budget_suggestions(1, today=_dt(2026, 10, 15))
+        assert budgets.list_budgets() == []
+
+    def test_format_none(self, budgets):
+        out = budgets.format_budget_suggestions(budgets.compute_budget_suggestions(today=_dt(2026, 10, 15)))
+        assert out.startswith("Nothing to suggest")
+        assert "3 completed month(s)" in out
+
+    def test_format_lists_suggestions_and_hint(self, budgets):
+        self._spend([("2026-09-05", "food", 300), ("2026-08-05", "food", 300)])
+        out = budgets.format_budget_suggestions(budgets.compute_budget_suggestions(3, 10, today=_dt(2026, 10, 15)))
+        assert "average of the last 3 completed month(s) + 10%" in out
+        assert "- food: 220 (avg 200.0, spent in 2/3 months)" in out
+        assert "set_budget" in out
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

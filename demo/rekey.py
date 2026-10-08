@@ -7,8 +7,9 @@ with the OLD key (or as plaintext, if there wasn't one), decrypts it
 in memory, generates a brand new random salt, and re-encrypts
 everything with the NEW key (or leaves it as plaintext, if disabling).
 
-This touches every config file (profile.json, habits.json, goals.json,
-etc.) plus every line of memory.jsonl. Nothing is written to disk
+This touches every data store registered in storage.DATA_STORES
+(profile.json, habits.json, spending.json, reminders.json, ...), every
+line of memory.jsonl, and the backup files in backups/. Nothing is written to disk
 until every file has been successfully decrypted with the old key -
 so a wrong old passphrase fails loudly before touching anything.
 However, the tool is NOT atomic across the whole profile once writing
@@ -49,10 +50,11 @@ import storage
 import crypto_store
 from crypto_store import EncryptionUnavailable, get_fernet
 
-CONFIG_FILE_ATTRS = [
-    "PROFILE_FILE", "HABITS_FILE", "GOALS_FILE", "NUTRITION_FILE",
-    "SLEEP_FILE", "HYDRATION_FILE", "FITNESS_FILE", "FOCUS_FILE", "MENTAL_FILE",
-]
+# Derived from the storage registry so every data store is re-keyed. This
+# used to be a hand-written list of 9 files, which silently left spending,
+# reminders, budgets, etc. on the OLD key: after the salt rotated they could
+# no longer be decrypted and read back as empty.
+CONFIG_FILE_ATTRS = [entry[0] for entry in storage.DATA_STORES.values()]
 
 
 class RekeyError(RuntimeError):
@@ -100,6 +102,21 @@ def _encrypt_text(raw: str, fernet) -> str:
     return fernet.encrypt(raw.encode("utf-8")).decode("ascii")
 
 
+BACKUP_GLOBS = ("backup-*.json", "pre-restore-*.json")
+
+
+def _backup_files() -> List[Path]:
+    """Backup and restore-safety files of the active profile. Backups are
+    encrypted under the active key (see data_export.export_json), so they
+    have to follow a passphrase change like everything else - otherwise,
+    once the salt rotates, the old key cannot be derived again and they
+    are unreadable for good."""
+    directory = storage.HERMES_DIR / "backups"
+    if not directory.exists():
+        return []
+    return sorted({p for pattern in BACKUP_GLOBS for p in directory.glob(pattern)})
+
+
 def rekey(old_passphrase: Optional[str], new_passphrase: Optional[str]) -> Dict[str, int]:
     """
     Re-encrypts every file in the *currently active* profile
@@ -108,8 +125,11 @@ def rekey(old_passphrase: Optional[str], new_passphrase: Optional[str]) -> Dict[
     function handles enabling encryption for the first time, changing
     an existing passphrase, and disabling encryption entirely).
 
-    Returns {"config_files": N, "memory_lines": M} - counts of what
-    was re-keyed.
+    Returns {"config_files": N, "memory_lines": M, "backup_files": B,
+    "backups_skipped": K} - counts of what was re-keyed. Backup files that
+    can be read with neither the old key nor as plain JSON (corrupt, or made
+    with some other passphrase) are left untouched and counted in
+    "backups_skipped" instead of blocking the whole re-key.
     """
     hermes_dir = storage.HERMES_DIR
     old_fernet = get_fernet(old_passphrase, hermes_dir) if old_passphrase else None
@@ -131,6 +151,14 @@ def rekey(old_passphrase: Optional[str], new_passphrase: Optional[str]) -> Dict[
                 if not line:
                     continue
                 decrypted_memory_lines.append(_decrypt_text(line, old_fernet))
+
+    decrypted_backups: Dict[Path, str] = {}
+    backups_skipped = 0
+    for path in _backup_files():
+        try:
+            decrypted_backups[path] = _decrypt_text(path.read_text(encoding="utf-8"), old_fernet)
+        except (RekeyError, OSError, UnicodeDecodeError):
+            backups_skipped += 1
 
     # Rotate the salt and derive the new key. A fresh salt means the
     # old (passphrase, salt) pair is fully retired, not just the
@@ -157,7 +185,11 @@ def rekey(old_passphrase: Optional[str], new_passphrase: Optional[str]) -> Dict[
                 fh.write(_encrypt_text(line, new_fernet) + "\n")
         tmp_path.replace(storage.MEMORY_FILE)
 
-    return {"config_files": len(decrypted_configs), "memory_lines": len(decrypted_memory_lines)}
+    for path, content in decrypted_backups.items():
+        path.write_text(_encrypt_text(content, new_fernet), encoding="utf-8")
+
+    return {"config_files": len(decrypted_configs), "memory_lines": len(decrypted_memory_lines),
+            "backup_files": len(decrypted_backups), "backups_skipped": backups_skipped}
 
 
 def main() -> None:
@@ -197,8 +229,11 @@ def main() -> None:
         print(e)
         sys.exit(1)
 
-    print(f"Done - re-keyed {summary['config_files']} config file(s) and "
-          f"{summary['memory_lines']} memory entries.")
+    print(f"Done - re-keyed {summary['config_files']} config file(s), "
+          f"{summary['memory_lines']} memory entries and {summary['backup_files']} backup file(s).")
+    if summary["backups_skipped"]:
+        print(f"Note: {summary['backups_skipped']} backup file(s) could not be read with the old key "
+              f"and were left unchanged.")
     if new_passphrase:
         print("Set LIFE_OS_ENCRYPTION_KEY to your NEW passphrase before running any other Hermes command.")
     else:

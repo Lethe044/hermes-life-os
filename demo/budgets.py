@@ -17,7 +17,8 @@ call.
 On top of the basic status check this module also offers a month-end
 forecast (compute_budget_forecast), a history of completed months
 (compute_budget_history), a view of spending that has no budget at all
-(compute_unbudgeted_spending) and one-line alerts for the proactive
+(compute_unbudgeted_spending), suggested limits for categories without a
+budget (compute_budget_suggestions) and one-line alerts for the proactive
 nudge check (budget_alerts). Spending categories are matched to budgets
 case-insensitively, so "Groceries" logged by the agent still counts
 against a "groceries" budget.
@@ -26,26 +27,89 @@ against a "groceries" budget.
 from __future__ import annotations
 
 import calendar
+import math
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from storage import load_budgets, save_budgets, load_spending
 
 
-def set_budget(category: str, limit: float) -> Dict[str, Any]:
+DEFAULT_ALERT_PCT = 80.0  # a budget this used-up (or more) shows up in the proactive nudge check
+
+
+def _check_limit(limit: Any) -> Any:
+    """Validates a monthly limit: a finite number of zero or more (a
+    numeric string such as "400" is accepted and converted, because the
+    agent sometimes sends numbers as text; storing the string would break
+    every later calculation). Whole numbers stay ints. Raises ValueError
+    otherwise."""
+    message = "limit must be a number of zero or more."
+    if isinstance(limit, bool) or limit is None:
+        raise ValueError(message)
+    try:
+        value = float(limit)
+    except (TypeError, ValueError):
+        raise ValueError(message) from None
+    if math.isnan(value) or math.isinf(value) or value < 0:
+        raise ValueError(message)
+    return int(value) if value == int(value) else value
+
+
+def valid_alert_pct(value: Any) -> bool:
+    """True if `value` is a usable alert threshold (a number from 1 to 100)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and 1 <= value <= 100
+
+
+def _check_alert_pct(alert_pct: Optional[float]) -> Optional[float]:
+    """Validates a per-budget alert threshold. None means "leave as is";
+    0 means "remove it (use the default)"; otherwise it must be a number
+    from 1 to 100. Raises ValueError for anything else."""
+    if alert_pct is None:
+        return None
+    if isinstance(alert_pct, bool):
+        raise ValueError("alert_pct must be a number from 1 to 100 (or 0 to remove it).")
+    try:
+        value = float(alert_pct)
+    except (TypeError, ValueError):
+        raise ValueError("alert_pct must be a number from 1 to 100 (or 0 to remove it).") from None
+    if value != 0 and not 1 <= value <= 100:
+        raise ValueError("alert_pct must be a number from 1 to 100 (or 0 to remove it).")
+    return int(value) if value == int(value) else value
+
+
+def set_budget(category: str, limit: float, alert_pct: Optional[float] = None) -> Dict[str, Any]:
     """Creates or updates the monthly limit for `category` (case
     preserved from the first time it's set, matched case-insensitively
-    on later calls). Returns the saved {"category", "limit"} entry."""
+    on later calls). Returns the saved entry: {"category", "limit"}, plus
+    "alert_pct" when one is set.
+
+    `alert_pct` (1-100) is how much of the limit has to be used before this
+    budget appears in the proactive nudge check (default 80). Leaving it
+    out keeps whatever the budget already had; 0 removes a custom value.
+    An invalid limit or alert_pct raises ValueError and saves nothing."""
+    limit = _check_limit(limit)
+    alert = _check_alert_pct(alert_pct)
     budgets = load_budgets()
     for b in budgets:
         if b.get("category", "").lower() == category.lower():
             b["limit"] = limit
+            _apply_alert(b, alert)
             save_budgets(budgets)
             return b
     entry = {"category": category, "limit": limit}
+    _apply_alert(entry, alert)
     budgets.append(entry)
     save_budgets(budgets)
     return entry
+
+
+def _apply_alert(entry: Dict[str, Any], alert: Optional[float]) -> None:
+    if alert is None:
+        return
+    if alert == 0:
+        entry.pop("alert_pct", None)
+    else:
+        entry["alert_pct"] = alert
 
 
 def delete_budget(category: str) -> bool:
@@ -136,7 +200,8 @@ def format_budget_list(budgets: List[Dict[str, Any]]) -> str:
         return "No budgets set yet."
     lines = ["Monthly budgets:"]
     for b in budgets:
-        lines.append(f"- {b.get('category', '?')}: {b.get('limit', 0)} / month")
+        alert = f" (alert at {b['alert_pct']}%)" if b.get("alert_pct") else ""
+        lines.append(f"- {b.get('category', '?')}: {b.get('limit', 0)} / month{alert}")
     return "\n".join(lines)
 
 
@@ -312,19 +377,113 @@ def format_unbudgeted_spending(result: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def budget_alerts(threshold_pct: float = 80.0,
+DEFAULT_SUGGESTION_BUFFER_PCT = 10.0
+
+
+def _round_up_limit(value: float) -> int:
+    """Rounds a suggested limit UP to a tidy number: whole units below 20,
+    multiples of 5 below 200, of 10 below 1000, of 50 above."""
+    # Float noise (200 * 1.1 == 220.00000000000003) must not push an exact
+    # multiple up to the next step, so snap to 6 decimals before rounding up.
+    value = round(value, 6)
+    step = 1 if value < 20 else 5 if value < 200 else 10 if value < 1000 else 50
+    return int(math.ceil(value / step) * step)
+
+
+def compute_budget_suggestions(months: int = 3,
+                               buffer_pct: float = DEFAULT_SUGGESTION_BUFFER_PCT,
+                               today: Optional[datetime] = None) -> Dict[str, Any]:
+    """Suggests a monthly limit for every spending category that has NO
+    budget yet, from the last `months` COMPLETED calendar months (clamped
+    to 1..24; the current month is left out because it is unfinished).
+    The suggestion is the average monthly spend over the whole window
+    (months with no spending count as zero, so an occasional category is
+    not overstated) plus `buffer_pct` percent (0-100, default 10), rounded
+    up to a tidy number. Returns {"months": [labels oldest-first],
+    "buffer_pct", "suggestions": [{"category", "avg_spent",
+    "suggested_limit", "months_with_spending", "last_month_spent"}]},
+    biggest suggestion first. Categories are lower-cased (spending
+    categories are matched case-insensitively). Raises ValueError if
+    `buffer_pct` is not a number from 0 to 100."""
+    if isinstance(buffer_pct, bool):
+        raise ValueError("buffer_pct must be a number from 0 to 100.")
+    try:
+        buffer = float(buffer_pct)
+    except (TypeError, ValueError):
+        raise ValueError("buffer_pct must be a number from 0 to 100.") from None
+    if math.isnan(buffer) or not 0 <= buffer <= 100:
+        raise ValueError("buffer_pct must be a number from 0 to 100.")
+
+    months = max(1, min(int(months), 24))
+    now = _now(today)
+    labels = []
+    for back in range(months, 0, -1):
+        y, m = _shift_month(now.year, now.month, -back)
+        labels.append(f"{y:04d}-{m:02d}")
+    spent_per_month = [_spent_by_category(label) for label in labels]
+
+    budgeted = {b.get("category", "").lower() for b in load_budgets()}
+    categories = {c for month in spent_per_month for c in month}
+    suggestions = []
+    for cat in categories:
+        if cat in budgeted:
+            continue
+        amounts = [month.get(cat, 0.0) for month in spent_per_month]
+        total = sum(amounts)
+        if total <= 0:
+            continue
+        avg = total / months
+        suggestions.append({
+            "category": cat,
+            "avg_spent": round(avg, 2),
+            "suggested_limit": _round_up_limit(avg * (1 + buffer / 100.0)),
+            "months_with_spending": sum(1 for a in amounts if a > 0),
+            "last_month_spent": round(amounts[-1], 2),
+        })
+    suggestions.sort(key=lambda r: (-r["suggested_limit"], r["category"]))
+    return {"months": labels, "buffer_pct": int(buffer) if buffer == int(buffer) else buffer,
+            "suggestions": suggestions}
+
+
+def format_budget_suggestions(result: Dict[str, Any]) -> str:
+    """Turns compute_budget_suggestions()'s output into a friendly summary."""
+    n = len(result.get("months", []))
+    if not result.get("suggestions"):
+        return (f"Nothing to suggest: there is no spending in the last {n} completed month(s) "
+                f"outside categories that already have a budget.")
+    lines = [f"Suggested monthly budgets (average of the last {n} completed month(s) "
+             f"+ {result['buffer_pct']}%):"]
+    for r in result["suggestions"]:
+        lines.append(
+            f"- {r['category']}: {r['suggested_limit']} "
+            f"(avg {r['avg_spent']}, spent in {r['months_with_spending']}/{n} months)"
+        )
+    lines.append("Use set_budget to adopt any of these.")
+    return "\n".join(lines)
+
+
+def budget_alerts(threshold_pct: Optional[float] = None,
                   today: Optional[datetime] = None) -> List[str]:
     """One-line warnings for budgets that are over their limit or have
-    used at least `threshold_pct` of it so far this month. Empty list
-    when everything is comfortable (used by nudges.generate_nudges)."""
+    used at least their alert threshold so far this month. The threshold
+    is the budget's own `alert_pct` (see set_budget), or 80% if it has
+    none; passing `threshold_pct` overrides every budget's threshold at
+    once. Empty list when everything is comfortable (used by
+    nudges.generate_nudges)."""
     alerts = []
     forecast = {f["category"]: f for f in compute_budget_forecast(today=today)}
+    own_alert = {b.get("category", ""): b.get("alert_pct") for b in load_budgets()}
     for r in compute_budget_status(today=today):
+        if threshold_pct is not None:
+            threshold = threshold_pct
+        else:
+            own = own_alert.get(r["category"])
+            threshold = own if valid_alert_pct(own) else DEFAULT_ALERT_PCT  # ignore hand-edited junk
         if r["over"]:
             alerts.append(
                 f"Budget '{r['category']}' is over: {r['spent']} spent of {r['limit']} this month."
             )
-        elif r["limit"] and r["pct_used"] >= threshold_pct:
+        elif r["limit"] and r["pct_used"] >= threshold:
             f = forecast.get(r["category"], {})
             alerts.append(
                 f"Budget '{r['category']}' is {r['pct_used']}% used ({r['remaining']} left) "
