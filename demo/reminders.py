@@ -33,6 +33,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
+import clock
 from storage import load_reminders, save_reminders
 
 VALID_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
@@ -143,7 +144,7 @@ def create_reminder(text: str, time_str: Optional[str] = None,
         "text": text,
         "time": _store_time(time_str),
         "days": [] if normalized_date else _normalize_days(days),
-        "created": time.strftime("%Y-%m-%d"),
+        "created": clock.today_str(),
     }
     if normalized_date:
         entry["date"] = normalized_date

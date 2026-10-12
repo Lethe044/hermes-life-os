@@ -14,6 +14,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
+import clock
 from storage import load_focus
 
 
@@ -22,7 +23,7 @@ def compute_focus_summary(days: int = 30) -> Dict[str, Any]:
     "avg_quality", "completed_sessions", "completion_pct",
     "total_distractions", "most_common_task"} over the last `days` days.
     """
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = clock.days_ago_str(days)
     sessions = [f for f in load_focus() if f.get("date", "") >= cutoff]
 
     if not sessions:

@@ -31,6 +31,7 @@ import math
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import clock
 from storage import load_budgets, save_budgets, load_spending
 
 
@@ -144,7 +145,7 @@ def _spent_by_category(month_prefix: str) -> Dict[str, float]:
 
 
 def _current_month_spent_by_category() -> Dict[str, float]:
-    return _spent_by_category(datetime.utcnow().strftime("%Y-%m"))
+    return _spent_by_category(clock.month_str())
 
 
 def compute_budget_status(category: Optional[str] = None,
@@ -213,7 +214,7 @@ EARLY_MONTH_DAYS = 5  # projections made before this day of the month are flagge
 
 
 def _now(today: Optional[datetime]) -> datetime:
-    return today if today is not None else datetime.utcnow()
+    return today if today is not None else clock.effective_now()
 
 
 def compute_budget_forecast(category: Optional[str] = None,

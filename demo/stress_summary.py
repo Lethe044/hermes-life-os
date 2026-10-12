@@ -14,6 +14,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
+import clock
 from storage import load_mental
 
 HIGH_STRESS_THRESHOLD = 7
@@ -28,8 +29,7 @@ def compute_stress_summary(days: int = 30) -> Dict[str, Any]:
     at least a 1.0-point difference on the 0-10 scale, to avoid
     flip-flopping on tiny amounts of data.
     """
-    cutoff_dt = datetime.utcnow() - timedelta(days=days)
-    cutoff = cutoff_dt.strftime("%Y-%m-%d")
+    cutoff = clock.days_ago_str(days)
     entries = [m for m in load_mental() if m.get("score") is not None and m.get("date", "") >= cutoff]
 
     if not entries:

@@ -12,6 +12,8 @@ alongside the numeric trackers, the same way a physical journal's
 from __future__ import annotations
 
 import hashlib
+
+import clock
 from datetime import datetime
 from typing import List, Optional
 
@@ -51,12 +53,12 @@ DAILY_PROMPTS: List[str] = [
 
 def get_daily_prompt(date: Optional[str] = None) -> str:
     """Returns the prompt for `date` (YYYY-MM-DD string, default today,
-    UTC). Deterministic: hashing the date string means the same date
+    the user's local day). Deterministic: hashing the date string means the same date
     always maps to the same prompt, without needing to persist any
     "which prompt did we show" state, and the sequence isn't a simple
     day-of-year cycle either (so it doesn't repeat on a predictable
     yearly schedule)."""
-    date = date or datetime.utcnow().strftime("%Y-%m-%d")
+    date = date or clock.today_str()
     digest = hashlib.sha256(date.encode("utf-8")).hexdigest()
     index = int(digest, 16) % len(DAILY_PROMPTS)
     return DAILY_PROMPTS[index]

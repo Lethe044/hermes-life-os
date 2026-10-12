@@ -15,6 +15,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
+import clock
 from storage import load_spending
 
 
@@ -26,9 +27,8 @@ def compute_spending_trends(days: int = 30) -> Dict[str, Any]:
     so a brand-new or a stopped category is visible rather than
     silently dropped.
     """
-    now = datetime.utcnow()
-    current_start = (now - timedelta(days=days)).strftime("%Y-%m-%d")
-    previous_start = (now - timedelta(days=days * 2)).strftime("%Y-%m-%d")
+    current_start = clock.days_ago_str(days)
+    previous_start = clock.days_ago_str(days * 2)
     previous_end = current_start
 
     current_by_cat: Dict[str, float] = defaultdict(float)

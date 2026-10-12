@@ -11,6 +11,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "demo"))
 
+import clock  # noqa: E402 - needs the demo/ path set up above
+
 
 @pytest.fixture()
 def hydration_summary(tmp_path, monkeypatch):
@@ -27,7 +29,7 @@ def hydration_summary(tmp_path, monkeypatch):
 
 
 def _days_ago(n: int) -> str:
-    return (datetime.utcnow() - timedelta(days=n)).strftime("%Y-%m-%d")
+    return clock.days_ago_str(n)
 
 
 class TestComputeHydrationSummary:

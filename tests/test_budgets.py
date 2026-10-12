@@ -10,6 +10,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "demo"))
 
+import clock  # noqa: E402 - needs the demo/ path set up above
+
 
 @pytest.fixture()
 def budgets(tmp_path, monkeypatch):
@@ -86,7 +88,7 @@ class TestComputeBudgetStatus:
         from datetime import datetime
         from storage import load_spending, save_spending
         budgets.set_budget("food", 100)
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = clock.today_str()
         save_spending([{"date": today, "category": "food", "amount": 40}])
         result = budgets.compute_budget_status()
         assert result[0]["spent"] == 40.0
@@ -98,7 +100,7 @@ class TestComputeBudgetStatus:
         from datetime import datetime
         from storage import save_spending
         budgets.set_budget("food", 10)
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = clock.today_str()
         save_spending([{"date": today, "category": "food", "amount": 50}])
         result = budgets.compute_budget_status()
         assert result[0]["over"] is True
@@ -121,7 +123,7 @@ class TestComputeBudgetStatus:
         from datetime import datetime
         from storage import save_spending
         budgets.set_budget("food", 0)
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = clock.today_str()
         save_spending([{"date": today, "category": "food", "amount": 5}])
         result = budgets.compute_budget_status()
         assert result[0]["pct_used"] == 100.0
@@ -165,7 +167,7 @@ class TestCaseInsensitiveSpending:
         from datetime import datetime
         from storage import save_spending
         budgets.set_budget("food", 100)
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = clock.today_str()
         save_spending([
             {"date": today, "category": "Food", "amount": 30},
             {"date": today, "category": "FOOD", "amount": 20},
@@ -178,7 +180,7 @@ class TestCaseInsensitiveSpending:
         from datetime import datetime
         from storage import save_spending
         budgets.set_budget("Groceries", 100)
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = clock.today_str()
         save_spending([{"date": today, "category": "groceries", "amount": 45}])
         assert budgets.compute_budget_status()[0]["spent"] == 45.0
 
@@ -186,7 +188,7 @@ class TestCaseInsensitiveSpending:
         from datetime import datetime
         from storage import save_spending
         budgets.set_budget("uncategorized", 100)
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = clock.today_str()
         save_spending([{"date": today, "amount": 15}, {"date": today, "category": None, "amount": 5}])
         assert budgets.compute_budget_status()[0]["spent"] == 20.0
 

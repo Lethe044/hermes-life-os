@@ -14,6 +14,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
+import clock
 from storage import load_fitness
 
 
@@ -25,7 +26,7 @@ def compute_workout_summary(days: int = 30) -> Dict[str, Any]:
     that had at least one workout logged, regardless of the lookback
     window - a workout habit stopping mid-window still breaks it.
     """
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = clock.days_ago_str(days)
     workouts = [w for w in load_fitness() if w.get("date", "") >= cutoff]
 
     if not workouts:
@@ -39,7 +40,7 @@ def compute_workout_summary(days: int = 30) -> Dict[str, Any]:
 
     all_dates = {w.get("date", "") for w in load_fitness()}
     streak = 0
-    cursor = datetime.utcnow().date()
+    cursor = clock.today()
     while cursor.strftime("%Y-%m-%d") in all_dates:
         streak += 1
         cursor -= timedelta(days=1)

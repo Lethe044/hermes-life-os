@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
+import clock
 from storage import load_mental
 
 
@@ -21,7 +22,7 @@ def compute_meditation_summary(days: int = 30) -> Dict[str, Any]:
     "avg_duration", "days_with_session", "consistency_pct"} over the
     last `days` days.
     """
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = clock.days_ago_str(days)
     sessions = [m for m in load_mental()
                 if m.get("type") == "meditation" and m.get("date", "") >= cutoff]
 

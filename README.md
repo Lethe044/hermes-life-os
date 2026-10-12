@@ -1562,9 +1562,68 @@ right shape, consistent with the encryption key), the memory journal
 interrupted write, backups (any at all, age of the newest, readable,
 complete, older ones unreadable), reminders (a time that can never fire,
 clashing ids, past one-offs) and budgets (bad limits, duplicate
-categories, out-of-range alert thresholds). Exit status is 0 unless there
-is an error (or, with `--strict`, a warning). The same report is available
-in chat as `run_health_check`.
+categories, out-of-range alert thresholds), the day-start setting (an
+invalid `LIFE_OS_DAY_START_HOUR` is flagged instead of silently ignored)
+and entries dated in the future (a sign of a wrong computer clock or a bad
+import). Exit status is 0 unless there is an error (or, with `--strict`, a
+warning). The same report is available in chat as `run_health_check`.
+
+## Local Days, Night Owls & Backdating
+
+Every tracker stamps its entries with a calendar date, and everything that
+reads them back (streaks, "last N days", the budget month) has to agree on
+what "today" is. Before v1.39.0 the writers used your local clock while
+about a dozen readers used UTC, so for part of every day the two disagreed:
+a dose logged at 00:30 in Istanbul did not count towards today's streak,
+an expense logged just after midnight on the 1st landed in last month's
+budget, and in UTC+14 the streak was wrong most of the day. All of them now
+share one source, `demo/clock.py`, which is your local day.
+
+The memory journal is deliberately different: its entries carry a UTC
+timestamp and the journal-based tools (life score, achievements, heatmap,
+correlations, "on this day") keep working in UTC.
+
+**Night owls:** set `LIFE_OS_DAY_START_HOUR` (0-12, default 0) to the hour
+your day really starts. With `LIFE_OS_DAY_START_HOUR=4`, something logged at
+01:30 counts for the previous calendar day.
+
+```bash
+export LIFE_OS_DAY_START_HOUR=4        # Windows: set LIFE_OS_DAY_START_HOUR=4
+```
+
+**Backdating:** forgot to log yesterday's lunch? The 13 log tools
+(`log_meal`, `log_sleep`, `log_hydration`, `log_workout`, `log_stress`,
+`log_meditation`, `log_gratitude`, `log_focus_session`, `log_expense`,
+`log_social_interaction`, `log_substance`, `log_reading`,
+`log_medication`) take an optional `date` (`YYYY-MM-DD`):
+
+```
+"I had a salad for lunch yesterday, about 350 calories"
+"log 2 glasses of water for 2026-10-09"
+```
+
+Future dates, dates more than 365 days back and anything that is not a real
+date are rejected with a clear message and nothing is written. A backdated
+entry is also filed under that day in the memory journal. Backdated
+hydration only joins the log and leaves today's running counter alone.
+
+## Fixing Expenses
+
+An expense used to be impossible to correct: a typo in the amount or a
+double entry stayed in the totals and the budgets for good. Every expense
+now has a short id (shown when you log it), and three tools manage them:
+
+```
+"show my expenses from the last week"           -> list_expenses
+"that lunch was 14.50, not 41.50"               -> update_expense
+"delete the duplicate coffee"                   -> delete_expense
+```
+
+`update_expense` can change the amount, category, note or date; invalid
+values change nothing. Updates and deletes also fix the matching memory
+journal entry, so the life score and "on this day" agree with the spending
+data. Expenses saved by older versions get an id the first time you list
+them.
 
 ## Spending, Social & Substance Tracking
 
@@ -1675,6 +1734,27 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.39.0 - Local Days, Backdating, Fixing Expenses**
+- **Fix:** streaks, "last N days" windows and the budget month used UTC
+  while entries were stamped with local dates. Outside UTC a dose logged
+  "today" could miss today's streak for hours, an expense after midnight on
+  the 1st counted in the previous month's budget, and in UTC+14 the
+  medication streak read 0 most of the day. A single `demo/clock.py` now
+  defines the user's day for all dated trackers (the UTC memory journal
+  analytics are unchanged on purpose).
+- New `LIFE_OS_DAY_START_HOUR` (0-12) for night owls; invalid values are
+  flagged by the doctor.
+- **Backdating:** 13 log tools accept an optional `date`, with validation
+  (no future, at most 365 days back).
+- **Expenses can be fixed:** new `list_expenses`, `update_expense` and
+  `delete_expense`; expenses carry ids and stay in sync with the memory
+  journal.
+- Doctor: new clock and future-dated-entries checks.
+- Tests run under a pinned clock, so they cover midnight boundaries in any
+  time zone; the suite was run under UTC, Istanbul, Kiritimati (+14), Pago
+  Pago (-11) and Los Angeles.
+- 270 new tests - suite grew from 2017 to 2287.
 
 **v1.38.0 - Data Safety: Complete Backups, Restore, Doctor**
 - **Fix (data loss):** `hermes-life-os-rekey` only re-encrypted 9 of the 18

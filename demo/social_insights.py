@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 
+import clock
 from storage import load_social
 
 
@@ -25,7 +26,7 @@ def compute_social_insights(days: int = 30) -> Dict[str, Any]:
     needs a non-empty "with_who" to be counted; blank entries are
     excluded from the breakdown but still counted in the total.
     """
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = clock.days_ago_str(days)
     interactions = [s for s in load_social() if s.get("date", "") >= cutoff]
 
     if not interactions:

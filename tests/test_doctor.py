@@ -424,7 +424,7 @@ class TestRunChecks:
             raise RuntimeError("no cryptography")
         monkeypatch.setattr(doc.storage, "encrypt_text", boom)
         areas = [f["area"] for f in doc.run_checks()]
-        assert areas == ["encryption", "temp files"]
+        assert areas == ["encryption", "temp files", "clock"]
 
     def test_never_modifies_anything(self, doc):
         doc.storage.save_habits([{"name": "a"}])
@@ -516,3 +516,74 @@ class TestMainCLI:
         doc.storage.data_store_path("habits").write_text("{", encoding="utf-8")
         assert doc.main(["--profile", "clean"]) == 0
         assert doc.main(["--profile", "default"]) == 1
+
+
+class TestCheckClock:
+    @pytest.fixture(autouse=True)
+    def _frozen(self, monkeypatch):
+        import clock
+        monkeypatch.setattr(clock, "now", lambda: datetime(2026, 10, 12, 9, 0))
+
+    def test_default(self, doc):
+        f = doc.check_clock()
+        assert _levels(f) == ["ok"] and "midnight to midnight" in f[0]["message"]
+
+    def test_custom_day_start_is_reported(self, doc, monkeypatch):
+        monkeypatch.setenv("LIFE_OS_DAY_START_HOUR", "4")
+        f = doc.check_clock()
+        assert _levels(f) == ["ok"] and "04:00" in f[0]["message"]
+
+    @pytest.mark.parametrize("raw", ["abc", "25", "-1", "3.5"])
+    def test_invalid_value_warns(self, doc, monkeypatch, raw):
+        monkeypatch.setenv("LIFE_OS_DAY_START_HOUR", raw)
+        f = doc.check_clock()
+        assert _levels(f) == ["warn"] and "LIFE_OS_DAY_START_HOUR" in f[0]["message"]
+
+
+class TestCheckFutureDates:
+    @pytest.fixture(autouse=True)
+    def _frozen(self, monkeypatch):
+        import clock
+        monkeypatch.setattr(clock, "now", lambda: datetime(2026, 10, 12, 9, 0))
+
+    def test_clean(self, doc):
+        doc.storage.save_spending([{"date": "2026-10-12", "amount": 1}])
+        f = doc.check_future_dates()
+        assert _levels(f) == ["ok"] and f[0]["area"] == "dates"
+
+    def test_empty_stores_are_fine(self, doc):
+        assert _levels(doc.check_future_dates()) == ["ok"]
+
+    def test_tomorrow_is_tolerated_but_the_day_after_is_not(self, doc):
+        doc.storage.save_spending([{"date": "2026-10-13", "amount": 1}])
+        assert _levels(doc.check_future_dates()) == ["ok"]
+        doc.storage.save_spending([{"date": "2026-10-13", "amount": 1}, {"date": "2026-10-14", "amount": 2}])
+        f = doc.check_future_dates()
+        assert _levels(f) == ["warn"] and f[0]["area"] == "spending"
+        assert "1 entry" in f[0]["message"] and "2026-10-14" in f[0]["message"]
+
+    def test_counts_and_latest(self, doc):
+        doc.storage.save_sleep([{"date": "2027-01-01"}, {"date": "2026-12-01"}, {"date": "2026-10-12"}])
+        f = doc.check_future_dates()
+        assert "2 entries" in f[0]["message"] and "latest 2027-01-01" in f[0]["message"]
+
+    def test_hydration_log_is_checked(self, doc):
+        doc.storage.save_hydration({"goal": 8, "log": [{"date": "2026-11-30", "glasses": 1}]})
+        f = doc.check_future_dates()
+        assert _levels(f) == ["warn"] and f[0]["area"] == "hydration"
+
+    def test_one_warning_per_store(self, doc):
+        doc.storage.save_fitness([{"date": "2027-01-01"}])
+        doc.storage.save_focus([{"date": "2027-01-01"}])
+        assert sorted(f["area"] for f in doc.check_future_dates()) == ["fitness", "focus"]
+
+    def test_malformed_entries_do_not_crash(self, doc):
+        doc.storage.save_spending([{"amount": 1}, {"date": 5}, "junk", {"date": None}])
+        assert _levels(doc.check_future_dates()) == ["ok"]
+
+    def test_is_part_of_run_checks_and_read_only(self, doc, tmp_path):
+        doc.storage.save_spending([{"date": "2027-01-01", "amount": 1}])
+        before = _snapshot(tmp_path)
+        findings = doc.run_checks()
+        assert "spending" in {f["area"] for f in findings if f["level"] == "warn"}
+        assert _snapshot(tmp_path) == before

@@ -14,6 +14,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
+import clock
 from storage import load_hydration
 
 
@@ -27,7 +28,7 @@ def compute_hydration_summary(days: int = 30) -> Dict[str, Any]:
     """
     hydration = load_hydration()
     goal = hydration.get("goal", 8)
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = clock.days_ago_str(days)
 
     by_date: Dict[str, int] = defaultdict(int)
     for entry in hydration.get("log", []):
@@ -49,7 +50,7 @@ def compute_hydration_summary(days: int = 30) -> Dict[str, Any]:
         all_by_date[entry.get("date", "")] += entry.get("glasses", 0)
 
     streak = 0
-    cursor = datetime.utcnow().date()
+    cursor = clock.today()
     while all_by_date.get(cursor.strftime("%Y-%m-%d"), 0) >= goal:
         streak += 1
         cursor -= timedelta(days=1)

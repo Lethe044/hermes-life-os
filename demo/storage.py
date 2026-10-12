@@ -401,6 +401,12 @@ def delete_memory_entry(entry_id: str) -> bool:
     _rewrite_all_memory_entries(remaining)
     return True
 
+def find_memory_ids(field: str, value) -> List[str]:
+    """Ids of the memory entries whose `field` equals `value` (used to keep a
+    tracker row and its journal entry in sync)."""
+    return [e["id"] for e in _read_all_memory_entries()
+            if e.get("id") and e.get(field) == value]
+
 def search_memory(query: str, limit: int = 10) -> List[Dict]:
     if not MEMORY_FILE.exists():
         return []
