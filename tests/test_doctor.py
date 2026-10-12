@@ -587,3 +587,53 @@ class TestCheckFutureDates:
         findings = doc.run_checks()
         assert "spending" in {f["area"] for f in findings if f["level"] == "warn"}
         assert _snapshot(tmp_path) == before
+
+
+class TestCheckEntryIds:
+    def test_clean(self, doc):
+        doc.storage.save_nutrition([{"date": "2026-10-12", "id": "a1"}])
+        doc.storage.write_memory({"type": "meal", "log_id": "a1"})
+        f = doc.check_entry_ids()
+        assert _levels(f) == ["ok"] and f[0]["area"] == "entry ids"
+
+    def test_empty(self, doc):
+        assert _levels(doc.check_entry_ids()) == ["ok"]
+
+    def test_rows_without_ids_are_fine(self, doc):
+        doc.storage.save_sleep([{"date": "2026-10-12"}])
+        assert _levels(doc.check_entry_ids()) == ["ok"]
+
+    def test_duplicate_ids_warn_per_store(self, doc):
+        doc.storage.save_sleep([{"id": "x1"}, {"id": "x1"}, {"id": "y2"}])
+        doc.storage.save_spending([{"id": "z"}, {"id": "z"}])
+        f = doc.check_entry_ids()
+        assert sorted(x["area"] for x in f) == ["sleep", "spending"]
+        assert "1 entry id(s)" in f[0]["message"]
+
+    def test_same_id_in_different_stores_is_not_a_duplicate(self, doc):
+        doc.storage.save_sleep([{"id": "x1"}])
+        doc.storage.save_fitness([{"id": "x1"}])
+        assert _levels(doc.check_entry_ids()) == ["ok"]
+
+    def test_orphan_journal_links_warn(self, doc):
+        doc.storage.save_spending([{"id": "keep"}])
+        doc.storage.write_memory({"type": "expense", "expense_id": "keep"})
+        doc.storage.write_memory({"type": "expense", "expense_id": "gone"})
+        doc.storage.write_memory({"type": "meal", "log_id": "gone2"})
+        f = doc.check_entry_ids()
+        assert _levels(f) == ["warn"] and f[0]["area"] == "journal" and "2 journal entries" in f[0]["message"]
+
+    def test_unlinked_memory_is_ignored(self, doc):
+        doc.storage.write_memory({"type": "note", "content": "x"})
+        assert _levels(doc.check_entry_ids()) == ["ok"]
+
+    def test_malformed_stores_do_not_crash(self, doc):
+        doc.storage.save_sleep([{"id": 5}, "junk", {"id": ""}, None])
+        assert _levels(doc.check_entry_ids()) == ["ok"]
+
+    def test_part_of_run_checks_and_read_only(self, doc, tmp_path):
+        doc.storage.save_sleep([{"id": "d"}, {"id": "d"}])
+        before = _snapshot(tmp_path)
+        findings = doc.run_checks()
+        assert "sleep" in {f["area"] for f in findings if f["level"] == "warn"}
+        assert _snapshot(tmp_path) == before
