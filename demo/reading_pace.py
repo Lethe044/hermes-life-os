@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
+import clock
 from storage import load_reading
 
 
@@ -52,7 +53,7 @@ def compute_reading_pace(title: str) -> Dict[str, Any]:
         if pages_per_day > 0:
             estimated_days_remaining = _ceil_div(pages_remaining, pages_per_day)
             estimated_finish_date = (
-                datetime.utcnow() + timedelta(days=estimated_days_remaining)
+                clock.effective_now() + timedelta(days=estimated_days_remaining)
             ).strftime("%Y-%m-%d")
 
     return {

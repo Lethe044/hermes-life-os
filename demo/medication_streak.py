@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict
 
 
+import clock
 from storage import load_medication
 
 
@@ -33,7 +34,7 @@ def compute_medication_streak(med_name: str) -> Dict[str, Any]:
     taken_dates = {m.get("date", "") for m in logs if m.get("taken", True)}
 
     current_streak = 0
-    cursor = datetime.utcnow().date()
+    cursor = clock.today()
     while cursor.strftime("%Y-%m-%d") in taken_dates:
         current_streak += 1
         cursor -= timedelta(days=1)
@@ -41,7 +42,7 @@ def compute_medication_streak(med_name: str) -> Dict[str, Any]:
     longest_streak = 0
     running = 0
     for offset in range(400, -1, -1):
-        date_str = (datetime.utcnow() - timedelta(days=offset)).strftime("%Y-%m-%d")
+        date_str = clock.days_ago_str(offset)
         if date_str in taken_dates:
             running += 1
             longest_streak = max(longest_streak, running)

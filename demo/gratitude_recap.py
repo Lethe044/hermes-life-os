@@ -15,6 +15,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
+import clock
 from storage import load_mental
 
 _STOPWORDS = {
@@ -35,7 +36,7 @@ def compute_gratitude_recap(days: int = 30, top_n: int = 5) -> Dict[str, Any]:
     last `days` days. "recent_items" holds up to the 5 most recent
     individual gratitude items, most recent first.
     """
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = clock.days_ago_str(days)
     entries = [m for m in load_mental()
                if m.get("type") == "gratitude" and m.get("date", "") >= cutoff]
 

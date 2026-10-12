@@ -15,6 +15,8 @@ Checks:
     plaintext file although a key is set)
   * the memory journal: how many lines cannot be read, duplicate entry ids
   * leftover .tmp files from an interrupted write
+  * the clock: an invalid LIFE_OS_DAY_START_HOUR, and entries dated in the
+    future (a wrong computer clock or a bad import)
   * backups: whether there are any, how old the newest is, whether it is
     readable and complete, whether older ones are unreadable
   * reminders: timed reminders whose time can never fire, ids that clash,
@@ -38,12 +40,13 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import clock
 import storage
 import backup
 import budgets
@@ -216,6 +219,54 @@ def check_leftovers() -> List[Dict[str, str]]:
                      f"it is safe to delete.") for p in leftovers]
 
 
+def check_clock() -> List[Dict[str, str]]:
+    """The day-start setting (LIFE_OS_DAY_START_HOUR): flags an invalid
+    value, which is otherwise silently ignored."""
+    problem = clock.day_start_problem()
+    if problem:
+        return [_finding(WARN, "clock", problem)]
+    hour = clock.day_start_hour()
+    if hour:
+        return [_finding(OK, "clock", f"Your day starts at {hour:02d}:00 (LIFE_OS_DAY_START_HOUR), "
+                                       f"so entries logged earlier count for the previous day.")]
+    return [_finding(OK, "clock", "Days run midnight to midnight, local time.")]
+
+
+# stores that hold a list of entries, each with a "date" (hydration keeps
+# its entries under ["log"], handled separately)
+_DATED_LIST_STORES = ["nutrition", "sleep", "fitness", "focus", "mental", "spending", "social",
+                      "substance", "reading", "medication"]
+
+
+def check_future_dates() -> List[Dict[str, str]]:
+    """Entries dated more than a day after today. The writers use the same
+    local clock as this check, so that only happens after a hand-edit, an
+    import with bad dates, or a computer clock that was set wrong when the
+    entry was logged - and it skews every "last N days" window."""
+    limit = (clock.today() + timedelta(days=1)).strftime("%Y-%m-%d")
+    findings: List[Dict[str, str]] = []
+    for name in _DATED_LIST_STORES + ["hydration"]:
+        try:
+            data = storage.load_store(name)
+        except Exception:  # noqa: BLE001 - unreadable stores are reported by check_stores
+            continue
+        if name == "hydration":
+            data = data.get("log", []) if isinstance(data, dict) else []
+        if not isinstance(data, list):
+            continue
+        future = sorted(e["date"] for e in data
+                        if isinstance(e, dict) and isinstance(e.get("date"), str) and e["date"] > limit)
+        if future:
+            findings.append(_finding(
+                WARN, name,
+                f"{len(future)} entr{'y' if len(future) == 1 else 'ies'} dated in the future "
+                f"(latest {future[-1]}). That usually means the computer's clock was wrong when "
+                f"they were logged, or an import used bad dates."))
+    if not findings:
+        findings.append(_finding(OK, "dates", "No entries are dated in the future."))
+    return findings
+
+
 def _has_any_data() -> bool:
     return storage.MEMORY_FILE.exists() or any(p.exists() for p in storage.data_store_paths())
 
@@ -360,7 +411,9 @@ def run_checks(now: Optional[datetime] = None) -> List[Dict[str, str]]:
         findings += check_stores()
         findings += check_memory()
     findings += check_leftovers()
+    findings += check_clock()
     if usable:
+        findings += check_future_dates()
         findings += check_backups(now)
         findings += check_reminders(now)
         findings += check_budgets()

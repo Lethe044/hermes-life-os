@@ -15,6 +15,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
+import clock
 from storage import load_nutrition
 
 
@@ -23,7 +24,7 @@ def compute_meal_summary(days: int = 30) -> Dict[str, Any]:
     "avg_calories_per_day", "by_meal_time": {time: count},
     "top_foods": [(food, count), ...]} over the last `days` days.
     """
-    cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = clock.days_ago_str(days)
     meals = [m for m in load_nutrition() if m.get("date", "") >= cutoff]
 
     if not meals:
