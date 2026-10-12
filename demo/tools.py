@@ -12,6 +12,7 @@ Extracted from the original monolithic demo_life_os.py.
 from __future__ import annotations
 
 import json
+import uuid
 import time
 
 import clock
@@ -56,10 +57,13 @@ console = Console(width=min(110, shutil.get_terminal_size().columns))
 # Tool implementations
 # ---------------------------------------------------------------------------
 
+_TRACKER_NAMES = ["meals", "sleep", "workouts", "stress", "meditation", "gratitude", "focus",
+                  "social", "substances", "reading", "medication"]
+
 _BACKDATABLE = frozenset({
     "log_meal", "log_sleep", "log_hydration", "log_workout", "log_stress", "log_meditation",
     "log_gratitude", "log_focus_session", "log_expense", "log_social_interaction",
-    "log_substance", "log_reading", "log_medication",
+    "log_substance", "log_reading", "log_medication", "log_dream",
 })
 
 _ENTRY_DATE_PROP = {
@@ -82,6 +86,7 @@ def _memory_stamp(date: str) -> Dict[str, str]:
 def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
 
     log_date = None
+    log_id = None
     log_stamp: Dict[str, str] = {}
     if name in _BACKDATABLE:
         try:
@@ -89,6 +94,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         except ValueError as e:
             return f"Not logged: {e}"
         log_stamp = _memory_stamp(log_date)
+        log_id = uuid.uuid4().hex[:8]
 
     # ── remember ──────────────────────────────────────────────────────────────
     if name == "remember":
@@ -149,15 +155,22 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
     # ── delete_entry ─────────────────────────────────────────────────────────
     elif name == "delete_entry":
         entry_id = inp.get("entry_id", "")
+        target = next((m for m in get_all_memory() if m.get("id") == entry_id), None)
         if delete_memory_entry(entry_id):
-            return f"Deleted entry [id={entry_id}]. This can't be undone."
+            note = ""
+            if target and (target.get("expense_id") or target.get("log_id")):
+                from entries import delete_linked_row
+                linked = delete_linked_row(target)
+                if linked:
+                    note = f" The linked {linked[0]} entry was removed too."
+            return f"Deleted entry [id={entry_id}].{note} This can't be undone."
         return (f"No entry found with id '{entry_id}'. Use recall first to find "
                 f"the id of the entry you want to delete.")
 
     # ── log_meal ──────────────────────────────────────────────────────────────
     elif name == "log_meal":
         meal = {
-            "date":     log_date,
+            "id": log_id, "date":     log_date,
             "time":     inp.get("meal_time", "unknown"),
             "food":     inp.get("food", ""),
             "calories": inp.get("calories", 0),
@@ -169,7 +182,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         nutrition = load_nutrition()
         nutrition.append(meal)
         save_nutrition(nutrition)
-        write_memory({**log_stamp, "type": "meal", "content": inp.get("food", ""),
+        write_memory({**log_stamp, "log_id": log_id, "type": "meal", "content": inp.get("food", ""),
                       "calories": inp.get("calories", 0), "meal_time": inp.get("meal_time", "")})
         today_meals = [m for m in nutrition if m["date"] == log_date]
         total_cal = sum(m.get("calories", 0) for m in today_meals)
@@ -180,7 +193,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
     # ── log_sleep ─────────────────────────────────────────────────────────────
     elif name == "log_sleep":
         entry = {
-            "date":      log_date,
+            "id": log_id, "date":      log_date,
             "bedtime":   inp.get("bedtime", ""),
             "wake_time": inp.get("wake_time", ""),
             "hours":     inp.get("hours", 0),
@@ -190,7 +203,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         sleep_log = load_sleep()
         sleep_log.append(entry)
         save_sleep(sleep_log)
-        write_memory({**log_stamp, "type": "sleep", "content": f"{inp.get('hours',0)}h sleep",
+        write_memory({**log_stamp, "log_id": log_id, "type": "sleep", "content": f"{inp.get('hours',0)}h sleep",
                       "hours": inp.get("hours", 0), "quality": inp.get("quality", 5)})
         avg_quality = sum(s.get("quality", 5) for s in sleep_log[-7:]) / min(7, len(sleep_log))
         avg_hours   = sum(s.get("hours", 0) for s in sleep_log[-7:]) / min(7, len(sleep_log))
@@ -226,7 +239,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
     # ── log_workout ───────────────────────────────────────────────────────────
     elif name == "log_workout":
         entry = {
-            "date":      log_date,
+            "id": log_id, "date":      log_date,
             "type":      inp.get("workout_type", ""),
             "duration":  inp.get("duration_min", 0),
             "intensity": inp.get("intensity", "medium"),
@@ -236,7 +249,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         fitness = load_fitness()
         fitness.append(entry)
         save_fitness(fitness)
-        write_memory({**log_stamp, "type": "workout", "content": f"{inp.get('workout_type','')} {inp.get('duration_min',0)}min",
+        write_memory({**log_stamp, "log_id": log_id, "type": "workout", "content": f"{inp.get('workout_type','')} {inp.get('duration_min',0)}min",
                       "workout_type": inp.get("workout_type", ""), "duration": inp.get("duration_min", 0)})
         this_week = [f for f in fitness if
                      datetime.strptime(f["date"], "%Y-%m-%d") >=
@@ -247,7 +260,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
     # ── log_stress ────────────────────────────────────────────────────────────
     elif name == "log_stress":
         entry = {
-            "date":    log_date,
+            "id": log_id, "date":    log_date,
             "score":   inp.get("score", 5),
             "trigger": inp.get("trigger", ""),
             "notes":   inp.get("notes", ""),
@@ -255,7 +268,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         mental = load_mental()
         mental.append(entry)
         save_mental(mental)
-        write_memory({**log_stamp, "type": "stress", "content": inp.get("trigger", "stress logged"),
+        write_memory({**log_stamp, "log_id": log_id, "type": "stress", "content": inp.get("trigger", "stress logged"),
                       "score": inp.get("score", 5)})
         recent_stress = [m for m in mental[-7:] if m.get("score")]
         avg = sum(m["score"] for m in recent_stress) / len(recent_stress) if recent_stress else 0
@@ -266,11 +279,11 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
     elif name == "log_meditation":
         duration = inp.get("duration_min", 10)
         mental   = load_mental()
-        entry = {"date": log_date, "type": "meditation",
+        entry = {"id": log_id, "date": log_date, "type": "meditation",
                  "duration": duration, "notes": inp.get("notes", "")}
         mental.append(entry)
         save_mental(mental)
-        write_memory({**log_stamp, "type": "meditation", "content": f"{duration}min meditation",
+        write_memory({**log_stamp, "log_id": log_id, "type": "meditation", "content": f"{duration}min meditation",
                       "duration": duration})
         total_sessions = sum(1 for m in mental if m.get("type") == "meditation")
         return f"Meditation logged: {duration} minutes. Total sessions: {total_sessions}"
@@ -279,17 +292,17 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
     elif name == "log_gratitude":
         items = inp.get("items", [])
         mental = load_mental()
-        entry = {"date": log_date, "type": "gratitude",
+        entry = {"id": log_id, "date": log_date, "type": "gratitude",
                  "items": items, "notes": inp.get("notes", "")}
         mental.append(entry)
         save_mental(mental)
-        write_memory({**log_stamp, "type": "gratitude", "content": ", ".join(items[:3])})
+        write_memory({**log_stamp, "log_id": log_id, "type": "gratitude", "content": ", ".join(items[:3])})
         return f"Gratitude logged: {', '.join(items[:3])}"
 
     # ── log_focus_session ─────────────────────────────────────────────────────
     elif name == "log_focus_session":
         entry = {
-            "date":        log_date,
+            "id": log_id, "date":        log_date,
             "duration":    inp.get("duration_min", 25),
             "task":        inp.get("task", ""),
             "completed":   inp.get("completed", True),
@@ -299,7 +312,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         focus = load_focus()
         focus.append(entry)
         save_focus(focus)
-        write_memory({**log_stamp, "type": "focus", "content": inp.get("task", "focus session"),
+        write_memory({**log_stamp, "log_id": log_id, "type": "focus", "content": inp.get("task", "focus session"),
                       "duration": inp.get("duration_min", 25),
                       "quality": inp.get("quality", 7)})
         today_focus = [f for f in focus if f["date"] == log_date]
@@ -366,6 +379,74 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                 f"{float(row.get('amount', 0)):.2f}, {row.get('category', 'uncategorized')}. "
                 f"This can't be undone.")
 
+    # ── list_logs ─────────────────────────────────────────────────────────────
+    elif name == "list_logs":
+        from entries import list_logs, format_log_list
+        days = inp.get("days", 7)
+        try:
+            rows = list_logs(inp.get("tracker", ""), days=days, limit=inp.get("limit", 20))
+        except (TypeError, ValueError) as e:
+            return str(e) if "tracker" in str(e).lower() else "days and limit must be whole numbers."
+        return format_log_list(inp.get("tracker", ""), rows, days)
+
+    # ── edit_log ──────────────────────────────────────────────────────────────
+    elif name == "edit_log":
+        from entries import edit_log, describe
+        tracker = inp.get("tracker", "")
+        log_ref = inp.get("log_id", "")
+        try:
+            row = edit_log(tracker, log_ref, inp.get("fields"))
+        except ValueError as e:
+            return f"Not changed: {e}"
+        if row is None:
+            return f"No {str(tracker).strip().lower()} entry found with id '{log_ref}'. Use list_logs to find the id."
+        return f"Updated [id={log_ref}]: {row.get('date', '?')}  {describe(tracker, row)}"
+
+    # ── delete_log ────────────────────────────────────────────────────────────
+    elif name == "delete_log":
+        from entries import delete_log, describe
+        tracker = inp.get("tracker", "")
+        log_ref = inp.get("log_id", "")
+        try:
+            row = delete_log(tracker, log_ref)
+        except ValueError as e:
+            return f"Not deleted: {e}"
+        if row is None:
+            return f"No {str(tracker).strip().lower()} entry found with id '{log_ref}'. Use list_logs to find the id."
+        return (f"Deleted [id={log_ref}]: {row.get('date', '?')}  {describe(tracker, row)}. "
+                f"This can't be undone.")
+
+    # ── undo_last_log ─────────────────────────────────────────────────────────
+    elif name == "undo_last_log":
+        from entries import undo_last_log
+        try:
+            result = undo_last_log(inp.get("tracker"))
+        except ValueError as e:
+            return f"Nothing undone: {e}"
+        if result is None:
+            which = f" {str(inp.get('tracker')).strip().lower()}" if inp.get("tracker") else ""
+            return f"Nothing to undo - no{which} entries found."
+        tracker, row, text = result
+        return f"Undid the last {tracker} entry: {row.get('date', '?')}  {text}. This can't be undone."
+
+    # ── get_logging_gaps ──────────────────────────────────────────────────────
+    elif name == "get_logging_gaps":
+        from entries import missing_days, format_missing_days, gaps_overview
+        tracker = inp.get("tracker") or ""
+        days = inp.get("days", 7)
+        if not str(tracker).strip() or str(tracker).strip().lower() == "all":
+            try:
+                return gaps_overview(days)
+            except (TypeError, ValueError):
+                return "days must be a whole number."
+        try:
+            missing = missing_days(tracker, days)
+        except ValueError as e:
+            return str(e) if "tracker" in str(e).lower() else "days must be a whole number."
+        except TypeError:
+            return "days must be a whole number."
+        return format_missing_days(tracker, missing, days)
+
     # ── get_spending_summary ─────────────────────────────────────────────────
     elif name == "get_spending_summary":
         days = inp.get("days", 30)
@@ -389,7 +470,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
     elif name == "log_social_interaction":
         quality = inp.get("quality", 5)
         entry = {
-            "date":        log_date,
+            "id": log_id, "date":        log_date,
             "with_who":    inp.get("with_who", ""),
             "quality":     quality,
             "duration_min": inp.get("duration_min", 0),
@@ -398,7 +479,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         social = load_social()
         social.append(entry)
         save_social(social)
-        write_memory({**log_stamp, "type": "social", "content": f"Time with {inp.get('with_who','')}",
+        write_memory({**log_stamp, "log_id": log_id, "type": "social", "content": f"Time with {inp.get('with_who','')}",
                       "quality": quality, "duration_min": inp.get("duration_min", 0)})
         return f"Social time logged: {inp.get('with_who','')}, quality {quality}/10"
 
@@ -428,7 +509,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         substance = inp.get("substance", "").strip().lower()
         amount = float(inp.get("amount", 0))
         entry = {
-            "date":      log_date,
+            "id": log_id, "date":      log_date,
             "substance": substance,
             "amount":    amount,
             "unit":      inp.get("unit", ""),
@@ -437,7 +518,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         substances = load_substance()
         substances.append(entry)
         save_substance(substances)
-        write_memory({**log_stamp, "type": "substance", "content": f"{substance}: {amount} {inp.get('unit','')}".strip(),
+        write_memory({**log_stamp, "log_id": log_id, "type": "substance", "content": f"{substance}: {amount} {inp.get('unit','')}".strip(),
                       "substance": substance, "amount": amount})
         return f"Logged: {amount} {inp.get('unit','')} {substance}".strip()
 
@@ -460,7 +541,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
     # ── log_reading ───────────────────────────────────────────────────────────
     elif name == "log_reading":
         entry = {
-            "date":    log_date,
+            "id": log_id, "date":    log_date,
             "title":   inp.get("title", ""),
             "minutes": inp.get("minutes", 0),
             "pages":   inp.get("pages", 0),
@@ -470,7 +551,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         reading = load_reading()
         reading.append(entry)
         save_reading(reading)
-        write_memory({**log_stamp, "type": "reading", "content": inp.get("title", ""),
+        write_memory({**log_stamp, "log_id": log_id, "type": "reading", "content": inp.get("title", ""),
                       "minutes": inp.get("minutes", 0), "pages": inp.get("pages", 0)})
         return f"Reading logged: '{inp.get('title','')}'" + (
             f" ({inp.get('minutes')} min)" if inp.get("minutes") else "")
@@ -491,7 +572,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
     elif name == "log_medication":
         taken = inp.get("taken", True)
         entry = {
-            "date":  log_date,
+            "id": log_id, "date":  log_date,
             "name":  inp.get("name", ""),
             "taken": taken,
             "notes": inp.get("notes", ""),
@@ -1607,14 +1688,14 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
     # ── log_dream ──────────────────────────────────────────────────────────────
     elif name == "log_dream":
         entry = {
-            "date":      clock.today_str(),
+            "date":      log_date,
             "content":   inp.get("content", ""),
             "emotions":  inp.get("emotions", []),
             "symbols":   inp.get("symbols", []),
             "tone":      inp.get("tone", "neutral"),
             "vividness": inp.get("vividness", 5),
         }
-        write_memory({"type": "dream", **entry})
+        write_memory({**log_stamp, "type": "dream", **entry})
         # Check for recurring symbols
         recent = get_recent_memory(days=30)
         dream_entries = [r for r in recent if r.get("type") == "dream"]
@@ -1805,6 +1886,50 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "expense_id": {"type": "string"},
         }, "required": ["expense_id"]}}},
+
+    {"type": "function", "function": {"name": "list_logs",
+        "description": "List recent entries of a tracker (newest first) with their ids, so one can be "
+                        "corrected or deleted. Use before edit_log / delete_log. For expenses use list_expenses.",
+        "parameters": {"type": "object", "properties": {
+            "tracker": {"type": "string", "enum": _TRACKER_NAMES},
+            "days":    {"type": "integer", "description": "Look back this many days. Default 7."},
+            "limit":   {"type": "integer", "description": "Max rows, default 20, at most 200."},
+        }, "required": ["tracker"]}}},
+
+    {"type": "function", "function": {"name": "edit_log",
+        "description": "Correct a logged entry (wrong calories, hours, score, date...). `fields` uses the "
+                        "same argument names as the matching log tool, plus date (YYYY-MM-DD). "
+                        "Get log_id from list_logs. Example: tracker meals, fields {calories: 450}.",
+        "parameters": {"type": "object", "properties": {
+            "tracker": {"type": "string", "enum": _TRACKER_NAMES},
+            "log_id":  {"type": "string"},
+            "fields":  {"type": "object", "description": "Only the fields to change."},
+        }, "required": ["tracker", "log_id", "fields"]}}},
+
+    {"type": "function", "function": {"name": "delete_log",
+        "description": "Permanently delete one logged entry (e.g. a duplicate). Get log_id from list_logs.",
+        "parameters": {"type": "object", "properties": {
+            "tracker": {"type": "string", "enum": _TRACKER_NAMES},
+            "log_id":  {"type": "string"},
+        }, "required": ["tracker", "log_id"]}}},
+
+    {"type": "function", "function": {"name": "undo_last_log",
+        "description": "Undo the most recent log entry (\"oops, that was a mistake\"). With no tracker it "
+                        "undoes whatever was logged last (not medication); with a tracker (or "
+                        "expenses) it removes that tracker's newest entry.",
+        "parameters": {"type": "object", "properties": {
+            "tracker": {"type": "string", "enum": _TRACKER_NAMES + ["expenses"]},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_logging_gaps",
+        "description": "Find days with nothing logged for a tracker among the last complete days, so they "
+                        "can be filled in afterwards with the log tool's date argument. Use when the user "
+                        "asks what they forgot to log or wants to catch up.",
+        "parameters": {"type": "object", "properties": {
+            "tracker": {"type": "string", "enum": _TRACKER_NAMES + ["hydration", "expenses", "all"],
+                        "description": "Omit or use all for an overview of every tracker you use."},
+            "days":    {"type": "integer", "description": "How many complete days back. Default 7, at most 366."},
+        }, "required": []}}},
 
     {"type": "function", "function": {"name": "get_spending_summary",
         "description": "Get a spending summary (total, by category, daily average) over a recent window.",
@@ -2438,6 +2563,7 @@ TOOLS = [
         "name": "log_dream",
         "description": "Log a dream from this morning. Include content, emotions, symbols, tone and vividness.",
         "parameters": {"type": "object", "properties": {
+            "date":      dict(_ENTRY_DATE_PROP),
             "content":   {"type": "string", "description": "What happened in the dream"},
             "emotions":  {"type": "array",  "items": {"type": "string"}, "description": "Emotions felt: anxiety, joy, fear, peace, etc."},
             "symbols":   {"type": "array",  "items": {"type": "string"}, "description": "Key symbols: flying, water, exam, chasing, etc."},

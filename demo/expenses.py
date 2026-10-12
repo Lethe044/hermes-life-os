@@ -122,15 +122,21 @@ def update_expense(expense_id: str, amount=None, category=None, notes=None,
     return None
 
 
-def delete_expense(expense_id: str) -> Optional[Dict[str, Any]]:
-    """Removes an expense (and its journal entry). Returns the removed row, or
-    None if no expense has that id."""
+def describe(e: Dict[str, Any]) -> str:
+    return f"{float(e.get('amount', 0)):.2f} {e.get('category', 'uncategorized')}"
+
+
+def delete_expense(expense_id: str, sync_journal: bool = True) -> Optional[Dict[str, Any]]:
+    """Removes an expense (and its journal entry, unless `sync_journal` is
+    False because the caller is deleting that entry itself). Returns the
+    removed row, or None if no expense has that id."""
     spending = _load_with_ids()
     for i, e in enumerate(spending):
         if e.get("id") == expense_id:
             del spending[i]
             save_spending(spending)
-            for mid in find_memory_ids("expense_id", expense_id):
-                delete_memory_entry(mid)
+            if sync_journal:
+                for mid in find_memory_ids("expense_id", expense_id):
+                    delete_memory_entry(mid)
             return e
     return None

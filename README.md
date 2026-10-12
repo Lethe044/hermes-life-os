@@ -1564,8 +1564,9 @@ complete, older ones unreadable), reminders (a time that can never fire,
 clashing ids, past one-offs) and budgets (bad limits, duplicate
 categories, out-of-range alert thresholds), the day-start setting (an
 invalid `LIFE_OS_DAY_START_HOUR` is flagged instead of silently ignored)
-and entries dated in the future (a sign of a wrong computer clock or a bad
-import). Exit status is 0 unless there is an error (or, with `--strict`, a
+entries dated in the future (a sign of a wrong computer clock or a bad
+import) and persistent entry ids (rows that share an id, journal entries
+linked to a row that no longer exists). Exit status is 0 unless there is an error (or, with `--strict`, a
 warning). The same report is available in chat as `run_health_check`.
 
 ## Local Days, Night Owls & Backdating
@@ -1606,6 +1607,44 @@ Future dates, dates more than 365 days back and anything that is not a real
 date are rejected with a clear message and nothing is written. A backdated
 entry is also filed under that day in the memory journal. Backdated
 hydration only joins the log and leaves today's running counter alone.
+
+## Fixing Any Log: List, Edit, Delete, Undo
+
+Expenses were the only thing that could be corrected until v1.40.0. A meal
+logged with the wrong calories or a workout logged twice stayed in every
+average, streak and correlation. Eleven more trackers now have the same
+tools (meals, sleep, workouts, stress, meditation, gratitude, focus, social,
+substances, reading, medication):
+
+```
+"show my meals from the last 3 days"          -> list_logs
+"that lunch was 450 calories, not 300"        -> edit_log
+"delete the duplicate workout"                -> delete_log
+"oops, undo that last log"                    -> undo_last_log
+```
+
+Every entry has a short id (shown by `list_logs`); `edit_log` takes the same
+field names as the matching log tool plus `date`, validates them and changes
+nothing if any is invalid. `undo_last_log` with no tracker removes whatever
+was logged last (medication has no journal entry, so name it explicitly);
+with a tracker name, or `expenses`, it removes that tracker's newest entry.
+Edits and deletes also fix the memory-journal entry the log wrote, and
+deleting a journal entry with `delete_entry` now removes the tracker row it
+was linked to. Older entries get an id the first time they are listed.
+
+## Catching Up on Forgotten Days
+
+`get_logging_gaps` lists the days with nothing logged, so they can be filled
+in with the log tools' `date` argument. With no tracker it gives one line
+per tracker you actually use; with a tracker (including hydration and
+expenses) it lists every empty day. Only complete days count, today is not
+over yet, and it follows your `LIFE_OS_DAY_START_HOUR`. `log_dream` accepts
+`date` too.
+
+```
+"what did I forget to log this week?"         -> get_logging_gaps
+"I slept 7 hours on the 9th"                  -> log_sleep with date 2026-10-09
+```
 
 ## Fixing Expenses
 
@@ -1734,6 +1773,22 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.40.0 - Fix Any Log, Undo, Catch-Up**
+- New **`list_logs`, `edit_log`, `delete_log`** for 11 trackers: until now
+  only expenses could be corrected, so a wrong meal or a duplicate workout
+  stayed in every average and streak. Edits are validated all-or-nothing and
+  keep the memory-journal entry in sync.
+- New **`undo_last_log`**: removes the most recent log of a tracker, or of
+  whatever was logged last.
+- New **`get_logging_gaps`**: days with nothing logged (one line per used
+  tracker, or every empty day for one tracker), to fill in with `date`.
+- `log_dream` accepts `date`. Every new log carries a persistent `id`, and its
+  journal entry a matching `log_id`.
+- `delete_entry` on a linked journal entry now also removes the tracker row
+  (before it left the row behind, still counted in summaries).
+- Doctor: new entry-id check (duplicate ids, orphaned journal links).
+- 192 new tests - suite grew from 2287 to 2479.
 
 **v1.39.0 - Local Days, Backdating, Fixing Expenses**
 - **Fix:** streaks, "last N days" windows and the budget month used UTC

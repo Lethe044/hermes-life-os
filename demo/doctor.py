@@ -17,6 +17,8 @@ Checks:
   * leftover .tmp files from an interrupted write
   * the clock: an invalid LIFE_OS_DAY_START_HOUR, and entries dated in the
     future (a wrong computer clock or a bad import)
+  * entry ids: duplicate ids, and journal entries linked to a tracker row that
+    no longer exists
   * backups: whether there are any, how old the newest is, whether it is
     readable and complete, whether older ones are unreadable
   * reminders: timed reminders whose time can never fire, ids that clash,
@@ -267,6 +269,50 @@ def check_future_dates() -> List[Dict[str, str]]:
     return findings
 
 
+# stores whose rows carry a persistent id (v1.39.0 / v1.40.0)
+_ID_STORES = ["nutrition", "sleep", "fitness", "focus", "mental", "spending", "social",
+              "substance", "reading", "medication"]
+
+
+def check_entry_ids() -> List[Dict[str, str]]:
+    """Persistent entry ids: rows sharing an id (edit/delete by id would only
+    reach the first one) and journal entries linked (expense_id / log_id) to a
+    tracker row that no longer exists, which happens after a partial restore
+    or when a data file is edited by hand."""
+    findings: List[Dict[str, str]] = []
+    all_ids = set()
+    for name in _ID_STORES:
+        try:
+            data = storage.load_store(name)
+        except Exception:  # noqa: BLE001 - unreadable stores are reported by check_stores
+            continue
+        if not isinstance(data, list):
+            continue
+        ids = [e["id"] for e in data if isinstance(e, dict) and isinstance(e.get("id"), str) and e["id"]]
+        all_ids.update(ids)
+        dupes = sorted({i for i in ids if ids.count(i) > 1})
+        if dupes:
+            findings.append(_finding(
+                WARN, name,
+                f"{len(dupes)} entry id(s) are shared by more than one entry ({', '.join(dupes[:3])}"
+                f"{'...' if len(dupes) > 3 else ''}). Editing or deleting by id only reaches the first."))
+    try:
+        memory = storage.get_all_memory()
+    except Exception:  # noqa: BLE001 - reported by check_memory
+        memory = []
+    orphans = [m for m in memory if isinstance(m, dict)
+               and any(m.get(k) and m.get(k) not in all_ids for k in ("expense_id", "log_id"))]
+    if orphans:
+        findings.append(_finding(
+            WARN, "journal",
+            f"{len(orphans)} journal entr{'y' if len(orphans) == 1 else 'ies'} point to a logged entry "
+            f"that no longer exists (a partial restore or a hand-edited data file). They still count "
+            f"in the life score and other journal-based tools."))
+    if not findings:
+        findings.append(_finding(OK, "entry ids", "Entry ids are unique and every journal link has its entry."))
+    return findings
+
+
 def _has_any_data() -> bool:
     return storage.MEMORY_FILE.exists() or any(p.exists() for p in storage.data_store_paths())
 
@@ -414,6 +460,7 @@ def run_checks(now: Optional[datetime] = None) -> List[Dict[str, str]]:
     findings += check_clock()
     if usable:
         findings += check_future_dates()
+        findings += check_entry_ids()
         findings += check_backups(now)
         findings += check_reminders(now)
         findings += check_budgets()
