@@ -637,3 +637,24 @@ class TestCheckEntryIds:
         findings = doc.run_checks()
         assert "sleep" in {f["area"] for f in findings if f["level"] == "warn"}
         assert _snapshot(tmp_path) == before
+
+
+class TestCheckEntryIdsHydration:
+    def test_hydration_rows_count_as_linked_targets(self, doc):
+        doc.storage.save_hydration({"goal": 8, "log": [{"id": "h1", "date": "2026-10-12", "glasses": 2}]})
+        doc.storage.write_memory({"type": "hydration", "log_id": "h1"})
+        assert _levels(doc.check_entry_ids()) == ["ok"]
+
+    def test_hydration_duplicate_ids_warn(self, doc):
+        doc.storage.save_hydration({"goal": 8, "log": [{"id": "h1"}, {"id": "h1"}]})
+        f = doc.check_entry_ids()
+        assert _levels(f) == ["warn"] and f[0]["area"] == "hydration"
+
+    def test_missing_hydration_row_is_an_orphan(self, doc):
+        doc.storage.save_hydration({"goal": 8, "log": []})
+        doc.storage.write_memory({"type": "hydration", "log_id": "h9"})
+        assert doc.check_entry_ids()[0]["area"] == "journal"
+
+    def test_malformed_hydration_store(self, doc):
+        doc.storage.save_hydration({"goal": 8, "log": "nope"})
+        assert _levels(doc.check_entry_ids()) == ["ok"]

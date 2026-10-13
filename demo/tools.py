@@ -58,12 +58,20 @@ console = Console(width=min(110, shutil.get_terminal_size().columns))
 # ---------------------------------------------------------------------------
 
 _TRACKER_NAMES = ["meals", "sleep", "workouts", "stress", "meditation", "gratitude", "focus",
-                  "social", "substances", "reading", "medication"]
+                  "social", "substances", "reading", "hydration", "medication"]
+
+MAX_BATCH = 50
+
+_BATCHABLE = frozenset({
+    "log_meal", "log_sleep", "log_hydration", "log_workout", "log_stress", "log_meditation",
+    "log_gratitude", "log_focus_session", "log_expense", "log_social_interaction",
+    "log_substance", "log_reading", "log_medication", "log_dream",
+})
 
 _BACKDATABLE = frozenset({
     "log_meal", "log_sleep", "log_hydration", "log_workout", "log_stress", "log_meditation",
     "log_gratitude", "log_focus_session", "log_expense", "log_social_interaction",
-    "log_substance", "log_reading", "log_medication", "log_dream",
+    "log_substance", "log_reading", "log_medication", "log_dream", "update_habit",
 })
 
 _ENTRY_DATE_PROP = {
@@ -218,7 +226,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         if is_today and hydration.get("last_date") != log_date:
             hydration["today"] = 0
             hydration["last_date"] = log_date
-        hydration.setdefault("log", []).append({"date": log_date, "glasses": glasses,
+        hydration.setdefault("log", []).append({"id": log_id, "date": log_date, "glasses": glasses,
                                                   "time": time.strftime("%H:%M")})
         if is_today:
             hydration["today"] = hydration.get("today", 0) + glasses
@@ -227,7 +235,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             # A backdated entry only joins the log; the running "today" counter is left alone.
             total = sum(h.get("glasses", 0) for h in hydration["log"] if h.get("date") == log_date)
         save_hydration(hydration)
-        write_memory({**log_stamp, "type": "hydration", "content": f"{glasses} glasses water",
+        write_memory({**log_stamp, "log_id": log_id, "type": "hydration", "content": f"{glasses} glasses water",
                       "glasses": total})
         goal   = hydration.get("goal", 8)
         pct    = min(100, int(total / goal * 100))
@@ -446,6 +454,59 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         except TypeError:
             return "days must be a whole number."
         return format_missing_days(tracker, missing, days)
+
+    # ── get_day_log ───────────────────────────────────────────────────────────
+    elif name == "get_day_log":
+        from entries import day_view
+        try:
+            return day_view(inp.get("date"))
+        except ValueError as e:
+            return str(e)
+
+    # ── search_logs ───────────────────────────────────────────────────────────
+    elif name == "search_logs":
+        from entries import search_logs
+        try:
+            return search_logs(inp.get("query"), days=inp.get("days", 30), limit=inp.get("limit", 20))
+        except (TypeError, ValueError) as e:
+            return str(e) if "search for" in str(e) else "days and limit must be whole numbers."
+
+    # ── find_duplicate_logs ───────────────────────────────────────────────────
+    elif name == "find_duplicate_logs":
+        from entries import find_duplicates
+        try:
+            return find_duplicates(inp.get("days", 30))
+        except (TypeError, ValueError):
+            return "days must be a whole number."
+
+    # ── log_many ──────────────────────────────────────────────────────────────
+    elif name == "log_many":
+        batch_items = inp.get("entries")
+        if not isinstance(batch_items, list) or not batch_items:
+            return "Nothing logged: give a non-empty list of entries, each {tool, args}."
+        if len(batch_items) > MAX_BATCH:
+            return f"Nothing logged: at most {MAX_BATCH} entries per call (got {len(batch_items)})."
+        for n, item in enumerate(batch_items, 1):
+            if (not isinstance(item, dict) or item.get("tool") not in _BATCHABLE
+                    or not isinstance(item.get("args", {}), dict)):
+                return (f"Nothing logged: entry {n} must be {{tool, args}} with tool one of: "
+                        f"{', '.join(sorted(_BATCHABLE))}.")
+            try:
+                clock.resolve_entry_date(item.get("args", {}).get("date"))
+            except ValueError as e:
+                return f"Nothing logged: entry {n} ({item['tool']}): {e}"
+        batch_lines = []
+        batch_ok = 0
+        for n, item in enumerate(batch_items, 1):
+            try:
+                reply = dispatch_tool(item["tool"], dict(item.get("args", {})))
+            except Exception as e:  # noqa: BLE001 - one bad entry must not stop the rest
+                reply = f"Not logged: {type(e).__name__}: {e}"
+            first = str(reply).splitlines()[0] if str(reply) else ""
+            if not first.startswith(("Not logged", "Expense not")):
+                batch_ok += 1
+            batch_lines.append(f"{n}. {item['tool']}: {first}")
+        return f"Logged {batch_ok} of {len(batch_items)} entries.\n" + "\n".join(batch_lines)
 
     # ── get_spending_summary ─────────────────────────────────────────────────
     elif name == "get_spending_summary":
@@ -1245,14 +1306,32 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         completed  = inp.get("completed", True)
         use_freeze = inp.get("use_freeze", False)
         habits     = load_habits()
+        today_s    = clock.today_str()
+        is_today   = log_date == today_s
         found      = False
         freeze_used = False
         freeze_earned = False
+        already_done = False
+        counters_untouched = False
         for h in habits:
             if h["name"].lower() == name_h.lower():
-                if completed:
+                found = True
+                last_done = h.get("last_done")
+                if not is_today:
+                    # A check-in for another day is recorded in the journal (so consistency
+                    # analytics see it) but never moves the running streak counters, which
+                    # describe "up to today".
+                    counters_untouched = True
+                elif completed:
+                    if last_done == log_date:
+                        # Checked in already today: counting it again would inflate the streak.
+                        already_done = True
+                        break
+                    if last_done and (datetime.strptime(log_date, "%Y-%m-%d")
+                                      - datetime.strptime(last_done, "%Y-%m-%d")).days > 1:
+                        h["streak"] = 0  # a day was missed in between: start over
                     h["streak"]    = h.get("streak", 0) + 1
-                    h["last_done"] = clock.today_str()
+                    h["last_done"] = log_date
                     h["best_streak"] = max(h.get("best_streak", 0), h["streak"])
                     # Earn a streak freeze every 7 days of streak, capped at
                     # 3 banked at once - a small forgiveness mechanic so one
@@ -1262,25 +1341,30 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
                         freeze_earned = True
                 elif use_freeze and h.get("freezes_available", 0) > 0:
                     h["freezes_available"] -= 1
-                    h["last_done"] = clock.today_str()
+                    h["last_done"] = log_date
                     freeze_used = True
                     # streak is deliberately left unchanged
                 else:
                     h["streak"] = 0
-                found = True
                 break
         if not found:
             habits.append({
-                "name": name_h, "streak": 1 if completed else 0,
-                "best_streak": 1 if completed else 0,
-                "last_done": clock.today_str() if completed else None,
-                "created": clock.today_str(),
+                "name": name_h,
+                "streak": 1 if (completed and is_today) else 0,
+                "best_streak": 1 if (completed and is_today) else 0,
+                "last_done": log_date if (completed and is_today) else None,
+                "created": log_date,
                 "freezes_available": 0,
             })
+            counters_untouched = not is_today
         save_habits(habits)
         streak  = next((h["streak"] for h in habits if h["name"].lower() == name_h.lower()), 0)
         best    = next((h.get("best_streak", 0) for h in habits if h["name"].lower() == name_h.lower()), 0)
         freezes = next((h.get("freezes_available", 0) for h in habits if h["name"].lower() == name_h.lower()), 0)
+
+        if already_done:
+            return (f"Habit '{name_h}': already checked in today - streak stays at {streak} days "
+                    f"(best: {best}).")
 
         # Record this check-in in the shared memory log so later analytics
         # (habit_consistency.py, habit_correlation.py) can look at a real
@@ -1290,10 +1374,13 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         # outright or protected with a freeze - as opposed to a missed day
         # that reset the streak.
         completed_effective = bool(completed) or freeze_used
-        write_memory({"type": "habit_completion", "content": name_h,
+        write_memory({**log_stamp, "type": "habit_completion", "content": name_h,
                       "habit": name_h, "completed": completed_effective,
                       "used_freeze": freeze_used, "streak": streak})
 
+        if counters_untouched:
+            return (f"Habit '{name_h}': recorded for {log_date} ({'done' if completed else 'missed'}). "
+                    f"The current streak ({streak} days, best: {best}) is unchanged.")
         if freeze_used:
             return (f"Habit '{name_h}': streak protected with a freeze! Still at {streak} days "
                      f"(best: {best}). {freezes} freeze(s) left.")
@@ -1926,10 +2013,45 @@ TOOLS = [
                         "can be filled in afterwards with the log tool's date argument. Use when the user "
                         "asks what they forgot to log or wants to catch up.",
         "parameters": {"type": "object", "properties": {
-            "tracker": {"type": "string", "enum": _TRACKER_NAMES + ["hydration", "expenses", "all"],
+            "tracker": {"type": "string", "enum": _TRACKER_NAMES + ["expenses", "all"],
                         "description": "Omit or use all for an overview of every tracker you use."},
             "days":    {"type": "integer", "description": "How many complete days back. Default 7, at most 366."},
         }, "required": []}}},
+
+    {"type": "function", "function": {"name": "get_day_log",
+        "description": "Show everything logged on one day (default today), grouped by tracker, with ids. "
+                        "Use to review a day, or before correcting entries.",
+        "parameters": {"type": "object", "properties": {
+            "date": {"type": "string", "description": "YYYY-MM-DD. Default today."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "search_logs",
+        "description": "Search tracker entries (food, notes, titles, names, triggers, categories) for some "
+                        "text, e.g. when did I last have pizza, or everything about a person.",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string"},
+            "days":  {"type": "integer", "description": "Look back this many days. Default 30."},
+            "limit": {"type": "integer", "description": "Max results, default 20, at most 100."},
+        }, "required": ["query"]}}},
+
+    {"type": "function", "function": {"name": "find_duplicate_logs",
+        "description": "Report entries that look logged twice (identical entries on the same day). "
+                        "Only reports; remove extras with delete_log / delete_expense.",
+        "parameters": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "Default 30."},
+        }, "required": []}}},
+
+    {"type": "function", "function": {"name": "log_many",
+        "description": "Log several entries in one call, e.g. to catch up on a day. Each entry is "
+                        "{tool, args} with tool one of the log tools (log_meal, log_sleep, ...) and args "
+                        "exactly as for that tool, including an optional date. All dates are checked "
+                        "first: one bad date or shape and nothing is logged. At most 50 entries.",
+        "parameters": {"type": "object", "properties": {
+            "entries": {"type": "array", "items": {"type": "object", "properties": {
+                "tool": {"type": "string", "enum": sorted(_BATCHABLE)},
+                "args": {"type": "object"},
+            }, "required": ["tool"]}},
+        }, "required": ["entries"]}}},
 
     {"type": "function", "function": {"name": "get_spending_summary",
         "description": "Get a spending summary (total, by category, daily average) over a recent window.",
@@ -2437,7 +2559,9 @@ TOOLS = [
         }, "required": ["habit_name"]}}},
 
     {"type": "function", "function": {"name": "update_habit",
-        "description": "Update habit streak. Habits earn a 'streak freeze' every 7 days of streak "
+        "description": "Update habit streak (one check-in per day: repeating it the same day does not "
+                        "add to the streak; a missed day in between restarts it; a date other than "
+                        "today is only recorded, the streak is unchanged). Habits earn a 'streak freeze' every 7 days of streak "
                         "(banked, up to 3) - if a day is missed, set completed=false and "
                         "use_freeze=true to spend one and protect the streak instead of resetting it.",
         "parameters": {"type": "object", "properties": {
@@ -2445,6 +2569,7 @@ TOOLS = [
             "completed":  {"type": "boolean"},
             "use_freeze": {"type": "boolean", "description": "Only relevant when completed=false - "
                            "spend a banked streak freeze instead of resetting the streak to 0."},
+            "date":       dict(_ENTRY_DATE_PROP),
         }, "required": ["habit_name", "completed"]}}},
 
     {"type": "function", "function": {"name": "update_goal",

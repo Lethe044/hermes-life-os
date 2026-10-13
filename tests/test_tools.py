@@ -10,6 +10,23 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "demo"))
 
 
+def run_days(tools, monkeypatch, habit, days, offset=0):
+    """Checks `habit` in on `days` consecutive days (one check-in per day, as in real
+    use) starting `offset` days after 2026-10-01, then leaves the clock on the day
+    after the last one. Returns the last reply."""
+    from datetime import datetime, timedelta
+    import clock
+    base = datetime(2026, 10, 1, 9, 0)
+    result = None
+    for i in range(offset, offset + days):
+        when = base + timedelta(days=i)
+        monkeypatch.setattr(clock, "now", lambda w=when: w)
+        result = tools.dispatch_tool("update_habit", {"habit_name": habit, "completed": True})
+    after = base + timedelta(days=offset + days)
+    monkeypatch.setattr(clock, "now", lambda w=after: w)
+    return result
+
+
 @pytest.fixture()
 def tools(tmp_path, monkeypatch):
     """Reload storage.py and tools.py with HOME pointed at a temp dir."""
@@ -127,9 +144,8 @@ class TestListHabitsTool:
         assert "meditate" in listed
         assert "streak 0 days" in listed
 
-    def test_shows_freezes_available(self, tools):
-        for _ in range(7):
-            tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+    def test_shows_freezes_available(self, tools, monkeypatch):
+        run_days(tools, monkeypatch, "meditate", 7)
         result = tools.dispatch_tool("list_habits", {})
         assert "freeze(s) available" in result
 
@@ -186,9 +202,8 @@ class TestUpdateHabit:
         result = tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
         assert "streak 1" in result
 
-    def test_existing_habit_streak_increments(self, tools):
-        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
-        result = tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+    def test_existing_habit_streak_increments(self, tools, monkeypatch):
+        result = run_days(tools, monkeypatch, "meditate", 2)
         assert "streak 2" in result
 
     def test_habit_reset_on_incomplete(self, tools):
@@ -209,10 +224,9 @@ class TestUpdateHabit:
         assert results[0]["completed_checkins"] == 1
         assert results[0]["total_checkins"] == 2
 
-    def test_freeze_used_recorded_as_completed(self, tools):
+    def test_freeze_used_recorded_as_completed(self, tools, monkeypatch):
         from habit_consistency import compute_habit_consistency
-        for _ in range(7):
-            tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        run_days(tools, monkeypatch, "meditate", 7)
         tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": False, "use_freeze": True})
         results = compute_habit_consistency(90)
         assert results[0]["completed_checkins"] == results[0]["total_checkins"]
@@ -256,9 +270,8 @@ class TestUpdateGoal:
         assert "meditate" in result
         assert "10.0%" in result  # 1-day streak / 10-day target
 
-    def test_linked_habit_progress_updates_with_streak(self, tools):
-        for _ in range(5):
-            tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+    def test_linked_habit_progress_updates_with_streak(self, tools, monkeypatch):
+        run_days(tools, monkeypatch, "meditate", 5)
         result = tools.dispatch_tool("update_goal", {
             "goal_name": "meditation streak", "linked_habit": "meditate", "target_streak": 10,
         })
@@ -1013,14 +1026,12 @@ class TestCheckGoalProgressTool:
         assert "Manual goal" in result and "manually tracked" in result
         assert "Auto goal" in result and "auto-tracked" in result
 
-    def test_habit_linked_goal_refreshes_with_streak(self, tools):
-        for _ in range(3):
-            tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+    def test_habit_linked_goal_refreshes_with_streak(self, tools, monkeypatch):
+        run_days(tools, monkeypatch, "meditate", 3)
         tools.dispatch_tool("update_goal", {
             "goal_name": "meditation streak", "linked_habit": "meditate", "target_streak": 30,
         })
-        for _ in range(3):
-            tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+        run_days(tools, monkeypatch, "meditate", 3, offset=3)
         result = tools.dispatch_tool("check_goal_progress", {})
         assert "meditation streak" in result
         assert "20.0%" in result  # 6-day streak / 30-day target
@@ -1382,9 +1393,8 @@ class TestWeatherCorrelationTool:
 
 
 class TestStreakFreeze:
-    def test_normal_streak_increments(self, tools):
-        tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
-        result = tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": True})
+    def test_normal_streak_increments(self, tools, monkeypatch):
+        result = run_days(tools, monkeypatch, "meditate", 2)
         assert "streak 2 days" in result
 
     def test_missed_day_without_freeze_resets_streak(self, tools):
@@ -1393,15 +1403,12 @@ class TestStreakFreeze:
         result = tools.dispatch_tool("update_habit", {"habit_name": "meditate", "completed": False})
         assert "streak 0 days" in result
 
-    def test_earns_freeze_at_7_day_streak(self, tools):
-        result = None
-        for _ in range(7):
-            result = tools.dispatch_tool("update_habit", {"habit_name": "run", "completed": True})
+    def test_earns_freeze_at_7_day_streak(self, tools, monkeypatch):
+        result = run_days(tools, monkeypatch, "run", 7)
         assert "earned a streak freeze" in result
 
-    def test_freeze_protects_streak_when_missed(self, tools):
-        for _ in range(7):
-            tools.dispatch_tool("update_habit", {"habit_name": "run", "completed": True})
+    def test_freeze_protects_streak_when_missed(self, tools, monkeypatch):
+        run_days(tools, monkeypatch, "run", 7)
         # miss a day but spend the freeze
         result = tools.dispatch_tool("update_habit", {
             "habit_name": "run", "completed": False, "use_freeze": True,
@@ -1409,10 +1416,9 @@ class TestStreakFreeze:
         assert "streak protected with a freeze" in result
         assert "Still at 7 days" in result
 
-    def test_freeze_consumed_after_use(self, tools):
+    def test_freeze_consumed_after_use(self, tools, monkeypatch):
         from storage import load_habits
-        for _ in range(7):
-            tools.dispatch_tool("update_habit", {"habit_name": "run", "completed": True})
+        run_days(tools, monkeypatch, "run", 7)
         assert load_habits()[0]["freezes_available"] == 1
         tools.dispatch_tool("update_habit", {"habit_name": "run", "completed": False, "use_freeze": True})
         assert load_habits()[0]["freezes_available"] == 0
@@ -1426,10 +1432,9 @@ class TestStreakFreeze:
         })
         assert "streak 0 days" in result
 
-    def test_freezes_capped_at_three(self, tools):
+    def test_freezes_capped_at_three(self, tools, monkeypatch):
         from storage import load_habits
-        for _ in range(28):  # 4x 7-day milestones
-            tools.dispatch_tool("update_habit", {"habit_name": "run", "completed": True})
+        run_days(tools, monkeypatch, "run", 28)  # 4x 7-day milestones
         assert load_habits()[0]["freezes_available"] == 3
 
 
