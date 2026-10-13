@@ -1612,9 +1612,10 @@ hydration only joins the log and leaves today's running counter alone.
 
 Expenses were the only thing that could be corrected until v1.40.0. A meal
 logged with the wrong calories or a workout logged twice stayed in every
-average, streak and correlation. Eleven more trackers now have the same
+average, streak and correlation. Twelve more trackers now have the same
 tools (meals, sleep, workouts, stress, meditation, gratitude, focus, social,
-substances, reading, medication):
+substances, reading, hydration, medication; v1.41.0 added hydration, whose
+running "today" counter is recomputed after a change):
 
 ```
 "show my meals from the last 3 days"          -> list_logs
@@ -1645,6 +1646,36 @@ over yet, and it follows your `LIFE_OS_DAY_START_HOUR`. `log_dream` accepts
 "what did I forget to log this week?"         -> get_logging_gaps
 "I slept 7 hours on the 9th"                  -> log_sleep with date 2026-10-09
 ```
+
+## Reviewing a Day, Searching, Duplicates and Batch Logging
+
+Four more tools make the correction workflow practical:
+
+```
+"what did I log yesterday?"                   -> get_day_log
+"when did I last have pizza?"                 -> search_logs
+"did I log anything twice this week?"         -> find_duplicate_logs
+"log breakfast, a 7h sleep and 3 glasses for the 10th"  -> log_many
+```
+
+`get_day_log` shows everything logged on a day, grouped by tracker with ids,
+ready for `edit_log` / `delete_log`. `search_logs` looks through food, notes,
+titles, names, triggers and categories. `find_duplicate_logs` reports
+identical entries on the same day (hydration is skipped, two identical glasses
+are normal); it never changes anything. `log_many` logs up to 50 entries in
+one call, each `{tool, args}` with an optional `date`: every shape and date is
+checked first, so one bad date means nothing is logged, and a failure inside
+one entry does not stop the others.
+
+## Habit Check-ins
+
+`update_habit` is now one check-in per day. Checking the same habit in twice
+on a day no longer adds twice to the streak (and no longer writes a second
+journal entry), and a day missed in between restarts the streak instead of
+silently continuing it. A streak freeze still bridges a missed day. Like the
+log tools it takes an optional `date`: a check-in for another day is recorded
+in the journal, so the habit consistency analytics see it, but the running
+streak counters (which describe "up to today") are left alone.
 
 ## Fixing Expenses
 
@@ -1773,6 +1804,22 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.41.0 - Habit Check-ins, Day View, Batch Logging**
+- **Fix:** `update_habit` counted every call as a new day. Checking a habit in
+  twice on one day inflated the streak (and the freeze counter), and a gap of
+  several days never reset it. Check-ins are now one per day, a missed day
+  restarts the streak, and `update_habit` takes an optional `date` (recorded
+  for the analytics, running streak untouched).
+- Hydration joins the entry tools (`list_logs`, `edit_log`, `delete_log`,
+  `undo_last_log`, `delete_entry` cascade): the glass log can be corrected and
+  the running "today" counter is recomputed.
+- New `get_day_log` (everything logged on a day, with ids), `search_logs`
+  (text search across the trackers), `find_duplicate_logs` (identical entries
+  on the same day, report only) and `log_many` (up to 50 logs in one call,
+  validated up front).
+- Doctor: the entry-id check now covers hydration rows.
+- 99 new tests - suite grew from 2479 to 2578.
 
 **v1.40.0 - Fix Any Log, Undo, Catch-Up**
 - New **`list_logs`, `edit_log`, `delete_log`** for 11 trackers: until now

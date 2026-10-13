@@ -271,7 +271,7 @@ def check_future_dates() -> List[Dict[str, str]]:
 
 # stores whose rows carry a persistent id (v1.39.0 / v1.40.0)
 _ID_STORES = ["nutrition", "sleep", "fitness", "focus", "mental", "spending", "social",
-              "substance", "reading", "medication"]
+              "substance", "reading", "medication", "hydration"]
 
 
 def check_entry_ids() -> List[Dict[str, str]]:
@@ -286,6 +286,8 @@ def check_entry_ids() -> List[Dict[str, str]]:
             data = storage.load_store(name)
         except Exception:  # noqa: BLE001 - unreadable stores are reported by check_stores
             continue
+        if name == "hydration":  # its entries live under ["log"]
+            data = data.get("log", []) if isinstance(data, dict) else []
         if not isinstance(data, list):
             continue
         ids = [e["id"] for e in data if isinstance(e, dict) and isinstance(e.get("id"), str) and e["id"]]

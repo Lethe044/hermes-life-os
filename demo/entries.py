@@ -9,8 +9,9 @@ plus a finder for days with nothing logged (so they can be filled in with the
 `date` argument of the log tools).
 
 Trackers covered: meals, sleep, workouts, stress, meditation, gratitude,
-focus, social, substances, reading, medication. (Expenses have their own
-tools in expenses.py; hydration is a running counter and is not covered.)
+focus, social, substances, reading, medication and hydration (its glass
+log; the running "today" counter is recomputed after a change). Expenses
+have their own tools in expenses.py.
 
 Every row now carries a short persistent `id`. The log tools add one, and
 the memory-journal entry they write gets a matching `log_id`, so the two stay
@@ -141,6 +142,13 @@ TRACKERS: Dict[str, Dict[str, Any]] = {
         "journal": lambda r: {"content": _g(r, "title"), "minutes": _g(r, "minutes", 0),
                               "pages": _g(r, "pages", 0)},
     },
+    "hydration": {
+        "store": "hydration",
+        "match": lambda r: True,
+        "fields": {"glasses": ("glasses", _i(1, 100))},
+        "label": lambda r: f"{_g(r, 'glasses', 0)} glass(es) of water",
+        "journal": None,  # handled by _sync_hydration_journal (the entry holds the day's total)
+    },
     "medication": {
         "store": "medication",
         "match": lambda r: True,
@@ -151,7 +159,7 @@ TRACKERS: Dict[str, Dict[str, Any]] = {
 }
 
 # extra trackers that only the gap finder and undo know about
-_GAP_ONLY = {"hydration": "hydration", "expenses": "spending"}
+_GAP_ONLY = {"expenses": "spending"}
 
 
 def tracker_names() -> List[str]:
@@ -179,14 +187,30 @@ def _rows_of(store: List[Any]) -> List[Dict[str, Any]]:
     return [r for r in store if isinstance(r, dict)]
 
 
-def _load_with_ids(store_name: str) -> List[Any]:
+def _list(container: Any) -> List[Any]:
+    """The live list of rows inside a loaded store (hydration keeps its rows
+    under ["log"]; every other store is the list itself)."""
+    if isinstance(container, dict):
+        log = container.get("log")
+        if not isinstance(log, list):
+            log = []
+            container["log"] = log
+        return log
+    return container
+
+
+def _load_with_ids(store_name: str) -> Any:
     """The whole store, giving id-less rows an id and saving once."""
     data = storage.load_store(store_name)
-    if not isinstance(data, list):
+    if store_name == "hydration":
+        if not isinstance(data, dict):
+            return {"log": []}
+    elif not isinstance(data, list):
         return []
-    seen = {r.get("id") for r in _rows_of(data) if r.get("id")}
+    rows = _list(data)
+    seen = {r.get("id") for r in _rows_of(rows) if r.get("id")}
     changed = False
-    for r in _rows_of(data):
+    for r in _rows_of(rows):
         if not r.get("id"):
             new = new_log_id()
             while new in seen:
@@ -199,6 +223,31 @@ def _load_with_ids(store_name: str) -> List[Any]:
     return data
 
 
+def _day_total(container: Dict[str, Any], date: str) -> int:
+    return sum(r.get("glasses", 0) for r in _rows_of(_list(container))
+               if r.get("date") == date and isinstance(r.get("glasses"), (int, float)))
+
+
+def _recount_today(container: Dict[str, Any], *dates: str) -> None:
+    """After a hydration row changed: if it touched today, rebuild the running
+    "today" counter from the log (the counter always equals today's total)."""
+    today = clock.today_str()
+    if today in dates:
+        container["today"] = _day_total(container, today)
+        container["last_date"] = today
+
+
+def _sync_hydration_journal(container: Dict[str, Any], log_id: str, row: Dict[str, Any],
+                            old_date: Optional[str] = None) -> None:
+    """The journal entry of a hydration log holds that day's total."""
+    for mid in find_memory_ids("log_id", log_id):
+        update = {"content": f"{_g(row, 'glasses', 0)} glasses water",
+                  "glasses": _day_total(container, row.get("date", ""))}
+        if old_date and old_date != row.get("date"):
+            update["timestamp"] = f"{row['date']}T12:00:00Z"
+        edit_memory_entry(mid, update)
+
+
 # ---------------------------------------------------------------- listing
 
 def list_logs(tracker: str, days: int = 7, limit: int = 20) -> List[Dict[str, Any]]:
@@ -206,7 +255,7 @@ def list_logs(tracker: str, days: int = 7, limit: int = 20) -> List[Dict[str, An
     today (0 = today only). `limit` is capped at MAX_LIST. Raises ValueError
     for an unknown tracker."""
     spec = _spec(tracker)
-    data = _load_with_ids(spec["store"])
+    data = _list(_load_with_ids(spec["store"]))
     cutoff = clock.days_ago_str(max(0, int(days)))
     rows = [r for r in _rows_of(data) if spec["match"](r) and str(r.get("date", "")) >= cutoff]
     rows.sort(key=lambda r: str(r.get("date", "")), reverse=True)
@@ -305,12 +354,17 @@ def edit_log(tracker: str, log_id: str, fields: Dict[str, Any]) -> Optional[Dict
                              f"Editable: {', '.join(editable_fields(tracker))}.")
 
     data = _load_with_ids(spec["store"])
-    for row in _rows_of(data):
+    for row in _rows_of(_list(data)):
         if row.get("id") != log_id or not spec["match"](row):
             continue
+        old_date = row.get("date")
         row.update(changes)
+        if spec["store"] == "hydration":
+            _recount_today(data, old_date, row.get("date"))
         storage.save_store(spec["store"], data)
-        if spec["journal"]:
+        if spec["store"] == "hydration":
+            _sync_hydration_journal(data, log_id, row, old_date)
+        elif spec["journal"]:
             for mid in find_memory_ids("log_id", log_id):
                 update = dict(spec["journal"](row))
                 if "date" in changes:
@@ -326,12 +380,26 @@ def _bad_date():
 
 # ---------------------------------------------------------------- deleting
 
-def _remove_row(spec: Dict[str, Any], data: List[Any], index: int) -> Dict[str, Any]:
-    row = data.pop(index)
-    storage.save_store(spec["store"], data)
+def _remove_row(spec: Dict[str, Any], container: Any, index: int) -> Dict[str, Any]:
+    rows = _list(container)
+    row = rows.pop(index)
+    if spec["store"] == "hydration":
+        _recount_today(container, row.get("date", ""))
+    storage.save_store(spec["store"], container)
     for mid in find_memory_ids("log_id", row.get("id")):
         delete_memory_entry(mid)
+    if spec["store"] == "hydration" and isinstance(row.get("date"), str):
+        _refresh_day_journal(container, row["date"])
     return row
+
+
+def _refresh_day_journal(container: Dict[str, Any], date: str) -> None:
+    """Other journal entries of the same hydration day keep the day's total."""
+    total = _day_total(container, date)
+    for r in _rows_of(_list(container)):
+        if r.get("date") == date and r.get("id"):
+            for mid in find_memory_ids("log_id", r["id"]):
+                edit_memory_entry(mid, {"glasses": total})
 
 
 def delete_log(tracker: str, log_id: str) -> Optional[Dict[str, Any]]:
@@ -339,7 +407,7 @@ def delete_log(tracker: str, log_id: str) -> Optional[Dict[str, Any]]:
     None if the tracker has no entry with that id."""
     spec = _spec(tracker)
     data = _load_with_ids(spec["store"])
-    for i, row in enumerate(data):
+    for i, row in enumerate(_list(data)):
         if isinstance(row, dict) and row.get("id") == log_id and spec["match"](row):
             return _remove_row(spec, data, i)
     return None
@@ -358,10 +426,14 @@ def delete_linked_row(memory_entry: Dict[str, Any]) -> Optional[Tuple[str, Dict[
     if log_id:
         for name, spec in TRACKERS.items():
             data = _load_with_ids(spec["store"])
-            for i, row in enumerate(data):
+            for i, row in enumerate(_list(data)):
                 if isinstance(row, dict) and row.get("id") == log_id and spec["match"](row):
-                    data.pop(i)
+                    _list(data).pop(i)
+                    if spec["store"] == "hydration":
+                        _recount_today(data, row.get("date", ""))
                     storage.save_store(spec["store"], data)
+                    if spec["store"] == "hydration" and isinstance(row.get("date"), str):
+                        _refresh_day_journal(data, row["date"])
                     return (name, row)
     return None
 
@@ -384,8 +456,9 @@ def undo_last_log(tracker: Optional[str] = None) -> Optional[Tuple[str, Dict[str
             return ("expenses", row, expenses.describe(row)) if row else None
         spec = _spec(key)
         data = _load_with_ids(spec["store"])
-        for i in range(len(data) - 1, -1, -1):
-            if isinstance(data[i], dict) and spec["match"](data[i]):
+        rows = _list(data)
+        for i in range(len(rows) - 1, -1, -1):
+            if isinstance(rows[i], dict) and spec["match"](rows[i]):
                 row = _remove_row(spec, data, i)
                 return (key, row, spec["label"](row))
         return None
@@ -399,7 +472,7 @@ def undo_last_log(tracker: Optional[str] = None) -> Optional[Tuple[str, Dict[str
         elif m.get("log_id"):
             for name, spec in TRACKERS.items():
                 data = _load_with_ids(spec["store"])
-                for i, row in enumerate(data):
+                for i, row in enumerate(_list(data)):
                     if isinstance(row, dict) and row.get("id") == m["log_id"] and spec["match"](row):
                         removed = _remove_row(spec, data, i)
                         return (name, removed, spec["label"](removed))
@@ -410,14 +483,13 @@ def undo_last_log(tracker: Optional[str] = None) -> Optional[Tuple[str, Dict[str
 
 def _dates_of(tracker: str) -> set:
     if tracker in _GAP_ONLY:
-        store_name = _GAP_ONLY[tracker]
-        data = storage.load_store(store_name)
-        if tracker == "hydration":
-            data = data.get("log", []) if isinstance(data, dict) else []
+        data = storage.load_store(_GAP_ONLY[tracker])
         match: Callable[[Dict[str, Any]], bool] = lambda r: True  # noqa: E731
     else:
         spec = _spec(tracker)
         data = storage.load_store(spec["store"])
+        if spec["store"] == "hydration":
+            data = data.get("log", []) if isinstance(data, dict) else []
         match = spec["match"]
     if not isinstance(data, list):
         return set()
@@ -467,3 +539,104 @@ def gaps_overview(days: int = 7) -> str:
         return f"No gaps: every tracker you use has an entry on each of the last {n} complete days."
     return (f"Days with nothing logged, last {n} complete days:\n" + "\n".join(lines)
             + "\nFill them in with the log tool's date argument.")
+
+
+# ---------------------------------------------------------------- day view, search, duplicates
+
+def _parse_day(value: Any) -> str:
+    """YYYY-MM-DD for viewing a day: None/blank means today; any real past or
+    future date is fine (viewing is read-only). Raises ValueError otherwise."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return clock.today_str()
+    if not isinstance(value, str):
+        raise ValueError("date must be written as YYYY-MM-DD, for example 2026-10-09.")
+    try:
+        from datetime import datetime
+        return datetime.strptime(value.strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        raise ValueError(f"'{value.strip()}' is not a valid date - write it as YYYY-MM-DD, "
+                         f"for example 2026-10-09.") from None
+
+
+def _all_rows():
+    """Yields (tracker, row, label) for every tracker row (expenses included),
+    giving legacy rows ids on the way."""
+    import expenses
+    for name, spec in TRACKERS.items():
+        for r in _rows_of(_list(_load_with_ids(spec["store"]))):
+            if spec["match"](r):
+                yield name, r, spec["label"](r)
+    for r in _rows_of(expenses._load_with_ids()):
+        yield "expenses", r, expenses.describe(r)
+
+
+def day_view(date: Any = None) -> str:
+    """Everything logged on one day, grouped by tracker, with ids - a single
+    place to review (and then correct) a day. Raises ValueError for a bad date."""
+    day = _parse_day(date)
+    groups: Dict[str, List[str]] = {}
+    for name, r, label in _all_rows():
+        if r.get("date") == day:
+            groups.setdefault(name, []).append(f"  [id={r['id']}] {label}")
+    if not groups:
+        return f"Nothing logged on {day}."
+    lines = [f"Everything logged on {day}:"]
+    for name, items in groups.items():
+        lines.append(f"{name} ({len(items)})")
+        lines.extend(items)
+    return "\n".join(lines)
+
+
+MAX_SEARCH = 100
+
+
+def search_logs(query: Any, days: int = 30, limit: int = 20) -> str:
+    """Case-insensitive text search over the tracker entries (food, notes,
+    titles, names, triggers, categories...) of the last `days` days, newest
+    first. Raises ValueError for a blank query."""
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError("Give some text to search for.")
+    q = query.strip().lower()
+    cutoff = clock.days_ago_str(max(0, int(days)))
+    cap = max(1, min(int(limit), MAX_SEARCH))
+    hits = []
+    for name, r, label in _all_rows():
+        if str(r.get("date", "")) < cutoff:
+            continue
+        haystack = " ".join([label] + [str(v) for k, v in r.items() if k != "id"
+                                       and isinstance(v, (str, list))]).lower()
+        if q in haystack:
+            hits.append((str(r.get("date", "")), name, r, label))
+    if not hits:
+        return f"No entries mention '{query.strip()}' in the last {days} days."
+    hits.sort(key=lambda h: h[0], reverse=True)
+    lines = [f"{min(len(hits), cap)} of {len(hits)} entr{'y' if len(hits) == 1 else 'ies'} "
+             f"mention '{query.strip()}', newest first:"]
+    for date, name, r, label in hits[:cap]:
+        lines.append(f"[{name} id={r['id']}] {date}  {label}")
+    return "\n".join(lines)
+
+
+def find_duplicates(days: int = 30) -> str:
+    """Entries that are identical (same tracker, day and every field except id
+    and time) and so were probably logged twice. Hydration is skipped: two
+    identical glasses in a day are normal. A report only - nothing is changed."""
+    cutoff = clock.days_ago_str(max(0, int(days)))
+    groups: Dict[Tuple, List[Tuple[str, Dict[str, Any], str]]] = {}
+    for name, r, label in _all_rows():
+        if name == "hydration" or str(r.get("date", "")) < cutoff:
+            continue
+        key = (name, tuple(sorted((k, repr(v)) for k, v in r.items() if k not in ("id", "time"))))
+        groups.setdefault(key, []).append((name, r, label))
+    dupes = [g for g in groups.values() if len(g) > 1]
+    if not dupes:
+        return f"No duplicate entries found in the last {days} days."
+    dupes.sort(key=lambda g: str(g[0][1].get("date", "")), reverse=True)
+    lines = [f"{len(dupes)} possible duplicate group(s) in the last {days} days (identical entries on "
+             f"the same day - two identical coffees are normal, a double-pasted log is not):"]
+    for g in dupes:
+        name, r, label = g[0]
+        ids = ", ".join(x[1]["id"] for x in g)
+        lines.append(f"- {name} {r.get('date')}: {label} x{len(g)} (ids: {ids})")
+    lines.append("Remove extras with delete_log (delete_expense for expenses).")
+    return "\n".join(lines)
