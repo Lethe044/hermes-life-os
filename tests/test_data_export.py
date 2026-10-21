@@ -43,7 +43,7 @@ class TestExportJson:
             "hydration", "fitness", "focus", "mental", "memory",
             "spending", "social", "substance", "reading", "medication",
             "achievements", "templates", "budgets", "reminders",
-            "body", "tasks", "subscriptions", "people", "_meta",
+            "body", "tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes", "_meta",
         }
         assert payload["memory"] == []
 

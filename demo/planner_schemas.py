@@ -2,7 +2,8 @@
 Hermes Life OS - tool schemas for the planner modules
 =======================================================
 Pure data: the schemas of the tools that live in tasks.py, body.py,
-subscriptions.py, people.py and agenda.py, plus the tool name -> module map
+subscriptions.py, people.py, agenda.py, lists.py, savings.py,
+symptoms.py and notes.py, plus the tool name -> module map
 tools.py uses to dispatch them. Kept apart from those modules so that
 importing tools.py never imports (and never binds to) the storage layer of
 modules that only matter when one of their tools is actually called.
@@ -128,10 +129,87 @@ AGENDA_SCHEMAS = [
                               "'plan my day'.", {}, []),
 ]
 
-PLANNER_SCHEMAS = TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_SCHEMAS + AGENDA_SCHEMAS
+_LIST_PROP = {"type": "string", "description": "List name, default 'shopping'."}
+_ITEM_REF = {"type": "string", "description": "An item's id or some words from its text."}
+_ITEMS_REF = {"type": "array", "items": {"type": "string"}, "description": "Several item names or ids."}
+
+LIST_SCHEMAS = [
+    _tool("add_list_items", "Add one or more items to a named checklist (default 'shopping'): items can be a "
+                            "comma-separated text or a list. Items already open on the list are skipped.",
+          {"items": {"type": "array", "items": {"type": "string"},
+                     "description": "Items to add (a comma-separated string also works)."},
+           "list": _LIST_PROP,
+           "quantity": {"type": "string", "description": "Only when adding a single item, e.g. '2 kg'."}},
+          ["items"]),
+    _tool("get_list", "Show one checklist: what is still to get and what is ticked.", {"list": _LIST_PROP}, []),
+    _tool("get_lists", "Overview of all checklists with their open and ticked counts.", {}, []),
+    _tool("check_list_item", "Tick off (or untick with checked=false) one or more list items.",
+          {"item": _ITEM_REF, "items": _ITEMS_REF, "list": _LIST_PROP,
+           "checked": {"type": "boolean", "description": "Default true."}}, []),
+    _tool("remove_list_items", "Remove one or more items from a list.",
+          {"item": _ITEM_REF, "items": _ITEMS_REF, "list": _LIST_PROP}, []),
+    _tool("clear_checked_items", "Remove all ticked items from a list (or from every list if none is named).",
+          {"list": {"type": "string"}}, []),
+    _tool("delete_list", "Delete a whole checklist with all its items.", {"list": {"type": "string"}}, ["list"]),
+]
+
+_GOAL_REF = {"type": "string", "description": "The savings goal's name (or part of it) or id."}
+
+SAVINGS_SCHEMAS = [
+    _tool("add_savings_goal", "Start a savings goal with a target amount and an optional deadline and starting "
+                              "balance. Amounts have no currency.",
+          {"name": {"type": "string"}, "target": {"type": "number"},
+           "deadline": {"type": "string", "description": "Optional, YYYY-MM-DD."},
+           "saved": {"type": "number", "description": "Optional amount already saved."},
+           "notes": {"type": "string"}}, ["name", "target"]),
+    _tool("contribute_to_savings", "Add money to a savings goal, or take some out with a negative amount.",
+          {"goal": _GOAL_REF, "amount": {"type": "number"}, "note": {"type": "string"},
+           "date": {"type": "string", "description": "YYYY-MM-DD, default today. Not in the future."}}, ["goal", "amount"]),
+    _tool("get_savings", "Progress of all savings goals, or one in detail (pace, estimated finish, what to put "
+                         "aside per month to meet the deadline).", {"goal": _GOAL_REF}, []),
+    _tool("update_savings_goal", "Change a savings goal: name, target, deadline ('' clears) or notes.",
+          {"goal": _GOAL_REF, "fields": {"type": "object"}}, ["goal", "fields"]),
+    _tool("delete_savings_goal", "Delete a savings goal and its history.", {"goal": _GOAL_REF}, ["goal"]),
+]
+
+SYMPTOM_SCHEMAS = [
+    _tool("log_symptom", "Log a recurring symptom such as a headache, back pain or heartburn with a severity "
+                         "from 1 to 10, optional duration, suspected triggers and notes. A personal log, not a "
+                         "diagnosis.",
+          {"symptom": {"type": "string"}, "severity": {"type": "integer", "description": "1 (mild) to 10 (worst)."},
+           "duration_minutes": {"type": "integer"},
+           "triggers": {"type": "array", "items": {"type": "string"},
+                        "description": "Suspected triggers, e.g. stress, coffee, bad sleep."},
+           "time": {"type": "string", "description": "Optional HH:MM."}, "notes": {"type": "string"},
+           "date": ENTRY_DATE_PROP}, ["symptom", "severity"]),
+    _tool("get_symptom_summary", "How often and how badly symptoms occurred: counts, average severity, days since "
+                                 "the last one, common triggers, trend, worst weekday and sleep before symptom days.",
+          {"days": {"type": "integer", "description": "Window, 1-365, default 30."},
+           "symptom": {"type": "string", "description": "Only this symptom."}}, []),
+]
+
+_NOTE_REF = {"type": "string", "description": "The note's id or some words from its text."}
+
+NOTE_SCHEMAS = [
+    _tool("add_note", "Save a quick note or idea with optional tags, and optionally pin it.",
+          {"text": {"type": "string"}, "tags": {"type": "array", "items": {"type": "string"}},
+           "pinned": {"type": "boolean"}}, ["text"]),
+    _tool("list_notes", "List notes, pinned first then newest, optionally for one tag or only pinned ones.",
+          {"tag": {"type": "string"}, "pinned": {"type": "boolean"},
+           "limit": {"type": "integer", "description": "Default 20, at most 100."}}, []),
+    _tool("search_notes", "Find notes containing all the given words in their text or tags.",
+          {"query": {"type": "string"}, "limit": {"type": "integer"}}, ["query"]),
+    _tool("update_note", "Change a note: text, tags or pinned.",
+          {"note": _NOTE_REF, "fields": {"type": "object"}}, ["note", "fields"]),
+    _tool("delete_note", "Delete a note.", {"note": _NOTE_REF}, ["note"]),
+]
+
+PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_SCHEMAS + AGENDA_SCHEMAS
+                   + LIST_SCHEMAS + SAVINGS_SCHEMAS + SYMPTOM_SCHEMAS + NOTE_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
-                          (PEOPLE_SCHEMAS, "people"), (AGENDA_SCHEMAS, "agenda")):
+                          (PEOPLE_SCHEMAS, "people"), (AGENDA_SCHEMAS, "agenda"), (LIST_SCHEMAS, "lists"),
+                          (SAVINGS_SCHEMAS, "savings"), (SYMPTOM_SCHEMAS, "symptoms"), (NOTE_SCHEMAS, "notes")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module

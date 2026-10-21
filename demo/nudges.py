@@ -35,9 +35,10 @@ MAX_BUDGET_NUDGES = 2             # budget warnings per run, so they can't crowd
 
 
 def _planner_nudges() -> List[str]:
-    """Overdue tasks, a subscription renewing within 3 days, a birthday or an
-    overdue catch-up. Each source is independent: one that fails (or has
-    nothing) never blocks the others or the rest of the nudges."""
+    """Overdue tasks, a subscription renewing within 3 days, a birthday, an
+    overdue catch-up or a savings goal whose deadline is close. Each source is
+    independent: one that fails (or has nothing) never blocks the others or the
+    rest of the nudges."""
     out: List[str] = []
     try:
         import tasks
@@ -56,6 +57,11 @@ def _planner_nudges() -> List[str]:
     try:
         import people
         out.extend(people.nudges(2))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import savings
+        out.extend(savings.nudges(1))
     except Exception:  # noqa: BLE001
         pass
     return out[:MAX_PLANNER_NUDGES]

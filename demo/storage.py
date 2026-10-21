@@ -62,6 +62,10 @@ BODY_FILE = HERMES_DIR / "body.json"
 TASKS_FILE = HERMES_DIR / "tasks.json"
 SUBSCRIPTIONS_FILE = HERMES_DIR / "subscriptions.json"
 PEOPLE_FILE = HERMES_DIR / "people.json"
+LISTS_FILE = HERMES_DIR / "lists.json"
+SAVINGS_FILE = HERMES_DIR / "savings.json"
+SYMPTOMS_FILE = HERMES_DIR / "symptoms.json"
+NOTES_FILE = HERMES_DIR / "notes.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -89,6 +93,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     global ACHIEVEMENTS_FILE, READING_FILE, MEDICATION_FILE, TEMPLATES_FILE
     global BUDGETS_FILE, REMINDERS_FILE
     global BODY_FILE, TASKS_FILE, SUBSCRIPTIONS_FILE, PEOPLE_FILE
+    global LISTS_FILE, SAVINGS_FILE, SYMPTOMS_FILE, NOTES_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -115,6 +120,10 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     TASKS_FILE = HERMES_DIR / "tasks.json"
     SUBSCRIPTIONS_FILE = HERMES_DIR / "subscriptions.json"
     PEOPLE_FILE = HERMES_DIR / "people.json"
+    LISTS_FILE = HERMES_DIR / "lists.json"
+    SAVINGS_FILE = HERMES_DIR / "savings.json"
+    SYMPTOMS_FILE = HERMES_DIR / "symptoms.json"
+    NOTES_FILE = HERMES_DIR / "notes.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -256,6 +265,14 @@ def load_subscriptions() -> List: return _load(SUBSCRIPTIONS_FILE, [])
 def save_subscriptions(s):       _save(SUBSCRIPTIONS_FILE, s)
 def load_people() -> List:       return _load(PEOPLE_FILE, [])
 def save_people(p):              _save(PEOPLE_FILE, p)
+def load_lists() -> List:        return _load(LISTS_FILE, [])
+def save_lists(x):               _save(LISTS_FILE, x)
+def load_savings() -> List:      return _load(SAVINGS_FILE, [])
+def save_savings(x):             _save(SAVINGS_FILE, x)
+def load_symptoms() -> List:     return _load(SYMPTOMS_FILE, [])
+def save_symptoms(x):            _save(SYMPTOMS_FILE, x)
+def load_notes() -> List:        return _load(NOTES_FILE, [])
+def save_notes(x):               _save(NOTES_FILE, x)
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +315,10 @@ DATA_STORES: Dict[str, tuple] = {
     "tasks":        ("TASKS_FILE",        "load_tasks",        "save_tasks",        list),
     "subscriptions": ("SUBSCRIPTIONS_FILE", "load_subscriptions", "save_subscriptions", list),
     "people":       ("PEOPLE_FILE",       "load_people",       "save_people",       list),
+    "lists":        ("LISTS_FILE",        "load_lists",        "save_lists",        list),
+    "savings":      ("SAVINGS_FILE",      "load_savings",      "save_savings",      list),
+    "symptoms":     ("SYMPTOMS_FILE",     "load_symptoms",     "save_symptoms",     list),
+    "notes":        ("NOTES_FILE",        "load_notes",        "save_notes",        list),
 }
 
 

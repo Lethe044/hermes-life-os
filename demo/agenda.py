@@ -4,8 +4,9 @@ Hermes Life OS - Today's Agenda
 One answer to "what do I have today?" that pulls from everything that has a
 date attached: tasks (overdue and due today), reminders for today,
 subscription renewals in the next few days, birthdays and people you are
-overdue to contact, habit streaks that need a check-in today to survive, and
-budgets that are over or close to their limit.
+overdue to contact, habit streaks that need a check-in today to survive,
+budgets that are over or close to their limit, and savings goals whose
+deadline is within two weeks.
 
 Read-only and network-free; a section with nothing to say is left out, and if
 nothing at all is due the agenda says so. "Today" is the user's day (clock.py).
@@ -81,6 +82,14 @@ def build_agenda() -> str:
         alerts = []
     if alerts:
         sections.append(_section("Budgets:", alerts))
+
+    try:
+        import savings
+        close = savings.nudges(3)
+    except Exception:  # noqa: BLE001
+        close = []
+    if close:
+        sections.append(_section("Savings goals with a close deadline:", close))
 
     if not sections:
         return out[0] + "\nNothing due today: no tasks, reminders, renewals, birthdays or streaks at risk."

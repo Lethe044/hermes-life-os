@@ -1568,7 +1568,7 @@ entries dated in the future (a sign of a wrong computer clock or a bad
 import), persistent entry ids (rows that share an id, journal entries
 linked to a row that no longer exists) and the planner stores (a task due
 date, renewal date or birthday that cannot be read, an unknown body metric,
-shared ids). Exit status is 0 unless there is an error (or, with `--strict`, a
+an unusable savings target, a symptom without a valid severity, shared ids). Exit status is 0 unless there is an error (or, with `--strict`, a
 warning). The same report is available in chat as `run_health_check`.
 
 ## Planner: Tasks, Body Metrics, Subscriptions, People & Today's Agenda
@@ -1624,6 +1624,51 @@ The proactive nudges now also mention an overdue task, a renewal within three
 days, a birthday and an overdue catch-up (at most two of these per run), and
 the doctor reports planner entries it cannot act on: an unreadable due date,
 renewal date, birthday or metric, and ids shared by two entries.
+
+## Lists, Savings Goals, Symptoms & Notes
+
+Four more everyday trackers, all local, per profile, encrypted with the rest of
+your data when encryption is on, and covered by backup, restore, export and the
+doctor.
+
+```
+"add milk, eggs and bread to the shopping list"    "I got the milk"
+"start a savings goal: holiday, 2400 by 2027-06-01"  "I put 300 into the holiday fund"
+"headache, 6 out of 10, about 90 minutes, stress"    "how often did I have headaches this month?"
+"note: gift idea for Ayse, a tea set #gifts"         "what notes do I have about gifts?"
+```
+
+- **Lists** (`add_list_items`, `get_list`, `get_lists`, `check_list_item`,
+  `remove_list_items`, `clear_checked_items`, `delete_list`): named checklists
+  for things that are not tasks. The default is `shopping`; any other name
+  (packing, movies, ...) works. Add several items in one go ("milk, eggs,
+  bread"), tick them off while you shop, clear what is ticked afterwards. An
+  item already open on the list is skipped instead of duplicated, and an item is
+  found by id or by words from its text.
+- **Savings goals** (`add_savings_goal`, `contribute_to_savings`, `get_savings`,
+  `update_savings_goal`, `delete_savings_goal`): a target, an optional deadline
+  and starting balance. Add money or take some out (backdated if you like);
+  you see the percentage, what is left, your real pace over the last 90 days
+  (a starting balance does not count), the day that pace gets you there, and
+  with a deadline whether you are on track and how much to put aside per month.
+  A goal whose deadline is within two weeks shows up in the proactive nudges
+  and in today's agenda.
+- **Symptoms** (`log_symptom`, `get_symptom_summary`): headaches, back pain,
+  heartburn and the like with a severity from 1 to 10, an optional duration,
+  suspected triggers and notes. The summary gives the count, average and worst
+  severity, entries per week, days since the last one, the most common
+  triggers, whether it is getting more or less frequent, the worst weekday and,
+  when you log sleep, the average sleep on symptom days against other days.
+  Symptoms join `list_logs`, `edit_log`, `delete_log`, `undo_last_log`,
+  backdating and `log_many`. A personal log, not a diagnosis or medical advice.
+- **Notes** (`add_note`, `list_notes`, `search_notes`, `update_note`,
+  `delete_note`): a quick-capture inbox with tags and pins; search finds notes
+  containing all your words in the text or tags.
+
+The doctor now also reports savings goals with an unusable target or deadline,
+symptom entries it cannot use, list items and notes without text, and ids shared
+by two entries; entries dated in the future are checked for body readings and
+symptoms as well.
 
 ## Local Days, Night Owls & Backdating
 
@@ -1860,6 +1905,25 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.43.0 - Lists, Savings Goals, Symptoms, Notes**
+- New **lists**: `add_list_items`, `get_list`, `get_lists`, `check_list_item`,
+  `remove_list_items`, `clear_checked_items`, `delete_list` for the shopping
+  list and any other named checklist.
+- New **savings goals**: `add_savings_goal`, `contribute_to_savings`,
+  `get_savings`, `update_savings_goal`, `delete_savings_goal` with progress,
+  real pace, estimated finish day and the monthly amount needed for a deadline.
+- New **symptom tracker**: `log_symptom` and `get_symptom_summary` (severity,
+  duration, triggers, frequency trend, worst weekday, sleep comparison).
+  Symptoms are a tracker like the others: `list_logs`, `edit_log`,
+  `delete_log`, `undo_last_log`, backdating and `log_many` work on them.
+- New **notes**: `add_note`, `list_notes`, `search_notes`, `update_note`,
+  `delete_note` with tags and pins.
+- Savings goals close to their deadline appear in the proactive nudges and in
+  `get_today_agenda`; the doctor checks the four new stores and now also looks
+  for future-dated body readings and symptoms; backup, restore, export and
+  rekey cover the new stores.
+- 354 new tests - suite grew from 2985 to 3339.
 
 **v1.42.0 - Planner: Tasks, Body Metrics, Subscriptions, People, Agenda**
 - New **tasks**: `add_task`, `list_tasks`, `complete_task`, `update_task`,
