@@ -59,20 +59,20 @@ console = Console(width=min(110, shutil.get_terminal_size().columns))
 # ---------------------------------------------------------------------------
 
 _TRACKER_NAMES = ["meals", "sleep", "workouts", "stress", "meditation", "gratitude", "focus",
-                  "social", "substances", "reading", "hydration", "body", "medication"]
+                  "social", "substances", "reading", "hydration", "body", "symptoms", "medication"]
 
 MAX_BATCH = 50
 
 _BATCHABLE = frozenset({
     "log_meal", "log_sleep", "log_hydration", "log_workout", "log_stress", "log_meditation",
     "log_gratitude", "log_focus_session", "log_expense", "log_social_interaction",
-    "log_substance", "log_reading", "log_medication", "log_dream", "log_body_metric",
+    "log_substance", "log_reading", "log_medication", "log_dream", "log_body_metric", "log_symptom",
 })
 
 _BACKDATABLE = frozenset({
     "log_meal", "log_sleep", "log_hydration", "log_workout", "log_stress", "log_meditation",
     "log_gratitude", "log_focus_session", "log_expense", "log_social_interaction",
-    "log_substance", "log_reading", "log_medication", "log_dream", "update_habit", "log_body_metric",
+    "log_substance", "log_reading", "log_medication", "log_dream", "update_habit", "log_body_metric", "log_symptom",
 })
 
 _ENTRY_DATE_PROP = dict(ENTRY_DATE_PROP)
@@ -451,7 +451,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
             return "days must be a whole number."
         return format_missing_days(tracker, missing, days)
 
-    # ── planner modules: tasks, body metrics, subscriptions, people, agenda ───
+    # ── planner modules: tasks, body, subscriptions, people, agenda, lists, savings, symptoms, notes ──
     elif name in _PLANNER_MODULES:
         import importlib
         planner_mod = importlib.import_module(_PLANNER_MODULES[name])
@@ -2850,7 +2850,7 @@ TOOLS = [
 # skipped (never crashes startup) and reported in PLUGIN_LOAD_ERRORS, which
 # demo_life_os.py surfaces once at startup.
 # ---------------------------------------------------------------------------
-TOOLS = TOOLS + PLANNER_SCHEMAS  # tasks, body metrics, subscriptions, people, agenda (planner_schemas.py)
+TOOLS = TOOLS + PLANNER_SCHEMAS  # tasks, body, subscriptions, people, agenda, lists, savings, symptoms, notes
 _BUILT_IN_TOOL_NAMES = {t["function"]["name"] for t in TOOLS}
 PLUGIN_TOOLS, PLUGIN_DISPATCHERS, PLUGIN_LOAD_ERRORS = _plugins.load_plugins(
     built_in_names=_BUILT_IN_TOOL_NAMES

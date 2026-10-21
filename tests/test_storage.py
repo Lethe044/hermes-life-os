@@ -174,7 +174,7 @@ class TestDataStoreRegistry:
             "profile", "habits", "goals", "nutrition", "sleep", "hydration", "fitness",
             "focus", "mental", "spending", "social", "substance", "reading", "medication",
             "achievements", "templates", "budgets", "reminders",
-            "body", "tasks", "subscriptions", "people",
+            "body", "tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes",
         }
 
     def test_every_file_constant_is_registered(self, storage):

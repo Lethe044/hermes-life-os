@@ -62,6 +62,16 @@ def _body_journal(row: Dict[str, Any]) -> Dict[str, Any]:
     return body.journal_fields(row)
 
 
+def _symptom_label(row: Dict[str, Any]) -> str:
+    import symptoms
+    return symptoms.describe(row)
+
+
+def _symptom_journal(row: Dict[str, Any]) -> Dict[str, Any]:
+    import symptoms
+    return symptoms.journal_fields(row)
+
+
 # name -> {store, match (row -> bool), fields {arg: (row key, kind)},
 #          label (row -> str), journal (row -> memory fields) or None}
 TRACKERS: Dict[str, Dict[str, Any]] = {
@@ -165,6 +175,15 @@ TRACKERS: Dict[str, Dict[str, Any]] = {
         "fields": {"value": ("value", ("pos",)), "diastolic": ("value2", ("pos",)), "notes": ("notes", S)},
         "label": lambda r: _body_label(r),
         "journal": lambda r: _body_journal(r),
+    },
+    "symptoms": {
+        "store": "symptoms",
+        "match": lambda r: "symptom" in r,
+        "fields": {"symptom": ("symptom", LS), "severity": ("severity", _i(1, 10)),
+                   "duration_minutes": ("duration_minutes", _i(1, 10080)), "triggers": ("triggers", L),
+                   "notes": ("notes", S)},
+        "label": lambda r: _symptom_label(r),
+        "journal": lambda r: _symptom_journal(r),
     },
     "medication": {
         "store": "medication",
