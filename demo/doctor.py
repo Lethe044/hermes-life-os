@@ -19,6 +19,8 @@ Checks:
     future (a wrong computer clock or a bad import)
   * entry ids: duplicate ids, and journal entries linked to a tracker row that
     no longer exists
+  * the planner data (tasks, subscriptions, people, body readings): dates and
+    values that cannot be read, shared ids
   * backups: whether there are any, how old the newest is, whether it is
     readable and complete, whether older ones are unreadable
   * reminders: timed reminders whose time can never fire, ids that clash,
@@ -271,7 +273,7 @@ def check_future_dates() -> List[Dict[str, str]]:
 
 # stores whose rows carry a persistent id (v1.39.0 / v1.40.0)
 _ID_STORES = ["nutrition", "sleep", "fitness", "focus", "mental", "spending", "social",
-              "substance", "reading", "medication", "hydration"]
+              "substance", "reading", "medication", "hydration", "body"]
 
 
 def check_entry_ids() -> List[Dict[str, str]]:
@@ -312,6 +314,62 @@ def check_entry_ids() -> List[Dict[str, str]]:
             f"in the life score and other journal-based tools."))
     if not findings:
         findings.append(_finding(OK, "entry ids", "Entry ids are unique and every journal link has its entry."))
+    return findings
+
+
+def _valid_day(value: Any) -> bool:
+    try:
+        clock.parse_day(value)
+        return True
+    except ValueError:
+        return False
+
+
+def check_planner_data() -> List[Dict[str, Any]]:
+    """The planner stores (tasks, subscriptions, people, body readings): entries
+    that Hermes silently skips or never acts on - a task whose due date cannot
+    be read never shows as overdue, a subscription without a readable renewal
+    date never reminds you, a birthday that cannot be read never fires, a body
+    reading with an unknown metric is left out of trends - and ids shared by
+    two entries. Read-only: it never assigns the missing ids that the tools
+    hand out on first use."""
+    findings: List[Dict[str, str]] = []
+
+    def rows(name: str) -> List[Dict[str, Any]]:
+        try:
+            data = storage.load_store(name)
+        except Exception:  # noqa: BLE001 - unreadable stores are reported by check_stores
+            return []
+        return [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
+
+    def warn(area: str, count: int, what: str) -> None:
+        if count:
+            findings.append(_finding(WARN, area, f"{count} {what}"))
+
+    tasks = rows("tasks")
+    warn("tasks", sum(1 for t in tasks if not t.get("done") and t.get("due") and not _valid_day(t.get("due"))),
+         "open task(s) have a due date that cannot be read, so they never show as overdue.")
+    subs = [s for s in rows("subscriptions") if s.get("active", True)]
+    warn("subscriptions", sum(1 for s in subs if not _valid_day(s.get("next_date"))
+                              or s.get("cycle") not in ("weekly", "monthly", "quarterly", "yearly")
+                              or not isinstance(s.get("amount"), (int, float)) or s.get("amount", 0) <= 0),
+         "active subscription(s) have no readable renewal date, cycle or amount, so they are left out of "
+         "totals and renewal reminders.")
+    warn("people", sum(1 for p in rows("people") if p.get("birthday") and not (
+        _valid_day(p["birthday"]) if len(str(p["birthday"]).split("-")) == 3 else _valid_day(f"2024-{p['birthday']}"))),
+         "birthday(s) cannot be read, so they never trigger a reminder.")
+    from body import METRICS
+    warn("body", sum(1 for r in rows("body") if r.get("type") != "goal" and (
+        r.get("metric") not in METRICS or not isinstance(r.get("value"), (int, float))
+        or not _valid_day(r.get("date")))), "body reading(s) have an unknown metric, a non-numeric value or "
+                                            "no date, so they are left out of trends.")
+    for name in ("tasks", "subscriptions", "people"):
+        ids = [r["id"] for r in rows(name) if isinstance(r.get("id"), str) and r["id"]]
+        dupes = len({i for i in ids if ids.count(i) > 1})
+        warn(name, dupes, "id(s) are shared by more than one entry, so editing or deleting by id only reaches "
+                          "the first.")
+    if not findings:
+        findings.append(_finding(OK, "planner", "Tasks, subscriptions, people and body readings are all readable."))
     return findings
 
 
@@ -463,6 +521,7 @@ def run_checks(now: Optional[datetime] = None) -> List[Dict[str, str]]:
     if usable:
         findings += check_future_dates()
         findings += check_entry_ids()
+        findings += check_planner_data()
         findings += check_backups(now)
         findings += check_reminders(now)
         findings += check_budgets()

@@ -52,6 +52,16 @@ def _g(row: Dict[str, Any], key: str, default: Any = "") -> Any:
     return default if value is None else value
 
 
+def _body_label(row: Dict[str, Any]) -> str:
+    import body
+    return body.describe(row)
+
+
+def _body_journal(row: Dict[str, Any]) -> Dict[str, Any]:
+    import body
+    return body.journal_fields(row)
+
+
 # name -> {store, match (row -> bool), fields {arg: (row key, kind)},
 #          label (row -> str), journal (row -> memory fields) or None}
 TRACKERS: Dict[str, Dict[str, Any]] = {
@@ -148,6 +158,13 @@ TRACKERS: Dict[str, Dict[str, Any]] = {
         "fields": {"glasses": ("glasses", _i(1, 100))},
         "label": lambda r: f"{_g(r, 'glasses', 0)} glass(es) of water",
         "journal": None,  # handled by _sync_hydration_journal (the entry holds the day's total)
+    },
+    "body": {
+        "store": "body",
+        "match": lambda r: r.get("type") != "goal" and "metric" in r,
+        "fields": {"value": ("value", ("pos",)), "diastolic": ("value2", ("pos",)), "notes": ("notes", S)},
+        "label": lambda r: _body_label(r),
+        "journal": lambda r: _body_journal(r),
     },
     "medication": {
         "store": "medication",
@@ -295,6 +312,11 @@ def _coerce(arg: str, kind: Tuple, value: Any) -> Any:
         if not math.isfinite(number) or number < 0:
             raise ValueError(f"{arg} must be a number of 0 or more.")
         return int(number) if isinstance(value, int) or number.is_integer() else number
+    if tag == "pos":
+        number = _coerce(arg, N, value)
+        if number <= 0:
+            raise ValueError(f"{arg} must be above 0.")
+        return number
     if tag == "int":
         lo, hi = kind[1], kind[2]
         if isinstance(value, bool):

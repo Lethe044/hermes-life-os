@@ -43,6 +43,7 @@ from storage import (
     get_memory_by_date_range,
 )
 import plugins as _plugins
+from planner_schemas import PLANNER_SCHEMAS, ENTRY_DATE_PROP, TOOL_MODULES as _PLANNER_MODULES
 from patterns import detect_patterns
 from analytics import (
     compute_goal_progress, compute_habit_goal_progress, compare_periods, compare_before_after,
@@ -58,28 +59,23 @@ console = Console(width=min(110, shutil.get_terminal_size().columns))
 # ---------------------------------------------------------------------------
 
 _TRACKER_NAMES = ["meals", "sleep", "workouts", "stress", "meditation", "gratitude", "focus",
-                  "social", "substances", "reading", "hydration", "medication"]
+                  "social", "substances", "reading", "hydration", "body", "medication"]
 
 MAX_BATCH = 50
 
 _BATCHABLE = frozenset({
     "log_meal", "log_sleep", "log_hydration", "log_workout", "log_stress", "log_meditation",
     "log_gratitude", "log_focus_session", "log_expense", "log_social_interaction",
-    "log_substance", "log_reading", "log_medication", "log_dream",
+    "log_substance", "log_reading", "log_medication", "log_dream", "log_body_metric",
 })
 
 _BACKDATABLE = frozenset({
     "log_meal", "log_sleep", "log_hydration", "log_workout", "log_stress", "log_meditation",
     "log_gratitude", "log_focus_session", "log_expense", "log_social_interaction",
-    "log_substance", "log_reading", "log_medication", "log_dream", "update_habit",
+    "log_substance", "log_reading", "log_medication", "log_dream", "update_habit", "log_body_metric",
 })
 
-_ENTRY_DATE_PROP = {
-    "type": "string",
-    "description": "Optional. The day this happened as YYYY-MM-DD, to log something afterwards "
-                   "(e.g. yesterday's lunch). Defaults to today. Future dates and dates more than "
-                   "365 days back are rejected.",
-}
+_ENTRY_DATE_PROP = dict(ENTRY_DATE_PROP)
 
 
 def _memory_stamp(date: str) -> Dict[str, str]:
@@ -454,6 +450,13 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         except TypeError:
             return "days must be a whole number."
         return format_missing_days(tracker, missing, days)
+
+    # ── planner modules: tasks, body metrics, subscriptions, people, agenda ───
+    elif name in _PLANNER_MODULES:
+        import importlib
+        planner_mod = importlib.import_module(_PLANNER_MODULES[name])
+        return planner_mod.run_tool(name, inp, log_date=log_date, log_stamp=log_stamp,
+                                    log_id=log_id, dispatch=dispatch_tool)
 
     # ── get_day_log ───────────────────────────────────────────────────────────
     elif name == "get_day_log":
@@ -2847,6 +2850,7 @@ TOOLS = [
 # skipped (never crashes startup) and reported in PLUGIN_LOAD_ERRORS, which
 # demo_life_os.py surfaces once at startup.
 # ---------------------------------------------------------------------------
+TOOLS = TOOLS + PLANNER_SCHEMAS  # tasks, body metrics, subscriptions, people, agenda (planner_schemas.py)
 _BUILT_IN_TOOL_NAMES = {t["function"]["name"] for t in TOOLS}
 PLUGIN_TOOLS, PLUGIN_DISPATCHERS, PLUGIN_LOAD_ERRORS = _plugins.load_plugins(
     built_in_names=_BUILT_IN_TOOL_NAMES

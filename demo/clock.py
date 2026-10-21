@@ -132,3 +132,25 @@ def resolve_entry_date(value) -> str:
 def month_str() -> str:
     """The user's current month as YYYY-MM."""
     return effective_now().strftime("%Y-%m")
+
+
+def parse_day(text) -> date:
+    """A strict YYYY-MM-DD string as a date (leading zeros optional). Raises
+    ValueError with a user-readable message otherwise."""
+    if not isinstance(text, str):
+        raise ValueError("date must be written as YYYY-MM-DD, for example 2026-10-09.")
+    try:
+        return datetime.strptime(text.strip(), "%Y-%m-%d").date()
+    except ValueError:
+        raise ValueError(f"'{text.strip()}' is not a valid date - write it as YYYY-MM-DD, "
+                         f"for example 2026-10-09.") from None
+
+
+def add_months(day: date, months: int) -> date:
+    """`day` shifted by whole months; the day of month is clamped to the length
+    of the target month (Jan 31 + 1 month = Feb 28/29)."""
+    index = day.year * 12 + (day.month - 1) + months
+    year, month = divmod(index, 12)
+    month += 1
+    last = (date(year + (month // 12), month % 12 + 1, 1) - timedelta(days=1)).day
+    return date(year, month, min(day.day, last))
