@@ -1565,9 +1565,65 @@ clashing ids, past one-offs) and budgets (bad limits, duplicate
 categories, out-of-range alert thresholds), the day-start setting (an
 invalid `LIFE_OS_DAY_START_HOUR` is flagged instead of silently ignored)
 entries dated in the future (a sign of a wrong computer clock or a bad
-import) and persistent entry ids (rows that share an id, journal entries
-linked to a row that no longer exists). Exit status is 0 unless there is an error (or, with `--strict`, a
+import), persistent entry ids (rows that share an id, journal entries
+linked to a row that no longer exists) and the planner stores (a task due
+date, renewal date or birthday that cannot be read, an unknown body metric,
+shared ids). Exit status is 0 unless there is an error (or, with `--strict`, a
 warning). The same report is available in chat as `run_health_check`.
+
+## Planner: Tasks, Body Metrics, Subscriptions, People & Today's Agenda
+
+Until v1.42.0 Hermes tracked what you already did. Four new stores cover what
+is still ahead of you, and one tool pulls them together. All of it is local,
+per profile, encrypted with the rest of your data when encryption is on, and
+included in backup, restore, export and the doctor.
+
+```
+"add a task: renew passport, due friday, high priority"
+"what's on my plate?"            "I did the passport thing"
+"weight 80.5 today"              "how is my weight trending?"
+"my blood pressure was 120/80"   "set a weight goal of 75 kg"
+"add Netflix, 15 a month, renews on the 20th"
+"I paid Netflix"                 "what do my subscriptions cost per month?"
+"add Ayse, birthday 03-07, keep in touch every 14 days"
+"I called Ayse"                  "who should I catch up with?"
+"what's on my agenda today?"
+```
+
+- **Tasks** (`add_task`, `list_tasks`, `complete_task`, `update_task`,
+  `delete_task`, `get_task_summary`, `clear_done_tasks`): due dates (`today`,
+  `tomorrow`, `in 3 days`, `in 2 weeks`, a weekday name or `YYYY-MM-DD`),
+  priority, tags and repeats (`daily`, `weekdays`, `weekly`, `monthly`).
+  Completing a repeating task moves it to its next due date instead of
+  closing it. A task is found by id or by words from its text; an ambiguous
+  match is reported rather than guessed.
+- **Body metrics** (`log_body_metric`, `get_body_trend`, `set_body_goal`):
+  weight, body fat, waist, hips, resting heart rate, blood pressure (systolic
+  and diastolic), blood glucose, temperature and SpO2, with unit conversion
+  (lb to kg, F to C, mmol/L to mg/dL), plausible-range checks, a weekly rate
+  of change from a least-squares fit, and goals with an estimated arrival
+  date. Readings are backdatable, editable through `edit_log` and fed into the
+  memory journal. This is a log of your own numbers, not medical advice.
+- **Subscriptions** (`add_subscription`, `list_subscriptions`,
+  `update_subscription`, `cancel_subscription`, `resume_subscription`,
+  `delete_subscription`, `get_subscription_summary`, `pay_subscription`):
+  weekly, monthly, quarterly and yearly payments with the monthly equivalent
+  of each, the total, and what renews soon. Dates that have passed roll
+  forward and month ends are clamped (the 31st becomes the 28th). Paying a
+  subscription also logs it as an expense in its category.
+- **People** (`add_person`, `list_people`, `get_person`, `update_person`,
+  `delete_person`, `log_contact`, `get_people_due`): birthdays (`MM-DD` or
+  `YYYY-MM-DD`, Feb 29 falls on Mar 1 in other years), an optional
+  keep-in-touch goal in days, a contact history and who is overdue.
+- **Today's agenda** (`get_today_agenda`): overdue and due tasks, today's
+  reminders, renewals within 3 days, birthdays within 7 days, overdue
+  catch-ups, habit streaks that need a check-in today and budget alerts, in
+  one answer. Empty sections are left out.
+
+The proactive nudges now also mention an overdue task, a renewal within three
+days, a birthday and an overdue catch-up (at most two of these per run), and
+the doctor reports planner entries it cannot act on: an unreadable due date,
+renewal date, birthday or metric, and ids shared by two entries.
 
 ## Local Days, Night Owls & Backdating
 
@@ -1804,6 +1860,27 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.42.0 - Planner: Tasks, Body Metrics, Subscriptions, People, Agenda**
+- New **tasks**: `add_task`, `list_tasks`, `complete_task`, `update_task`,
+  `delete_task`, `get_task_summary`, `clear_done_tasks` with natural due dates,
+  priority, tags and daily/weekdays/weekly/monthly repeats.
+- New **body metrics**: `log_body_metric`, `get_body_trend`, `set_body_goal`
+  for weight, body fat, waist, hips, resting heart rate, blood pressure,
+  glucose, temperature and SpO2, with unit conversion, weekly trend and goal
+  ETA. Body readings join `list_logs`, `edit_log`, `delete_log`, backdating and
+  `log_many`.
+- New **subscriptions**: add, list, update, cancel, resume, delete, summary and
+  `pay_subscription` (logs the expense), with monthly-equivalent totals and
+  month-end-safe renewal dates.
+- New **people**: birthdays, keep-in-touch goals, contact history,
+  `get_people_due`.
+- New **`get_today_agenda`** combining tasks, reminders, renewals, birthdays,
+  overdue catch-ups, streaks at risk and budget alerts.
+- Proactive nudges cover overdue tasks, renewals and people; the doctor gets a
+  planner check; backup, restore, export and rekey cover the four new stores.
+- `clock.py` gains `parse_day` and `add_months`.
+- 407 new tests - suite grew from 2578 to 2985.
 
 **v1.41.0 - Habit Check-ins, Day View, Batch Logging**
 - **Fix:** `update_habit` counted every call as a new day. Checking a habit in

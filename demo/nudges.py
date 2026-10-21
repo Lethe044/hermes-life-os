@@ -30,7 +30,35 @@ from budgets import budget_alerts
 from backup import backup_alert
 
 GOAL_REGRESSION_THRESHOLD = 50.0  # below this, a linked goal is worth flagging
+MAX_PLANNER_NUDGES = 2            # task/renewal/people nudges per run
 MAX_BUDGET_NUDGES = 2             # budget warnings per run, so they can't crowd out everything else
+
+
+def _planner_nudges() -> List[str]:
+    """Overdue tasks, a subscription renewing within 3 days, a birthday or an
+    overdue catch-up. Each source is independent: one that fails (or has
+    nothing) never blocks the others or the rest of the nudges."""
+    out: List[str] = []
+    try:
+        import tasks
+        msg = tasks.overdue_nudge()
+        if msg:
+            out.append(msg)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import subscriptions
+        msg = subscriptions.renewal_nudge(3)
+        if msg:
+            out.append(msg)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import people
+        out.extend(people.nudges(2))
+    except Exception:  # noqa: BLE001
+        pass
+    return out[:MAX_PLANNER_NUDGES]
 
 
 def generate_nudges(window_days: int = 7, max_nudges: int = 4) -> List[str]:
@@ -63,6 +91,8 @@ def generate_nudges(window_days: int = 7, max_nudges: int = 4) -> List[str]:
             )
 
     nudges.extend(budget_alerts()[:MAX_BUDGET_NUDGES])
+
+    nudges.extend(_planner_nudges())
 
     stale_backup = backup_alert()
     if stale_backup:

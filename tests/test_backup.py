@@ -276,7 +276,8 @@ class TestFormatBackupStatus:
         backup_module.storage.write_memory({"type": "t"})
         backup_module.run_backup(now=datetime(2026, 10, 1, 20, 30, 0))
         out = backup_module.format_backup_status(now=datetime(2026, 10, 1, 21, 0, 0))
-        assert "holds 1 memory entries across 19 data sections" in out
+        sections = len(backup_module.storage.data_store_names()) + 1  # every store plus the memory journal
+        assert f"holds 1 memory entries across {sections} data sections" in out
 
     def test_legacy_newest_backup_is_flagged_incomplete(self, backup_module):
         _legacy_backup(backup_module.backups_dir())

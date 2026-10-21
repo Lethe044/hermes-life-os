@@ -58,6 +58,10 @@ MEDICATION_FILE = HERMES_DIR / "medication.json"
 TEMPLATES_FILE = HERMES_DIR / "templates.json"
 BUDGETS_FILE = HERMES_DIR / "budgets.json"
 REMINDERS_FILE = HERMES_DIR / "reminders.json"
+BODY_FILE = HERMES_DIR / "body.json"
+TASKS_FILE = HERMES_DIR / "tasks.json"
+SUBSCRIPTIONS_FILE = HERMES_DIR / "subscriptions.json"
+PEOPLE_FILE = HERMES_DIR / "people.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -84,6 +88,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     global FOCUS_FILE, MENTAL_FILE, SPENDING_FILE, SOCIAL_FILE, SUBSTANCE_FILE
     global ACHIEVEMENTS_FILE, READING_FILE, MEDICATION_FILE, TEMPLATES_FILE
     global BUDGETS_FILE, REMINDERS_FILE
+    global BODY_FILE, TASKS_FILE, SUBSCRIPTIONS_FILE, PEOPLE_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -106,6 +111,10 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     TEMPLATES_FILE = HERMES_DIR / "templates.json"
     BUDGETS_FILE = HERMES_DIR / "budgets.json"
     REMINDERS_FILE = HERMES_DIR / "reminders.json"
+    BODY_FILE = HERMES_DIR / "body.json"
+    TASKS_FILE = HERMES_DIR / "tasks.json"
+    SUBSCRIPTIONS_FILE = HERMES_DIR / "subscriptions.json"
+    PEOPLE_FILE = HERMES_DIR / "people.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -239,6 +248,14 @@ def load_budgets() -> List:      return _load(BUDGETS_FILE, [])
 def save_budgets(b):             _save(BUDGETS_FILE, b)
 def load_reminders() -> List:    return _load(REMINDERS_FILE, [])
 def save_reminders(r):           _save(REMINDERS_FILE, r)
+def load_body() -> List:         return _load(BODY_FILE, [])
+def save_body(b):                _save(BODY_FILE, b)
+def load_tasks() -> List:        return _load(TASKS_FILE, [])
+def save_tasks(t):               _save(TASKS_FILE, t)
+def load_subscriptions() -> List: return _load(SUBSCRIPTIONS_FILE, [])
+def save_subscriptions(s):       _save(SUBSCRIPTIONS_FILE, s)
+def load_people() -> List:       return _load(PEOPLE_FILE, [])
+def save_people(p):              _save(PEOPLE_FILE, p)
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +294,10 @@ DATA_STORES: Dict[str, tuple] = {
     "templates":    ("TEMPLATES_FILE",    "load_templates",    "save_templates",    dict),
     "budgets":      ("BUDGETS_FILE",      "load_budgets",      "save_budgets",      list),
     "reminders":    ("REMINDERS_FILE",    "load_reminders",    "save_reminders",    list),
+    "body":         ("BODY_FILE",         "load_body",         "save_body",         list),
+    "tasks":        ("TASKS_FILE",        "load_tasks",        "save_tasks",        list),
+    "subscriptions": ("SUBSCRIPTIONS_FILE", "load_subscriptions", "save_subscriptions", list),
+    "people":       ("PEOPLE_FILE",       "load_people",       "save_people",       list),
 }
 
 
