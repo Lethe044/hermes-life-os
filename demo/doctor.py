@@ -20,7 +20,7 @@ Checks:
   * entry ids: duplicate ids, and journal entries linked to a tracker row that
     no longer exists
   * the planner data (tasks, subscriptions, people, body readings, lists,
-    savings goals, symptoms, notes): dates and values that cannot be read,
+    savings goals, symptoms, notes, income, debts, countdowns, supplies): dates and values that cannot be read,
     shared ids
   * backups: whether there are any, how old the newest is, whether it is
     readable and complete, whether older ones are unreadable
@@ -240,7 +240,7 @@ def check_clock() -> List[Dict[str, str]]:
 # stores that hold a list of entries, each with a "date" (hydration keeps
 # its entries under ["log"], handled separately)
 _DATED_LIST_STORES = ["nutrition", "sleep", "fitness", "focus", "mental", "spending", "social",
-                      "substance", "reading", "medication", "body", "symptoms"]
+                      "substance", "reading", "medication", "body", "symptoms", "income"]
 
 
 def check_future_dates() -> List[Dict[str, str]]:
@@ -274,7 +274,7 @@ def check_future_dates() -> List[Dict[str, str]]:
 
 # stores whose rows carry a persistent id (v1.39.0 / v1.40.0)
 _ID_STORES = ["nutrition", "sleep", "fitness", "focus", "mental", "spending", "social",
-              "substance", "reading", "medication", "hydration", "body", "symptoms"]
+              "substance", "reading", "medication", "hydration", "body", "symptoms", "income"]
 
 
 def check_entry_ids() -> List[Dict[str, str]]:
@@ -376,13 +376,29 @@ def check_planner_data() -> List[Dict[str, Any]]:
          "list item(s) have no text.")
     warn("notes", sum(1 for r in rows("notes") if not isinstance(r.get("text"), str) or not r.get("text", "").strip()),
          "note(s) have no text.")
-    for name in ("tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes"):
+    warn("income", sum(1 for r in rows("income") if not isinstance(r.get("amount"), (int, float))
+                       or isinstance(r.get("amount"), bool) or r.get("amount", 0) <= 0
+                       or not _valid_day(r.get("date"))),
+         "income entries have an amount that is not a positive number or no readable date, so they are left "
+         "out of cash flow.")
+    warn("debts", sum(1 for d in rows("debts") if not isinstance(d.get("amount"), (int, float))
+                      or d.get("amount", 0) <= 0 or d.get("direction") not in ("owe", "owed")
+                      or (d.get("due") and not _valid_day(d.get("due")))),
+         "debt(s) have an unusable amount, direction or due date.")
+    warn("countdowns", sum(1 for c in rows("countdowns") if not _valid_day(c.get("date"))),
+         "countdown(s) have a date that cannot be read.")
+    warn("supplies", sum(1 for s in rows("supplies") if not _valid_day(s.get("as_of"))
+                         or not isinstance(s.get("quantity"), (int, float)) or s.get("quantity", 0) < 0
+                         or not isinstance(s.get("per_day"), (int, float)) or s.get("per_day", 0) < 0),
+         "supply item(s) have a count, daily use or date that cannot be read.")
+    for name in ("tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes", "income", "debts",
+                 "countdowns", "supplies"):
         ids = [r["id"] for r in rows(name) if isinstance(r.get("id"), str) and r["id"]]
         dupes = len({i for i in ids if ids.count(i) > 1})
         warn(name, dupes, "id(s) are shared by more than one entry, so editing or deleting by id only reaches "
                           "the first.")
     if not findings:
-        findings.append(_finding(OK, "planner", "Tasks, subscriptions, people, body readings, lists, savings, symptoms and notes are all readable."))
+        findings.append(_finding(OK, "planner", "Tasks, subscriptions, people, body readings, lists, savings, symptoms, notes, income, debts, countdowns and supplies are all readable."))
     return findings
 
 

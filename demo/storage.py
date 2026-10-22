@@ -66,6 +66,10 @@ LISTS_FILE = HERMES_DIR / "lists.json"
 SAVINGS_FILE = HERMES_DIR / "savings.json"
 SYMPTOMS_FILE = HERMES_DIR / "symptoms.json"
 NOTES_FILE = HERMES_DIR / "notes.json"
+INCOME_FILE = HERMES_DIR / "income.json"
+DEBTS_FILE = HERMES_DIR / "debts.json"
+COUNTDOWNS_FILE = HERMES_DIR / "countdowns.json"
+SUPPLIES_FILE = HERMES_DIR / "supplies.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -94,6 +98,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     global BUDGETS_FILE, REMINDERS_FILE
     global BODY_FILE, TASKS_FILE, SUBSCRIPTIONS_FILE, PEOPLE_FILE
     global LISTS_FILE, SAVINGS_FILE, SYMPTOMS_FILE, NOTES_FILE
+    global INCOME_FILE, DEBTS_FILE, COUNTDOWNS_FILE, SUPPLIES_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -124,6 +129,10 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     SAVINGS_FILE = HERMES_DIR / "savings.json"
     SYMPTOMS_FILE = HERMES_DIR / "symptoms.json"
     NOTES_FILE = HERMES_DIR / "notes.json"
+    INCOME_FILE = HERMES_DIR / "income.json"
+    DEBTS_FILE = HERMES_DIR / "debts.json"
+    COUNTDOWNS_FILE = HERMES_DIR / "countdowns.json"
+    SUPPLIES_FILE = HERMES_DIR / "supplies.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -273,6 +282,14 @@ def load_symptoms() -> List:     return _load(SYMPTOMS_FILE, [])
 def save_symptoms(x):            _save(SYMPTOMS_FILE, x)
 def load_notes() -> List:        return _load(NOTES_FILE, [])
 def save_notes(x):               _save(NOTES_FILE, x)
+def load_income() -> List:       return _load(INCOME_FILE, [])
+def save_income(x):              _save(INCOME_FILE, x)
+def load_debts() -> List:        return _load(DEBTS_FILE, [])
+def save_debts(x):               _save(DEBTS_FILE, x)
+def load_countdowns() -> List:   return _load(COUNTDOWNS_FILE, [])
+def save_countdowns(x):          _save(COUNTDOWNS_FILE, x)
+def load_supplies() -> List:     return _load(SUPPLIES_FILE, [])
+def save_supplies(x):            _save(SUPPLIES_FILE, x)
 
 
 # ---------------------------------------------------------------------------
@@ -319,6 +336,10 @@ DATA_STORES: Dict[str, tuple] = {
     "savings":      ("SAVINGS_FILE",      "load_savings",      "save_savings",      list),
     "symptoms":     ("SYMPTOMS_FILE",     "load_symptoms",     "save_symptoms",     list),
     "notes":        ("NOTES_FILE",        "load_notes",        "save_notes",        list),
+    "income":       ("INCOME_FILE",       "load_income",       "save_income",       list),
+    "debts":        ("DEBTS_FILE",        "load_debts",        "save_debts",        list),
+    "countdowns":   ("COUNTDOWNS_FILE",   "load_countdowns",   "save_countdowns",   list),
+    "supplies":     ("SUPPLIES_FILE",     "load_supplies",     "save_supplies",     list),
 }
 
 

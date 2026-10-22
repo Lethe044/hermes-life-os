@@ -5,8 +5,9 @@ One answer to "what do I have today?" that pulls from everything that has a
 date attached: tasks (overdue and due today), reminders for today,
 subscription renewals in the next few days, birthdays and people you are
 overdue to contact, habit streaks that need a check-in today to survive,
-budgets that are over or close to their limit, and savings goals whose
-deadline is within two weeks.
+budgets that are over or close to their limit, savings goals whose deadline
+is within two weeks, debts that are due, countdowns in the next week and
+supplies that are about to run out.
 
 Read-only and network-free; a section with nothing to say is left out, and if
 nothing at all is due the agenda says so. "Today" is the user's day (clock.py).
@@ -90,6 +91,31 @@ def build_agenda() -> str:
         close = []
     if close:
         sections.append(_section("Savings goals with a close deadline:", close))
+
+    try:
+        import debts
+        due = [f"{('OVERDUE ' if x['in_days'] < 0 else '') + debts.describe(x['debt'])} "
+               f"(due {x['debt']['due']})" for x in debts.due_soon(3)]
+    except Exception:  # noqa: BLE001
+        due = []
+    if due:
+        sections.append(_section("Debts due:", due))
+
+    try:
+        import countdowns
+        coming = [countdowns.format_countdown(x).split(" [id=")[0] for x in countdowns.within(countdowns.AGENDA_DAYS)]
+    except Exception:  # noqa: BLE001
+        coming = []
+    if coming:
+        sections.append(_section("Countdowns:", coming))
+
+    try:
+        import supplies
+        low = [supplies.format_supply(x).split(" [id=")[0] for x in supplies.running_low(supplies.AGENDA_DAYS)]
+    except Exception:  # noqa: BLE001
+        low = []
+    if low:
+        sections.append(_section("Supplies running out:", low))
 
     if not sections:
         return out[0] + "\nNothing due today: no tasks, reminders, renewals, birthdays or streaks at risk."

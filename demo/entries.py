@@ -62,6 +62,16 @@ def _body_journal(row: Dict[str, Any]) -> Dict[str, Any]:
     return body.journal_fields(row)
 
 
+def _income_label(row: Dict[str, Any]) -> str:
+    import income
+    return income.describe(row)
+
+
+def _income_journal(row: Dict[str, Any]) -> Dict[str, Any]:
+    import income
+    return income.journal_fields(row)
+
+
 def _symptom_label(row: Dict[str, Any]) -> str:
     import symptoms
     return symptoms.describe(row)
@@ -184,6 +194,13 @@ TRACKERS: Dict[str, Dict[str, Any]] = {
                    "notes": ("notes", S)},
         "label": lambda r: _symptom_label(r),
         "journal": lambda r: _symptom_journal(r),
+    },
+    "income": {
+        "store": "income",
+        "match": lambda r: "amount" in r,
+        "fields": {"amount": ("amount", ("pos",)), "source": ("source", S), "notes": ("notes", S)},
+        "label": lambda r: _income_label(r),
+        "journal": lambda r: _income_journal(r),
     },
     "medication": {
         "store": "medication",
