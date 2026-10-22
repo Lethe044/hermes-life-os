@@ -175,6 +175,7 @@ class TestDataStoreRegistry:
             "focus", "mental", "spending", "social", "substance", "reading", "medication",
             "achievements", "templates", "budgets", "reminders",
             "body", "tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes",
+            "income", "debts", "countdowns", "supplies",
         }
 
     def test_every_file_constant_is_registered(self, storage):

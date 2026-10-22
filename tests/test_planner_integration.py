@@ -56,7 +56,7 @@ class TestNudges:
         planner.dispatch_tool("add_task", {"text": "old", "due": "2026-10-01"})
         planner.dispatch_tool("add_subscription", {"name": "Netflix", "amount": 15, "next_date": "2026-10-14"})
         planner.dispatch_tool("add_person", {"name": "Ayse", "birthday": "10-14"})
-        assert len(nudges._planner_nudges()) == nudges.MAX_PLANNER_NUDGES == 2
+        assert len(nudges._planner_nudges()) == nudges.MAX_PLANNER_NUDGES == 3
 
     def test_a_failing_source_does_not_block_the_others(self, planner, monkeypatch):
         import nudges, tasks

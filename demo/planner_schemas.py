@@ -3,7 +3,8 @@ Hermes Life OS - tool schemas for the planner modules
 =======================================================
 Pure data: the schemas of the tools that live in tasks.py, body.py,
 subscriptions.py, people.py, agenda.py, lists.py, savings.py,
-symptoms.py and notes.py, plus the tool name -> module map
+symptoms.py, notes.py, income.py, debts.py, countdowns.py
+and supplies.py, plus the tool name -> module map
 tools.py uses to dispatch them. Kept apart from those modules so that
 importing tools.py never imports (and never binds to) the storage layer of
 modules that only matter when one of their tools is actually called.
@@ -181,7 +182,7 @@ SYMPTOM_SCHEMAS = [
            "triggers": {"type": "array", "items": {"type": "string"},
                         "description": "Suspected triggers, e.g. stress, coffee, bad sleep."},
            "time": {"type": "string", "description": "Optional HH:MM."}, "notes": {"type": "string"},
-           "date": ENTRY_DATE_PROP}, ["symptom", "severity"]),
+           "date": dict(ENTRY_DATE_PROP)}, ["symptom", "severity"]),
     _tool("get_symptom_summary", "How often and how badly symptoms occurred: counts, average severity, days since "
                                  "the last one, common triggers, trend, worst weekday and sleep before symptom days.",
           {"days": {"type": "integer", "description": "Window, 1-365, default 30."},
@@ -204,12 +205,79 @@ NOTE_SCHEMAS = [
     _tool("delete_note", "Delete a note.", {"note": _NOTE_REF}, ["note"]),
 ]
 
+INCOME_SCHEMAS = [
+    _tool("log_income", "Log money coming in (salary, refund, side job). Amounts have no currency. Mirrors "
+                        "log_expense; can be backdated.",
+          {"amount": {"type": "number"}, "source": {"type": "string", "description": "e.g. salary, freelance."},
+           "notes": {"type": "string"}, "date": dict(ENTRY_DATE_PROP)}, ["amount"]),
+    _tool("get_cash_flow", "Income vs spending per month: net, share of income kept (savings rate), average "
+                           "net and income sources.",
+          {"months": {"type": "integer", "description": "Calendar months including this one, 1-24, default 3."}}, []),
+]
+
+_DEBT_REF = {"type": "string", "description": "The debt's id or the other person's name."}
+
+DEBT_SCHEMAS = [
+    _tool("add_debt", "Record money you owe someone (direction 'owe') or that someone owes you (direction 'owed').",
+          {"who": {"type": "string"}, "amount": {"type": "number"},
+           "direction": {"type": "string", "enum": ["owe", "owed"],
+                         "description": "'owe' = you owe them, 'owed' = they owe you."},
+           "due": {"type": "string", "description": "Optional, YYYY-MM-DD."}, "notes": {"type": "string"}},
+          ["who", "amount", "direction"]),
+    _tool("record_debt_payment", "Record a (partial) payment on a debt. Cannot exceed what is still open.",
+          {"debt": _DEBT_REF, "amount": {"type": "number"}, "note": {"type": "string"},
+           "date": {"type": "string", "description": "YYYY-MM-DD, default today. Not in the future."}},
+          ["debt", "amount"]),
+    _tool("get_debts", "What you owe and what you are owed, with due dates and overdue flags.",
+          {"include_settled": {"type": "boolean", "description": "Also show fully paid debts. Default false."}}, []),
+    _tool("update_debt", "Change a debt: who, amount, due ('' clears) or notes.",
+          {"debt": _DEBT_REF, "fields": {"type": "object"}}, ["debt", "fields"]),
+    _tool("delete_debt", "Delete a debt and its payments.", {"debt": _DEBT_REF}, ["debt"]),
+]
+
+_COUNTDOWN_REF = {"type": "string", "description": "The countdown's name (or part of it) or id."}
+
+COUNTDOWN_SCHEMAS = [
+    _tool("add_countdown", "Count the days until (or since) an event, e.g. a holiday, an exam or quitting "
+                           "something. A yearly countdown always points at its next anniversary.",
+          {"name": {"type": "string"}, "date": {"type": "string", "description": "YYYY-MM-DD, past dates allowed."},
+           "repeat": {"type": "string", "enum": ["yearly"]}, "notes": {"type": "string"}}, ["name", "date"]),
+    _tool("get_countdowns", "All countdowns: upcoming first, then days since for past ones.",
+          {"include_past": {"type": "boolean", "description": "Default true."}}, []),
+    _tool("update_countdown", "Change a countdown: name, date, repeat ('' clears) or notes.",
+          {"countdown": _COUNTDOWN_REF, "fields": {"type": "object"}}, ["countdown", "fields"]),
+    _tool("delete_countdown", "Delete a countdown.", {"countdown": _COUNTDOWN_REF}, ["countdown"]),
+]
+
+_SUPPLY_REF = {"type": "string", "description": "The supply's name (or part of it) or id."}
+
+SUPPLY_SCHEMAS = [
+    _tool("add_supply", "Track something that runs out (pills, contact lenses, pet food): how many you have and "
+                        "how many you use per day. Hermes works out how many are left and when it runs out.",
+          {"name": {"type": "string"}, "quantity": {"type": "number", "description": "How many you have."},
+           "per_day": {"type": "number", "description": "How many you use per day."},
+           "unit": {"type": "string", "description": "e.g. pills."},
+           "as_of": {"type": "string", "description": "Day of the count, YYYY-MM-DD, default today."},
+           "notes": {"type": "string"}}, ["name", "quantity", "per_day"]),
+    _tool("refill_supply", "Record a refill: adds to what is left (mode 'add', default) or sets the count today "
+                           "(mode 'set').",
+          {"supply": _SUPPLY_REF, "quantity": {"type": "number"},
+           "mode": {"type": "string", "enum": ["add", "set"]}}, ["supply", "quantity"]),
+    _tool("get_supplies", "How many of each supply are left and when each runs out, soonest first.", {}, []),
+    _tool("update_supply", "Change a supply: name, per_day, unit or notes (use refill_supply for the count).",
+          {"supply": _SUPPLY_REF, "fields": {"type": "object"}}, ["supply", "fields"]),
+    _tool("delete_supply", "Stop tracking a supply.", {"supply": _SUPPLY_REF}, ["supply"]),
+]
+
 PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_SCHEMAS + AGENDA_SCHEMAS
-                   + LIST_SCHEMAS + SAVINGS_SCHEMAS + SYMPTOM_SCHEMAS + NOTE_SCHEMAS)
+                   + LIST_SCHEMAS + SAVINGS_SCHEMAS + SYMPTOM_SCHEMAS + NOTE_SCHEMAS
+                   + INCOME_SCHEMAS + DEBT_SCHEMAS + COUNTDOWN_SCHEMAS + SUPPLY_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
                           (PEOPLE_SCHEMAS, "people"), (AGENDA_SCHEMAS, "agenda"), (LIST_SCHEMAS, "lists"),
-                          (SAVINGS_SCHEMAS, "savings"), (SYMPTOM_SCHEMAS, "symptoms"), (NOTE_SCHEMAS, "notes")):
+                          (SAVINGS_SCHEMAS, "savings"), (SYMPTOM_SCHEMAS, "symptoms"), (NOTE_SCHEMAS, "notes"),
+                          (INCOME_SCHEMAS, "income"), (DEBT_SCHEMAS, "debts"), (COUNTDOWN_SCHEMAS, "countdowns"),
+                          (SUPPLY_SCHEMAS, "supplies")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module
