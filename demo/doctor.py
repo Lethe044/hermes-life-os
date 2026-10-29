@@ -20,8 +20,9 @@ Checks:
   * entry ids: duplicate ids, and journal entries linked to a tracker row that
     no longer exists
   * the planner data (tasks, subscriptions, people, body readings, lists,
-    savings goals, symptoms, notes, income, debts, countdowns, supplies): dates and values that cannot be read,
-    shared ids
+    savings goals, symptoms, notes, income, debts, countdowns, supplies, time blocks, objectives, recipes,
+    the meal plan, trips): dates and values that cannot be read, shared ids (repair_hints.py names the entries and
+    the fixing tool call)
   * backups: whether there are any, how old the newest is, whether it is
     readable and complete, whether older ones are unreadable
   * reminders: timed reminders whose time can never fire, ids that clash,
@@ -334,6 +335,7 @@ def check_planner_data() -> List[Dict[str, Any]]:
     reading with an unknown metric is left out of trends - and ids shared by
     two entries. Read-only: it never assigns the missing ids that the tools
     hand out on first use."""
+    import timeblocks
     findings: List[Dict[str, str]] = []
 
     def rows(name: str) -> List[Dict[str, Any]]:
@@ -391,14 +393,33 @@ def check_planner_data() -> List[Dict[str, Any]]:
                          or not isinstance(s.get("quantity"), (int, float)) or s.get("quantity", 0) < 0
                          or not isinstance(s.get("per_day"), (int, float)) or s.get("per_day", 0) < 0),
          "supply item(s) have a count, daily use or date that cannot be read.")
+    warn("timeblocks", sum(1 for b in rows("timeblocks") if timeblocks.span(b) is None),
+         "time block(s) have a date or time that cannot be read, or end before they start, so they are left "
+         "out of the day plan.")
+    warn("okrs", sum(1 for o in rows("okrs") if not _valid_day(o.get("start")) or not _valid_day(o.get("end"))
+                     or any(not isinstance(k, dict) or not all(isinstance(k.get(f), (int, float)) and not isinstance(k.get(f), bool)
+                                                              for f in ("start_value", "target", "current"))
+                            or k.get("start_value") == k.get("target")
+                            for k in (o.get("key_results") if isinstance(o.get("key_results"), list) else []))),
+         "objective(s) have a period or key result numbers that cannot be used.")
+    warn("recipes", sum(1 for r in rows("recipes") if not isinstance(r.get("ingredients"), list)
+                        or not r.get("ingredients") or not isinstance(r.get("servings"), (int, float))
+                        or isinstance(r.get("servings"), bool) or r.get("servings", 0) < 1),
+         "recipe(s) have no ingredients or no usable number of servings.")
+    warn("mealplan", sum(1 for m in rows("mealplan") if not _valid_day(m.get("date"))
+                         or m.get("slot") not in ("breakfast", "lunch", "dinner", "snack")),
+         "planned meal(s) have a date that cannot be read or an unknown slot.")
+    warn("trips", sum(1 for t in rows("trips") if not _valid_day(t.get("start")) or not _valid_day(t.get("end"))
+                      or str(t.get("end")) < str(t.get("start"))),
+         "trip(s) have dates that cannot be read or end before they start.")
     for name in ("tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes", "income", "debts",
-                 "countdowns", "supplies"):
+                 "countdowns", "supplies", "timeblocks", "okrs", "recipes", "mealplan", "trips"):
         ids = [r["id"] for r in rows(name) if isinstance(r.get("id"), str) and r["id"]]
         dupes = len({i for i in ids if ids.count(i) > 1})
         warn(name, dupes, "id(s) are shared by more than one entry, so editing or deleting by id only reaches "
                           "the first.")
     if not findings:
-        findings.append(_finding(OK, "planner", "Tasks, subscriptions, people, body readings, lists, savings, symptoms, notes, income, debts, countdowns and supplies are all readable."))
+        findings.append(_finding(OK, "planner", "Tasks, subscriptions, people, body readings, lists, savings, symptoms, notes, income, debts, countdowns, supplies, time blocks, objectives, recipes, the meal plan and trips are all readable. Run get_repair_suggestions when a warning needs follow-up."))
     return findings
 
 

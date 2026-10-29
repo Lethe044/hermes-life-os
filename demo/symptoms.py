@@ -11,7 +11,9 @@ symptom days with the average before the other days.
 
 Stored in symptoms.json as {"id", "date", "symptom", "severity", "duration_minutes",
 "triggers", "time", "notes"} dicts. Entries are logged with log_symptom and
-can be listed, edited, deleted and backdated like the other trackers. This is
+can be listed, edited, deleted and backdated like the other trackers. The trigger
+report compares symptom days with other days using the sleep, stress, water,
+caffeine, alcohol, nicotine and workout logs. This is
 a personal log, not a diagnosis: nothing here is medical advice. No network
 call is made by this module.
 """
@@ -21,7 +23,7 @@ from __future__ import annotations
 import uuid
 from collections import Counter
 from datetime import timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import clock
 
@@ -285,6 +287,180 @@ def format_summary(stats: List[Dict[str, Any]], days: int, symptom: Optional[str
         lines.append("A severity of 9-10 or anything new or getting worse is worth mentioning to a doctor.")
     return "\n".join(lines)
 
+# ------------------------------------------------------------------ trigger report
+
+MIN_SYMPTOM_DAYS = 4
+MIN_OTHER_DAYS = 4
+MIN_DAYS, MAX_DAYS, DEFAULT_DAYS = 14, 365, 90
+_GROUPS = {
+    "caffeine": ("caffeine", "coffee", "tea", "espresso", "energy drink", "cola"),
+    "alcohol": ("alcohol", "beer", "wine", "vodka", "whiskey", "whisky", "rum", "gin", "spirits", "cocktail"),
+    "nicotine": ("nicotine", "cigarette", "smoking", "vape", "tobacco"),
+}
+# numeric factor -> (label, minimum difference worth mentioning, unit)
+_NUMERIC = {
+    "sleep_hours": ("Sleep the night before", 0.5, "h"),
+    "sleep_quality": ("Sleep quality the night before", 0.7, "/10"),
+    "stress": ("Stress the day before", 0.7, "/10"),
+    "water": ("Water the day before", 1.0, " glasses"),
+}
+
+
+def _num(value: Any) -> Optional[float]:
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _day_before(day: str) -> str:
+    return (clock.parse_day(day) - timedelta(days=1)).isoformat()
+
+
+def _list_rows(loader: str) -> List[Dict[str, Any]]:
+    try:
+        rows = getattr(_storage(), loader)()
+    except Exception:  # noqa: BLE001 - one unreadable store must not break the report
+        return []
+    return [r for r in rows if isinstance(r, dict) and isinstance(r.get("date"), str)] if isinstance(rows, list) else []
+
+
+def _factor_data() -> Dict[str, Any]:
+    """Per-day values of every factor, from the other trackers."""
+    sleep_h: Dict[str, float] = {}
+    sleep_q: Dict[str, float] = {}
+    for r in _list_rows("load_sleep"):
+        if _num(r.get("hours")) is not None:
+            sleep_h[r["date"]] = float(r["hours"])
+        if _num(r.get("quality")) is not None:
+            sleep_q[r["date"]] = float(r["quality"])
+    stress: Dict[str, List[float]] = {}
+    for r in _list_rows("load_mental"):
+        if _num(r.get("score")) is not None and r.get("type") in (None, "stress"):
+            stress.setdefault(r["date"], []).append(float(r["score"]))
+    water: Dict[str, float] = {}
+    try:
+        hyd = _storage().load_hydration()
+    except Exception:  # noqa: BLE001
+        hyd = {}
+    for r in hyd.get("log", []) if isinstance(hyd, dict) and isinstance(hyd.get("log"), list) else []:
+        if isinstance(r, dict) and isinstance(r.get("date"), str) and _num(r.get("glasses")) is not None:
+            water[r["date"]] = water.get(r["date"], 0.0) + float(r["glasses"])
+    groups: Dict[str, set] = {g: set() for g in _GROUPS}
+    subs = _list_rows("load_substance")
+    for r in subs:
+        name = str(r.get("substance", "")).lower()
+        for g, words in _GROUPS.items():
+            if any(w in name for w in words):
+                groups[g].add(r["date"])
+    workouts = {r["date"] for r in _list_rows("load_fitness")}
+    logged = set(sleep_h) | set(sleep_q) | set(stress) | set(water) | workouts | {r["date"] for r in subs}
+    logged |= {r["date"] for r in _list_rows("load_nutrition")}
+    return {"sleep_hours": sleep_h, "sleep_quality": sleep_q,
+            "stress": {d: sum(v) / len(v) for d, v in stress.items()}, "water": water,
+            "groups": groups, "workouts": workouts, "logged": logged}
+
+
+def _mean_sd(values: List[float]) -> Tuple[float, float]:
+    m = sum(values) / len(values)
+    var = sum((v - m) ** 2 for v in values) / (len(values) - 1) if len(values) > 1 else 0.0
+    return m, var ** 0.5
+
+
+def trigger_report(symptom: Any = None, days: Any = DEFAULT_DAYS) -> Dict[str, Any]:
+    """Compares the days a symptom happened with the other days over the last
+    `days` days: numeric factors (sleep, stress, water) by their averages,
+    habits (caffeine, alcohol, nicotine, a workout) by how often they came the
+    day before, plus how often each trigger you named came up. Only differences
+    that are large enough and backed by enough days are reported."""
+    if isinstance(days, bool):
+        raise ValueError(f"days must be a whole number from {MIN_DAYS} to {MAX_DAYS}.")
+    try:
+        n = int(days)
+    except (TypeError, ValueError):
+        raise ValueError(f"days must be a whole number from {MIN_DAYS} to {MAX_DAYS}.") from None
+    if not MIN_DAYS <= n <= MAX_DAYS:
+        raise ValueError(f"days must be between {MIN_DAYS} and {MAX_DAYS}.")
+    today = clock.today()
+    start = (today - timedelta(days=n - 1)).isoformat()
+    window = [r for r in entries() if start <= r["date"] <= today.isoformat()]
+    if symptom:
+        name = clean_name(symptom)
+    elif window:
+        name = Counter(r["symptom"] for r in window).most_common(1)[0][0]
+    else:
+        return {"symptom": None, "days": n, "enough": False, "symptom_days": 0, "other_days": 0,
+                "findings": [], "self_reported": []}
+    rows = [r for r in window if r["symptom"] == name]
+    sdays = {r["date"] for r in rows}
+    all_days = {(today - timedelta(days=i)).isoformat() for i in range(n)}
+    odays = all_days - sdays
+    out: Dict[str, Any] = {"symptom": name, "days": n, "symptom_days": len(sdays), "other_days": len(odays),
+                           "enough": len(sdays) >= MIN_SYMPTOM_DAYS, "findings": [], "self_reported": []}
+    counted = Counter(t for r in rows for t in (r.get("triggers") or []) if isinstance(t, str))
+    out["self_reported"] = [(t, c) for t, c in counted.most_common(5)]
+    out["entries"] = len(rows)
+    if not out["enough"]:
+        return out
+    data = _factor_data()
+    findings: List[Dict[str, Any]] = []
+    for key, (label, min_diff, unit) in _NUMERIC.items():
+        source = data[key]
+        shift = key in ("stress", "water")           # these look at the day BEFORE
+        def val(d: str, source=source, shift=shift):
+            return source.get(_day_before(d) if shift else d)
+        a = [v for v in (val(d) for d in sdays) if v is not None]
+        b = [v for v in (val(d) for d in odays) if v is not None]
+        if len(a) < MIN_SYMPTOM_DAYS or len(b) < MIN_OTHER_DAYS:
+            continue
+        ma, sa = _mean_sd(a)
+        mb, sb = _mean_sd(b)
+        diff = ma - mb
+        if abs(diff) < min_diff:
+            continue
+        pooled = (((len(a) - 1) * sa ** 2 + (len(b) - 1) * sb ** 2) / max(1, len(a) + len(b) - 2)) ** 0.5
+        effect = abs(diff) / max(pooled, min_diff / 2)
+        if effect < 0.5:
+            continue
+        findings.append({"factor": key, "kind": "numeric", "effect": round(effect, 2),
+                         "text": f"{label}: {ma:.1f}{unit} on {name} days vs {mb:.1f}{unit} on other days "
+                                 f"({len(a)} vs {len(b)} days with data)."})
+    logged = data["logged"]
+    base_other = odays & logged
+    presence = [(g, f"{g.capitalize()} the day before", data["groups"][g]) for g in _GROUPS]
+    presence.append(("workout", "A workout the day before", data["workouts"]))
+    for key, label, days_with in presence:
+        if not days_with or len(base_other) < MIN_OTHER_DAYS:
+            continue
+        hit_s = sum(1 for d in sdays if _day_before(d) in days_with)
+        hit_o = sum(1 for d in base_other if _day_before(d) in days_with)
+        share_s, share_o = hit_s / len(sdays), hit_o / len(base_other)
+        if abs(share_s - share_o) < 0.25:
+            continue
+        findings.append({"factor": key, "kind": "presence", "effect": round(abs(share_s - share_o) * 4, 2),
+                         "text": f"{label}: before {hit_s} of {len(sdays)} {name} days ({share_s:.0%}) vs "
+                                 f"{hit_o} of {len(base_other)} other logged days ({share_o:.0%})."})
+    findings.sort(key=lambda f: (-f["effect"], f["factor"]))
+    out["findings"] = findings[:5]
+    return out
+
+
+def format_trigger_report(rep: Dict[str, Any]) -> str:
+    if rep["symptom"] is None:
+        return f"No symptoms logged in the last {rep['days']} days, so there is nothing to compare."
+    name = rep["symptom"]
+    if not rep["enough"]:
+        return (f"Only {rep['symptom_days']} day(s) with {name} in the last {rep['days']} days - at least "
+                f"{MIN_SYMPTOM_DAYS} are needed to compare them with the other days.")
+    lines = [f"What differs on {name} days (last {rep['days']} days: {rep['symptom_days']} {name} days, "
+             f"{rep['other_days']} other days):"]
+    if rep["findings"]:
+        lines += [f"- {f['text']}" for f in rep["findings"]]
+    else:
+        lines.append("- No clear difference in sleep, stress, water, caffeine, alcohol, nicotine or workouts "
+                     "(or too little logged to tell).")
+    if rep["self_reported"]:
+        lines.append("Triggers you named: " + ", ".join(f"{t} ({c}x)" for t, c in rep["self_reported"]) + ".")
+    lines.append("These are patterns in your own data, not causes, and not medical advice.")
+    return "\n".join(lines)
+
 
 def run_tool(name: str, inp: Dict[str, Any], log_date: Optional[str] = None,
              log_stamp: Optional[Dict[str, str]] = None, log_id: Optional[str] = None, **_ctx: Any) -> str:
@@ -302,6 +478,9 @@ def run_tool(name: str, inp: Dict[str, Any], log_date: Optional[str] = None,
         if name == "get_symptom_summary":
             days = int(inp.get("days", 30))
             return format_summary(summary(days, inp.get("symptom")), days, inp.get("symptom"))
+        if name == "get_symptom_triggers":
+            return format_trigger_report(trigger_report(inp.get("symptom"), inp.get("days", DEFAULT_DAYS)))
     except (ValueError, TypeError) as e:
-        return {"log_symptom": "Not logged", "get_symptom_summary": "Cannot summarize symptoms"}.get(name, "Error") + f": {e}"
+        return {"log_symptom": "Not logged", "get_symptom_summary": "Cannot summarize symptoms",
+                                                                      "get_symptom_triggers": "Cannot compare symptom days"}.get(name, "Error") + f": {e}"
     return f"Unknown symptom tool: {name}"

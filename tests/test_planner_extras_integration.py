@@ -24,7 +24,7 @@ class TestDoctor:
         planner.dispatch_tool("add_note", {"text": "hello"})
         f = self.check()
         assert [x["level"] for x in f] == ["ok"]
-        assert "lists, savings, symptoms, notes, income, debts, countdowns and supplies" in f[0]["message"]
+        assert "countdowns, supplies, time blocks, objectives, recipes, the meal plan and trips are all readable" in f[0]["message"]
 
     def test_savings_problems(self, planner):
         import storage

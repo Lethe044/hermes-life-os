@@ -6,8 +6,9 @@ date attached: tasks (overdue and due today), reminders for today,
 subscription renewals in the next few days, birthdays and people you are
 overdue to contact, habit streaks that need a check-in today to survive,
 budgets that are over or close to their limit, savings goals whose deadline
-is within two weeks, debts that are due, countdowns in the next week and
-supplies that are about to run out.
+is within two weeks, debts that are due, countdowns in the next week,
+supplies that are about to run out, today's time blocks, objectives that end
+within a week and trips that are about to start or are under way.
 
 Read-only and network-free; a section with nothing to say is left out, and if
 nothing at all is due the agenda says so. "Today" is the user's day (clock.py).
@@ -116,6 +117,30 @@ def build_agenda() -> str:
         low = []
     if low:
         sections.append(_section("Supplies running out:", low))
+
+    try:
+        import timeblocks
+        planned = timeblocks.agenda_lines()
+    except Exception:  # noqa: BLE001
+        planned = []
+    if planned:
+        sections.append(_section("Time blocks:", planned))
+
+    try:
+        import okrs
+        ending = okrs.agenda_lines()
+    except Exception:  # noqa: BLE001
+        ending = []
+    if ending:
+        sections.append(_section("Objectives about to end:", ending))
+
+    try:
+        import trips
+        away = trips.agenda_lines()
+    except Exception:  # noqa: BLE001
+        away = []
+    if away:
+        sections.append(_section("Trips:", away))
 
     if not sections:
         return out[0] + "\nNothing due today: no tasks, reminders, renewals, birthdays or streaks at risk."
