@@ -30,7 +30,7 @@ from budgets import budget_alerts
 from backup import backup_alert
 
 GOAL_REGRESSION_THRESHOLD = 50.0  # below this, a linked goal is worth flagging
-MAX_PLANNER_NUDGES = 3            # task/renewal/people/savings/debt/countdown/supply/block/objective/trip nudges per run
+MAX_PLANNER_NUDGES = 3            # task/renewal/people/savings/debt/countdown/supply/block/objective/trip/chore/expiry/gift/decision nudges per run
 MAX_BUDGET_NUDGES = 2             # budget warnings per run, so they can't crowd out everything else
 
 
@@ -68,7 +68,7 @@ def _planner_nudges() -> List[str]:
     except Exception:  # noqa: BLE001
         pass
     for module, count in (("debts", 1), ("countdowns", 1), ("supplies", 1), ("timeblocks", 1), ("okrs", 1),
-                          ("trips", 1)):
+                          ("trips", 1), ("chores", 1), ("expiries", 1), ("gifts", 1), ("decisions", 1)):
         try:
             out.extend(__import__(module).nudges(count))
         except Exception:  # noqa: BLE001

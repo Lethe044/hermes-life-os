@@ -4,8 +4,8 @@ Hermes Life OS - tool schemas for the planner modules
 Pure data: the schemas of the tools that live in tasks.py, body.py,
 subscriptions.py, people.py, agenda.py, lists.py, savings.py,
 symptoms.py, notes.py, income.py, debts.py, countdowns.py,
-supplies.py, timeblocks.py, okrs.py, recipes.py, trips.py, finder.py, closing.py
-and repair_hints.py, plus the tool name -> module map
+supplies.py, timeblocks.py, okrs.py, recipes.py, trips.py, finder.py, closing.py,
+repair_hints.py, chores.py, expiries.py, routines.py, gifts.py, decisions.py and weekahead.py, plus the tool name -> module map
 tools.py uses to dispatch them. Kept apart from those modules so that
 importing tools.py never imports (and never binds to) the storage layer of
 modules that only matter when one of their tools is actually called.
@@ -441,10 +441,115 @@ TRIP_SCHEMAS = [
           {"trip": _TRIP_REF, "item": {"type": "string"}}, ["trip", "item"]),
 ]
 
+_CHORE_REF = {"type": "string", "description": "The chore's name (or part of it) or id."}
+
+CHORE_SCHEMAS = [
+    _tool("add_chore", "Add something that repeats on a schedule: watering plants, changing a filter, a car service. "
+                       "The next due date counts from the day it was last done.",
+          {"name": {"type": "string"},
+           "every": {"type": "string", "description": "daily, weekly, biweekly, monthly, quarterly, yearly, 'every 10 days', "
+                                                       "'every 3 months' (a number alone means days)."},
+           "start": {"type": "string", "description": "First due date, default today. YYYY-MM-DD, tomorrow, in 3 days or a weekday."},
+           "notes": {"type": "string"}}, ["name", "every"]),
+    _tool("complete_chore", "Mark a chore done (today unless a date is given); the next one is due one interval later.",
+          {"chore": _CHORE_REF, "date": {"type": "string", "description": "YYYY-MM-DD, yesterday or today. Not in the future."}},
+          ["chore"]),
+    _tool("get_chores", "Chores with their next due date, overdue ones first.",
+          {"filter": {"type": "string", "enum": ["all", "due"], "description": "due = overdue or due within 7 days."}}, []),
+    _tool("update_chore", "Change a chore: name, every, start, last_done ('' clears) or notes.",
+          {"chore": _CHORE_REF, "fields": {"type": "object"}}, ["chore", "fields"]),
+    _tool("delete_chore", "Delete a chore.", {"chore": _CHORE_REF}, ["chore"]),
+]
+
+_EXPIRY_REF = {"type": "string", "description": "The item's name (or part of it) or id."}
+
+EXPIRY_SCHEMAS = [
+    _tool("add_expiry", "Track something that expires on a date (passport, driving licence, insurance, warranty, "
+                        "membership) so you are reminded in time.",
+          {"name": {"type": "string"}, "date": {"type": "string", "description": "Last valid day, YYYY-MM-DD."},
+           "remind_days": {"type": "integer", "description": "Start reminding this many days before, 1-365, default 30."},
+           "category": {"type": "string", "enum": ["document", "insurance", "license", "warranty", "membership", "other"]},
+           "notes": {"type": "string"}}, ["name", "date"]),
+    _tool("get_expiries", "Everything with an expiry date, earliest first, with what is expired or expiring soon.",
+          {"filter": {"type": "string", "enum": ["all", "soon"], "description": "soon = expired or inside its reminder window."}}, []),
+    _tool("renew_expiry", "Record a renewal: give the new expiry date, or a number of months to add to the current one "
+                          "(counted from today when it already expired).",
+          {"item": _EXPIRY_REF, "new_date": {"type": "string", "description": "YYYY-MM-DD."},
+           "extend_months": {"type": "integer", "description": "1-120."}}, ["item"]),
+    _tool("update_expiry", "Change an expiry date entry: name, date, remind_days, category or notes.",
+          {"item": _EXPIRY_REF, "fields": {"type": "object"}}, ["item", "fields"]),
+    _tool("delete_expiry", "Delete an expiry date entry.", {"item": _EXPIRY_REF}, ["item"]),
+]
+
+_ROUTINE_REF = {"type": "string", "description": "The routine's name (or part of it) or id."}
+
+ROUTINE_SCHEMAS = [
+    _tool("add_routine", "Create a routine: a named checklist you repeat (morning routine, evening shutdown). Steps are "
+                         "ticked per day and the streak of fully done days is tracked.",
+          {"name": {"type": "string"}, "steps": {"type": "array", "items": {"type": "string"}},
+           "days": {"type": "string", "description": "daily (default), weekdays, weekends or names such as 'mon, wed, fri'."}},
+          ["name", "steps"]),
+    _tool("get_routines", "All routines with today's progress and streak; give a routine to see its steps.",
+          {"routine": _ROUTINE_REF}, []),
+    _tool("check_routine_step", "Tick (or untick with undo) one step of a routine for today, or 'all' steps. A date up "
+                                "to 7 days back is allowed.",
+          {"routine": _ROUTINE_REF, "step": {"type": "string", "description": "The step's id, some words from it, or 'all'."},
+           "undo": {"type": "boolean"}, "date": {"type": "string", "description": "YYYY-MM-DD, default today."}},
+          ["routine", "step"]),
+    _tool("update_routine", "Change a routine: name, days or steps (the full new list; unchanged steps keep their ticks).",
+          {"routine": _ROUTINE_REF, "fields": {"type": "object"}}, ["routine", "fields"]),
+    _tool("delete_routine", "Delete a routine and its history.", {"routine": _ROUTINE_REF}, ["routine"]),
+]
+
+_GIFT_REF = {"type": "string", "description": "The gift idea's id or some words from it."}
+
+GIFT_SCHEMAS = [
+    _tool("add_gift_idea", "Save a gift idea for a person (a name from your people list gets their birthday linked).",
+          {"person": {"type": "string"}, "idea": {"type": "string"}, "price": {"type": "number"},
+           "occasion": {"type": "string", "description": "e.g. birthday, wedding."},
+           "status": {"type": "string", "enum": ["idea", "bought", "given"]}, "notes": {"type": "string"}},
+          ["person", "idea"]),
+    _tool("get_gift_ideas", "Gift ideas grouped by person, with what was bought or given and the birthdays coming up "
+                            "with no gift bought yet.",
+          {"person": {"type": "string"}, "status": {"type": "string", "enum": ["idea", "bought", "given"]}}, []),
+    _tool("update_gift_idea", "Change a gift idea: person, idea, price, occasion, status (idea, bought, given) or notes.",
+          {"gift": _GIFT_REF, "fields": {"type": "object"}}, ["gift", "fields"]),
+    _tool("delete_gift_idea", "Delete a gift idea.", {"gift": _GIFT_REF}, ["gift"]),
+]
+
+_DECISION_REF = {"type": "string", "description": "The decision's id or some words from its title."}
+
+DECISION_SCHEMAS = [
+    _tool("add_decision", "Write down a decision: the options, what you chose and why, what you expect and how "
+                          "confident you are. A review date (default in 30 days) is set so you can check how it went.",
+          {"title": {"type": "string"}, "options": {"type": "array", "items": {"type": "string"}},
+           "choice": {"type": "string"}, "reasoning": {"type": "string"}, "expected": {"type": "string"},
+           "confidence": {"type": "integer", "description": "1-10."},
+           "review": {"type": "string", "description": "YYYY-MM-DD, in 3 weeks or a weekday. Default in 30 days."}},
+          ["title"]),
+    _tool("get_decisions", "Decisions: open (default), due for review, reviewed (with how confidence compared with "
+                           "outcomes) or all.",
+          {"status": {"type": "string", "enum": ["open", "due", "reviewed", "all"]}}, []),
+    _tool("review_decision", "Record how a decision turned out, rated 1 (bad) to 5 (great), and what you learned.",
+          {"decision": _DECISION_REF, "outcome": {"type": "string"}, "rating": {"type": "integer", "description": "1-5."},
+           "lessons": {"type": "string"}}, ["decision", "outcome", "rating"]),
+    _tool("update_decision", "Change a decision: title, options, choice, reasoning, expected, confidence, review, "
+                             "outcome or lessons.",
+          {"decision": _DECISION_REF, "fields": {"type": "object"}}, ["decision", "fields"]),
+    _tool("delete_decision", "Delete a decision.", {"decision": _DECISION_REF}, ["decision"]),
+]
+
+WEEKAHEAD_SCHEMAS = [
+    _tool("get_week_ahead", "One calendar of everything with a date in the coming days: due tasks, time blocks, planned "
+                            "meals, birthdays, renewals, debts, countdowns, chores, expiry dates, trips and decisions to "
+                            "review. Overdue items first. Use for 'what is coming up this week'.",
+          {"days": {"type": "integer", "description": "1-14, default 7."}}, []),
+]
+
 SEARCH_SCHEMAS = [
     _tool("search_everything", "Search all your planner data at once (tasks, notes, lists, people, subscriptions, "
                                "savings, debts, countdowns, supplies, symptoms, recipes, meal plan, trips, objectives, "
-                               "time blocks, reminders, habits, goals) for some words. Results are grouped by area "
+                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, reminders, habits, goals) for some words. Results are grouped by area "
                                "with ids you can use in the matching tools. For things you logged, use search_logs.",
           {"query": {"type": "string"},
            "areas": {"type": "array", "items": {"type": "string"}, "description": "Only these areas, e.g. notes, tasks."},
@@ -468,7 +573,8 @@ PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_S
                    + LIST_SCHEMAS + SAVINGS_SCHEMAS + SYMPTOM_SCHEMAS + NOTE_SCHEMAS
                    + INCOME_SCHEMAS + DEBT_SCHEMAS + COUNTDOWN_SCHEMAS + SUPPLY_SCHEMAS
                    + TIMEBLOCK_SCHEMAS + OKR_SCHEMAS + RECIPE_SCHEMAS + TRIP_SCHEMAS + SEARCH_SCHEMAS
-                   + CLOSING_SCHEMAS + REPAIR_SCHEMAS)
+                   + CLOSING_SCHEMAS + REPAIR_SCHEMAS + CHORE_SCHEMAS + EXPIRY_SCHEMAS + ROUTINE_SCHEMAS
+                   + GIFT_SCHEMAS + DECISION_SCHEMAS + WEEKAHEAD_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
@@ -477,6 +583,8 @@ for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBS
                           (INCOME_SCHEMAS, "income"), (DEBT_SCHEMAS, "debts"), (COUNTDOWN_SCHEMAS, "countdowns"),
                           (SUPPLY_SCHEMAS, "supplies"), (TIMEBLOCK_SCHEMAS, "timeblocks"), (OKR_SCHEMAS, "okrs"),
                           (RECIPE_SCHEMAS, "recipes"), (TRIP_SCHEMAS, "trips"), (SEARCH_SCHEMAS, "finder"),
-                          (CLOSING_SCHEMAS, "closing"), (REPAIR_SCHEMAS, "repair_hints")):
+                          (CLOSING_SCHEMAS, "closing"), (REPAIR_SCHEMAS, "repair_hints"), (CHORE_SCHEMAS, "chores"),
+                          (EXPIRY_SCHEMAS, "expiries"), (ROUTINE_SCHEMAS, "routines"), (GIFT_SCHEMAS, "gifts"),
+                          (DECISION_SCHEMAS, "decisions"), (WEEKAHEAD_SCHEMAS, "weekahead")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module

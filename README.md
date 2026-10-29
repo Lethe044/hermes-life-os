@@ -368,6 +368,56 @@ The proactive nudges and `get_today_agenda` include the new sources, and the
 doctor checks the five new stores (blocks, objectives, recipes and planned
 meals it cannot read, trips with unusable dates, shared ids).
 
+## Chores, Expiry Dates, Routines, Gift Ideas & Decisions
+
+Five more stores and a combined calendar, all local, per profile, encrypted
+with the rest of your data when encryption is on, and covered by backup,
+restore, export, rekey and the doctor.
+
+```
+"water the plants every week"            "I watered them"
+"my passport expires 2027-03-01"         "I renewed my insurance for 12 months"
+"morning routine: water, stretch, journal"  "tick stretch"
+"a poetry book for Ayse"                 "I bought the scarf"
+"I chose the standing desk, review in a month"  "how did the desk decision turn out?"
+"what is coming up this week?"
+```
+
+- **Chores** (`add_chore`, `complete_chore`, `get_chores`, `update_chore`,
+  `delete_chore`): anything that repeats on a schedule (every 10 days, weekly,
+  every 3 months, yearly). The next due date counts from the day it was
+  done, so a late chore never piles up. Overdue and due-today chores are
+  nudged and shown in the agenda.
+- **Expiry dates** (`add_expiry`, `get_expiries`, `renew_expiry`,
+  `update_expiry`, `delete_expiry`): a passport, a licence, insurance, a
+  warranty. Each has a reminder window (30 days by default); inside it the item
+  is nudged and listed in the agenda. Renewing moves the date forward (a new
+  date, or a number of months) and keeps a history.
+- **Routines** (`add_routine`, `get_routines`, `check_routine_step`,
+  `update_routine`, `delete_routine`): named checklists with their own
+  schedule (daily, weekdays, weekends or chosen days). Tick steps per day (or
+  `all`), see the streak of fully done days (days a routine is not scheduled
+  do not break it) and find unfinished routines in the agenda.
+- **Gift ideas** (`add_gift_idea`, `get_gift_ideas`, `update_gift_idea`,
+  `delete_gift_idea`): ideas per person with price and occasion, marked idea,
+  bought or given. Names from your people list link to their birthday: the list
+  shows birthdays with no gift bought yet, and a birthday within a week with
+  saved ideas but nothing bought is nudged.
+- **Decisions** (`add_decision`, `get_decisions`, `review_decision`,
+  `update_decision`, `delete_decision`): the options, the choice, why, what you
+  expect and how confident you are, with a review date (30 days by default).
+  When it arrives Hermes asks how it went; reviewed decisions show how your
+  confidence compares with the outcomes.
+- **Week ahead** (`get_week_ahead`): one calendar for 1 to 14 days over due
+  tasks, time blocks, planned meals, birthdays, renewals, debts, countdowns,
+  chores, expiry dates, trips and decisions to review, with overdue items first.
+
+`search_everything` now covers the five new stores, the closing summary shows
+chores and decisions that are waiting, and `get_repair_suggestions` and the
+doctor check them (a chore interval it cannot read, an expiry date or review
+date that is not a date, a routine without steps, an unknown gift status,
+shared ids).
+
 ## Project Structure
 
 ```mermaid
@@ -2004,6 +2054,25 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.46.0 - Chores, Expiry Dates, Routines, Gift Ideas, Decisions**
+- New **chores**: `add_chore`, `complete_chore`, `get_chores`, `update_chore`,
+  `delete_chore` for anything that repeats, counted from the last time it was done.
+- New **expiry dates**: `add_expiry`, `get_expiries`, `renew_expiry`,
+  `update_expiry`, `delete_expiry` with a reminder window and renewal history.
+- New **routines**: `add_routine`, `get_routines`, `check_routine_step`,
+  `update_routine`, `delete_routine` with per-day ticks and streaks.
+- New **gift ideas**: `add_gift_idea`, `get_gift_ideas`, `update_gift_idea`,
+  `delete_gift_idea`, linked to birthdays in the people list.
+- New **decision journal**: `add_decision`, `get_decisions`, `review_decision`,
+  `update_decision`, `delete_decision` with confidence versus outcome.
+- New **`get_week_ahead`**: one calendar over everything with a date.
+- Due chores, expiring documents, gifts to buy and decisions to review appear in
+  the proactive nudges and in `get_today_agenda`; routines still to finish are
+  in the agenda too. The closing summary, `search_everything`, the doctor and
+  `get_repair_suggestions` cover the five new stores; backup, restore, export
+  and rekey do as well.
+- 379 new tests - suite grew from 4319 to 4698.
 
 **v1.45.0 - Time Blocks, Objectives, Recipes, Trips**
 - New **time blocks**: `add_time_block`, `get_day_plan`, `update_time_block`,

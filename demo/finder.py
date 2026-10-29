@@ -4,7 +4,7 @@ Hermes Life OS - Search Everything
 One search over all the planner data that is kept as lists of entries: tasks,
 notes, lists, people, subscriptions, savings goals, debts, countdowns, supplies,
 symptoms, recipes, the meal plan, trips (with their packing and itinerary),
-objectives, time blocks, reminders, habits and goals. Every word of the query
+objectives, time blocks, chores, expiry dates, routines, gift ideas, decisions, reminders, habits and goals. Every word of the query
 has to appear somewhere in an entry (any case); results are grouped by area, an
 entry whose main name matches comes first, and each line carries the id to use
 with the tool of that area. Logged entries (meals, sleep, spending and so on)
@@ -86,6 +86,18 @@ SOURCES: Dict[str, Tuple[str, Callable, Callable, Callable]] = {
                   lambda r: f"{_s(r.get('name'))} ({_s(r.get('start'))} to {_s(r.get('end'))})"),
     "timeblocks": _spec("load_timeblocks", lambda r: _s(r.get("title")), lambda r: [_s(r.get("notes")), _s(r.get("category"))],
                         lambda r: f"{_s(r.get('date'))} {_s(r.get('start'))}-{_s(r.get('end'))} {_s(r.get('title'))}"),
+    "chores": _spec("load_chores", lambda r: _s(r.get("name")), lambda r: [_s(r.get("notes"))],
+                    lambda r: f"{_s(r.get('name'))} (every {r.get('every')} {_s(r.get('unit'))})"),
+    "expiries": _spec("load_expiries", lambda r: _s(r.get("name")), lambda r: [_s(r.get("notes")), _s(r.get("category"))],
+                      lambda r: f"{_s(r.get('name'))} (expires {_s(r.get('date'))})"),
+    "routines": _spec("load_routines", lambda r: _s(r.get("name")), lambda r: _names(r.get("steps"), "text"),
+                      lambda r: f"{_s(r.get('name'))} ({len(r.get('steps') or [])} steps)"),
+    "gifts": _spec("load_gifts", lambda r: _s(r.get("idea")), lambda r: [_s(r.get("person")), _s(r.get("occasion")), _s(r.get("notes"))],
+                   lambda r: f"{_s(r.get('person'))}: {_s(r.get('idea'))} ({_s(r.get('status'))})"),
+    "decisions": _spec("load_decisions", lambda r: _s(r.get("title")),
+                       lambda r: [_s(r.get("choice")), _s(r.get("reasoning")), _s(r.get("outcome")), _s(r.get("lessons"))]
+                       + [o for o in (r.get("options") or []) if isinstance(o, str)],
+                       lambda r: f"{_s(r.get('title'))} ({_s(r.get('status'))})"),
     "reminders": _spec("load_reminders", lambda r: _s(r.get("text")), lambda r: [],
                        lambda r: f"{_s(r.get('text'))}" + (f" ({_s(r.get('time'))})" if _s(r.get("time")) else "")),
     "habits": _spec("load_habits", lambda r: _s(r.get("name")), lambda r: [],

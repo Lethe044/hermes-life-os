@@ -122,7 +122,7 @@ class TestDoctor:
         seed_all(planner)
         f = self.check()
         assert [x["level"] for x in f] == ["ok"]
-        assert "time blocks, objectives, recipes, the meal plan and trips" in f[0]["message"]
+        assert "time blocks, objectives, recipes, the meal plan, trips, chores, expiry dates, routines, gift ideas and decisions" in f[0]["message"]
 
     def test_timeblock_problems(self, planner):
         import storage

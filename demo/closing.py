@@ -130,6 +130,10 @@ def _day_lines() -> List[str]:
         lines += [f"due today, not done: {t.get('text')}" for t in s["due_today"]]
         lines += [f"unfinished block: {r['start']}-{r['end']} {r['title']}" for r in sorted(
             _blocks(d, d), key=lambda r: r["start"]) if not r.get("done")]
+        import chores
+        import decisions
+        lines += [f"chore: {x}" for x in _safe_list(chores.agenda_lines)]
+        lines += [f"review decision: {x['item'].get('title')}" for x in _safe_list(decisions.due_for_review)]
         lines += [f"habit streak at risk: {h['name']} ({h['streak']} days)" for h in _rows("load_habits")
                   if isinstance(h.get("streak"), int) and h["streak"] > 0 and h.get("last_done") != d]
         return lines
@@ -153,6 +157,8 @@ def _day_lines() -> List[str]:
         lines += [countdowns.format_countdown(x).split(" [id=")[0] for x in _safe_list(lambda: countdowns.within(1))
                   if x["in_days"] == 1]
         lines += [f"trip starts: {t['name']}" for t in _safe_list(trips.listing) if t.get("start") == tomorrow]
+        import chores
+        lines += [f"chore: {x['item']['name']}" for x in _safe_list(lambda: chores.listing(1)) if x["in_days"] == 1]
         return lines
     out += _section("Tomorrow:", _safe(tomorrow_items))
     if len(out) == 1:
@@ -234,6 +240,10 @@ def _week_lines() -> List[str]:
         bd = _safe_list(lambda: people.upcoming_birthdays(7))
         if bd:
             lines.append("birthdays: " + ", ".join(x["person"]["name"] for x in bd[:4]))
+        import chores
+        ch = _safe_list(lambda: chores.listing(7))
+        if ch:
+            lines.append(f"{len(ch)} chore(s) due or overdue")
         cd = _safe_list(lambda: countdowns.within(7))
         if cd:
             lines.append("countdowns: " + ", ".join(x["item"]["name"] for x in cd[:4]))

@@ -8,7 +8,9 @@ overdue to contact, habit streaks that need a check-in today to survive,
 budgets that are over or close to their limit, savings goals whose deadline
 is within two weeks, debts that are due, countdowns in the next week,
 supplies that are about to run out, today's time blocks, objectives that end
-within a week and trips that are about to start or are under way.
+within a week, trips that are about to start or are under way, chores that are due,
+expiry dates that are close, unfinished routines, gifts still to buy for coming
+birthdays and decisions waiting for a review.
 
 Read-only and network-free; a section with nothing to say is left out, and if
 nothing at all is due the agenda says so. "Today" is the user's day (clock.py).
@@ -141,6 +143,15 @@ def build_agenda() -> str:
         away = []
     if away:
         sections.append(_section("Trips:", away))
+
+    for title, module in (("Chores due:", "chores"), ("Expiring soon:", "expiries"), ("Routines to finish:", "routines"),
+                          ("Gifts to buy:", "gifts"), ("Decisions to review:", "decisions")):
+        try:
+            lines = __import__(module).agenda_lines()
+        except Exception:  # noqa: BLE001
+            lines = []
+        if lines:
+            sections.append(_section(title, lines))
 
     if not sections:
         return out[0] + "\nNothing due today: no tasks, reminders, renewals, birthdays or streaks at risk."

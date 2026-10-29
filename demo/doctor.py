@@ -412,14 +412,33 @@ def check_planner_data() -> List[Dict[str, Any]]:
     warn("trips", sum(1 for t in rows("trips") if not _valid_day(t.get("start")) or not _valid_day(t.get("end"))
                       or str(t.get("end")) < str(t.get("start"))),
          "trip(s) have dates that cannot be read or end before they start.")
+    import chores
+    import routines
+    warn("chores", sum(1 for c in rows("chores") if chores.due_date(c) is None),
+         "chore(s) have an interval or date that cannot be read, so they never show as due.")
+    warn("expiries", sum(1 for e in rows("expiries") if not _valid_day(e.get("date"))),
+         "expiry date(s) cannot be read, so they never remind you.")
+    warn("routines", sum(1 for r in rows("routines") if not routines.steps_of(r)
+                         or (r.get("days") is not None and not (isinstance(r.get("days"), list) and all(
+                             isinstance(d, int) and not isinstance(d, bool) and 0 <= d <= 6 for d in r["days"])))),
+         "routine(s) have no usable steps or a schedule that cannot be read.")
+    warn("gifts", sum(1 for g in rows("gifts") if g.get("status") not in ("idea", "bought", "given")
+                      or not isinstance(g.get("idea"), str) or not g["idea"].strip()
+                      or not isinstance(g.get("person"), str) or not g["person"].strip()),
+         "gift idea(s) have no person or idea text, or an unknown status.")
+    warn("decisions", sum(1 for d in rows("decisions") if d.get("status") not in ("open", "reviewed")
+                          or (d.get("status") != "reviewed" and not _valid_day(d.get("review")))
+                          or not isinstance(d.get("title"), str) or not d["title"].strip()),
+         "decision(s) have no title, an unknown status or a review date that cannot be read.")
     for name in ("tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes", "income", "debts",
-                 "countdowns", "supplies", "timeblocks", "okrs", "recipes", "mealplan", "trips"):
+                 "countdowns", "supplies", "timeblocks", "okrs", "recipes", "mealplan", "trips", "chores", "expiries",
+                 "routines", "gifts", "decisions"):
         ids = [r["id"] for r in rows(name) if isinstance(r.get("id"), str) and r["id"]]
         dupes = len({i for i in ids if ids.count(i) > 1})
         warn(name, dupes, "id(s) are shared by more than one entry, so editing or deleting by id only reaches "
                           "the first.")
     if not findings:
-        findings.append(_finding(OK, "planner", "Tasks, subscriptions, people, body readings, lists, savings, symptoms, notes, income, debts, countdowns, supplies, time blocks, objectives, recipes, the meal plan and trips are all readable. Run get_repair_suggestions when a warning needs follow-up."))
+        findings.append(_finding(OK, "planner", "Tasks, subscriptions, people, body readings, lists, savings, symptoms, notes, income, debts, countdowns, supplies, time blocks, objectives, recipes, the meal plan, trips, chores, expiry dates, routines, gift ideas and decisions are all readable. Run get_repair_suggestions when a warning needs follow-up."))
     return findings
 
 
