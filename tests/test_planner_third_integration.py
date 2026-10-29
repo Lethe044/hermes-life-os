@@ -22,7 +22,7 @@ class TestDoctor:
         planner.dispatch_tool("add_supply", {"name": "s", "quantity": 5, "per_day": 1})
         f = self.check()
         assert [x["level"] for x in f] == ["ok"]
-        assert "income, debts, countdowns and supplies" in f[0]["message"]
+        assert "countdowns, supplies, time blocks, objectives, recipes, the meal plan and trips are all readable" in f[0]["message"]
 
     def test_income_problems(self, planner):
         import storage

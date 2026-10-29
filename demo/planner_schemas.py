@@ -3,8 +3,9 @@ Hermes Life OS - tool schemas for the planner modules
 =======================================================
 Pure data: the schemas of the tools that live in tasks.py, body.py,
 subscriptions.py, people.py, agenda.py, lists.py, savings.py,
-symptoms.py, notes.py, income.py, debts.py, countdowns.py
-and supplies.py, plus the tool name -> module map
+symptoms.py, notes.py, income.py, debts.py, countdowns.py,
+supplies.py, timeblocks.py, okrs.py, recipes.py, trips.py, finder.py, closing.py
+and repair_hints.py, plus the tool name -> module map
 tools.py uses to dispatch them. Kept apart from those modules so that
 importing tools.py never imports (and never binds to) the storage layer of
 modules that only matter when one of their tools is actually called.
@@ -187,6 +188,12 @@ SYMPTOM_SCHEMAS = [
                                  "the last one, common triggers, trend, worst weekday and sleep before symptom days.",
           {"days": {"type": "integer", "description": "Window, 1-365, default 30."},
            "symptom": {"type": "string", "description": "Only this symptom."}}, []),
+    _tool("get_symptom_triggers", "Compare the days a symptom happened with the days it did not, using what was "
+                                  "logged elsewhere: the sleep and stress before it, water, caffeine, alcohol, "
+                                  "workouts and the weekday, and how often each suspected trigger you named came "
+                                  "up. Shows patterns in your own data, not causes or medical advice.",
+          {"symptom": {"type": "string", "description": "The symptom, e.g. migraine. Default: the most frequent."},
+           "days": {"type": "integer", "description": "Window, 14-365, default 90."}}, []),
 ]
 
 _NOTE_REF = {"type": "string", "description": "The note's id or some words from its text."}
@@ -269,15 +276,207 @@ SUPPLY_SCHEMAS = [
     _tool("delete_supply", "Stop tracking a supply.", {"supply": _SUPPLY_REF}, ["supply"]),
 ]
 
+_BLOCK_REF = {"type": "string", "description": "The block's id or some words from its title."}
+_BLOCK_DATE = {"type": "string", "description": "Optional day (YYYY-MM-DD, today, tomorrow or a weekday) to narrow "
+                                                 "down a title that repeats on several days."}
+
+TIMEBLOCK_SCHEMAS = [
+    _tool("add_time_block", "Plan a block of time in a day (for example deep work 09:00-10:30). Blocks on one day "
+                            "cannot overlap. Give an end time or duration_minutes. A task can be linked, which "
+                            "also supplies the title.",
+          {"title": {"type": "string"}, "start": {"type": "string", "description": "HH:MM or 2:30pm."},
+           "end": {"type": "string", "description": "HH:MM (24:00 allowed)."},
+           "duration_minutes": {"type": "integer", "description": "Instead of end, 5 to 960."},
+           "date": {"type": "string", "description": "YYYY-MM-DD, today, tomorrow, in 3 days or a weekday; default today."},
+           "category": {"type": "string", "description": "e.g. work, study, exercise. Default general."},
+           "task": {"type": "string", "description": "Optional open task (id or words) to link."},
+           "notes": {"type": "string"}}, ["start"]),
+    _tool("get_day_plan", "The plan of one day in time order with the free gaps between blocks, how much is planned "
+                          "and done, and what is happening now or next.",
+          {"date": {"type": "string", "description": "Default today."}}, []),
+    _tool("update_time_block", "Change a block: title, date, start, end, category, notes or done.",
+          {"block": _BLOCK_REF, "fields": {"type": "object", "description": "Only the fields to change."},
+           "date": _BLOCK_DATE}, ["block", "fields"]),
+    _tool("delete_time_block", "Delete a time block.", {"block": _BLOCK_REF, "date": _BLOCK_DATE}, ["block"]),
+    _tool("finish_time_block", "Mark a block done, and optionally complete the task it is linked to.",
+          {"block": _BLOCK_REF, "complete_task": {"type": "boolean"}, "date": _BLOCK_DATE}, ["block"]),
+    _tool("find_free_time", "Find free slots of a given length between 07:00 and 22:00 (up to five, soonest first), "
+                            "today onwards or on a given day, optionally over several days.",
+          {"duration_minutes": {"type": "integer"}, "date": {"type": "string", "description": "First day, default today."},
+           "days": {"type": "integer", "description": "How many days to search, 1-14, default 1."},
+           "earliest": {"type": "string", "description": "HH:MM, default 07:00."},
+           "latest": {"type": "string", "description": "HH:MM, default 22:00."}}, ["duration_minutes"]),
+    _tool("schedule_task", "Put an open task into the first free slot (on a given day, or in the next 7 days) as a "
+                           "time block linked to the task.",
+          {"task": {"type": "string", "description": "The task's id or some words from its text."},
+           "duration_minutes": {"type": "integer", "description": "Default 60."},
+           "date": {"type": "string", "description": "Only this day; default: the next 7 days."},
+           "earliest": {"type": "string"}, "latest": {"type": "string"}, "category": {"type": "string"}}, ["task"]),
+    _tool("get_time_allocation", "Where the planned time went over the last days: hours per category, how much of it "
+                                 "was marked done.",
+          {"days": {"type": "integer", "description": "1-90, default 7."}}, []),
+]
+
+_OBJECTIVE_REF = {"type": "string", "description": "The objective's id or some words from its name."}
+_KR_REF = {"type": "string", "description": "The key result's id or some words from its name."}
+
+OKR_SCHEMAS = [
+    _tool("add_objective", "Set an objective for a period with measurable key results, e.g. 'Get fit' for this "
+                           "quarter with 'run 100 km' and 'weight 85 -> 80'. Progress is compared with the time "
+                           "that has passed.",
+          {"name": {"type": "string"},
+           "period": {"type": "string", "description": "week, month, quarter (default), year, 2026-Q4, 2026-10 or 2026."},
+           "start": {"type": "string", "description": "YYYY-MM-DD, instead of period (needs end)."},
+           "end": {"type": "string", "description": "YYYY-MM-DD."}, "notes": {"type": "string"},
+           "key_results": {"type": "array", "description": "Up to 8: {name, target, start_value, unit}.",
+                           "items": {"type": "object", "properties": {
+                               "name": {"type": "string"}, "target": {"type": "number"},
+                               "start_value": {"type": "number", "description": "Default 0."},
+                               "unit": {"type": "string"}}, "required": ["name", "target"]}}}, ["name"]),
+    _tool("add_key_result", "Add a measurable key result to an objective (a target below the start means 'go down').",
+          {"objective": _OBJECTIVE_REF, "name": {"type": "string"}, "target": {"type": "number"},
+           "start_value": {"type": "number", "description": "Default 0."}, "unit": {"type": "string"}},
+          ["objective", "name", "target"]),
+    _tool("record_key_result", "Record progress on a key result: the new total (value) or the change (add, may be "
+                               "negative). The key result may be left out when the objective has only one.",
+          {"objective": _OBJECTIVE_REF, "key_result": _KR_REF, "value": {"type": "number"},
+           "add": {"type": "number"}}, ["objective"]),
+    _tool("get_okrs", "Objectives with progress, expected progress and whether you are on track. With an objective, "
+                      "its key results and their history.",
+          {"status": {"type": "string", "enum": ["active", "done", "dropped", "all"], "description": "Default active."},
+           "objective": _OBJECTIVE_REF}, []),
+    _tool("update_okr", "Change an objective (name, notes, start, end, status active/done/dropped) or, with "
+                        "key_result, one of its key results (name, target, start_value, unit, current).",
+          {"objective": _OBJECTIVE_REF, "key_result": _KR_REF, "fields": {"type": "object"}}, ["objective", "fields"]),
+    _tool("delete_okr", "Delete an objective with its key results, or only one key result.",
+          {"objective": _OBJECTIVE_REF, "key_result": _KR_REF}, ["objective"]),
+]
+
+_RECIPE_REF = {"type": "string", "description": "The recipe's id or some words from its name."}
+_SLOT = {"type": "string", "enum": ["breakfast", "lunch", "dinner", "snack"]}
+
+RECIPE_SCHEMAS = [
+    _tool("add_recipe", "Save a recipe: ingredients like '200 g flour' or '2 eggs', steps, servings, tags, calories "
+                        "per serving and minutes.",
+          {"name": {"type": "string"},
+           "ingredients": {"type": "array", "items": {"type": "string"},
+                           "description": "e.g. ['200 g flour', '2 eggs', 'salt'] (or objects {name, quantity, unit})."},
+           "steps": {"type": "array", "items": {"type": "string"}},
+           "servings": {"type": "integer", "description": "How many it makes, default 2."},
+           "tags": {"type": "array", "items": {"type": "string"}},
+           "calories_per_serving": {"type": "integer"}, "minutes": {"type": "integer"}, "notes": {"type": "string"}},
+          ["name", "ingredients"]),
+    _tool("get_recipes", "List recipes, optionally for one tag or words in the name or ingredients.",
+          {"tag": {"type": "string"}, "query": {"type": "string"}, "limit": {"type": "integer"}}, []),
+    _tool("get_recipe", "Show a recipe, optionally scaled to a number of servings.",
+          {"recipe": _RECIPE_REF, "servings": {"type": "integer"}}, ["recipe"]),
+    _tool("update_recipe", "Change a recipe: name, servings, ingredients (replaces them), steps, tags, calories, "
+                           "minutes or notes.",
+          {"recipe": _RECIPE_REF, "fields": {"type": "object"}}, ["recipe", "fields"]),
+    _tool("delete_recipe", "Delete a recipe (planned meals that used it stay as plain text).",
+          {"recipe": _RECIPE_REF}, ["recipe"]),
+    _tool("suggest_recipes", "Suggest what to cook next: recipes never cooked or cooked longest ago, optionally for "
+                             "one tag or within a time limit.",
+          {"tag": {"type": "string"}, "max_minutes": {"type": "integer"}, "limit": {"type": "integer"}}, []),
+    _tool("plan_meal", "Plan a meal for a slot of a day: a recipe or plain text such as 'leftovers', optionally "
+                       "repeated on following days (meal prep).",
+          {"slot": _SLOT, "date": {"type": "string", "description": "YYYY-MM-DD, today, tomorrow or a weekday; default today."},
+           "recipe": _RECIPE_REF, "text": {"type": "string", "description": "Instead of a recipe."},
+           "servings": {"type": "integer", "description": "Default: the recipe's servings."},
+           "repeat_days": {"type": "integer", "description": "Plan it on this many consecutive days, 1-14."}},
+          ["slot"]),
+    _tool("get_meal_plan", "The meal plan for the coming days, with calories where known.",
+          {"date": {"type": "string", "description": "First day, default today."},
+           "days": {"type": "integer", "description": "1-31, default 7."}}, []),
+    _tool("clear_meals", "Remove planned meals: one by id, or every meal of a day (optionally one slot).",
+          {"meal": {"type": "string", "description": "A planned meal's id."},
+           "date": {"type": "string"}, "slot": _SLOT}, []),
+    _tool("log_planned_meal", "Log a planned meal as eaten in the nutrition log (and count its recipe as cooked). "
+                              "Only for meals of today or earlier.",
+          {"meal": {"type": "string", "description": "The planned meal's id or words from its name or slot."},
+           "date": {"type": "string", "description": "The day of the meal, default today."},
+           "portions": {"type": "number", "description": "How many servings YOU ate, default 1 (0.25 to 20)."}},
+          ["meal"]),
+    _tool("shopping_from_plan", "Add everything the planned recipes need to a list (default: shopping). Quantities "
+                                "are added up and scaled to the planned servings; items already on the list stay as "
+                                "they are.",
+          {"date": {"type": "string", "description": "First day, default today."},
+           "days": {"type": "integer", "description": "1-31, default 7."},
+           "list": {"type": "string", "description": "List name, default 'shopping'."},
+           "include_eaten": {"type": "boolean"},
+           "skip": {"type": "array", "items": {"type": "string"},
+                    "description": "Ingredients you already have, e.g. salt, water."}}, []),
+]
+
+_TRIP_REF = {"type": "string", "description": "The trip's id or some words from its name or destination."}
+
+TRIP_SCHEMAS = [
+    _tool("add_trip", "Plan a trip with dates, destination, an optional budget and a packing list that can start "
+                      "from templates (basic, documents, flight, city, beach, hiking, winter, business).",
+          {"name": {"type": "string"}, "start": {"type": "string", "description": "YYYY-MM-DD, tomorrow, in 3 weeks or a weekday."},
+           "end": {"type": "string", "description": "Last day; default: a one-day trip."},
+           "destination": {"type": "string"}, "budget": {"type": "number"}, "notes": {"type": "string"},
+           "template": {"type": "array", "items": {"type": "string"}, "description": "Packing templates to start from."}},
+          ["name", "start"]),
+    _tool("get_trips", "Ongoing and upcoming trips with the countdown and packing progress.",
+          {"include_past": {"type": "boolean"}}, []),
+    _tool("get_trip", "One trip in full: dates, budget per day, what is still to pack and the itinerary.",
+          {"trip": _TRIP_REF}, ["trip"]),
+    _tool("update_trip", "Change a trip: name, destination, start, end, budget ('' clears) or notes.",
+          {"trip": _TRIP_REF, "fields": {"type": "object"}}, ["trip", "fields"]),
+    _tool("delete_trip", "Delete a trip with its packing list and itinerary.", {"trip": _TRIP_REF}, ["trip"]),
+    _tool("add_packing_items", "Add items to a trip's packing list: your own and/or a template.",
+          {"trip": _TRIP_REF, "items": {"type": "array", "items": {"type": "string"}},
+           "template": {"type": "array", "items": {"type": "string"},
+                        "description": "basic, documents, flight, city, beach, hiking, winter, business."}}, ["trip"]),
+    _tool("pack_items", "Tick items as packed (or untick with packed=false), by id or words; 'all' for every item.",
+          {"trip": _TRIP_REF, "items": {"type": "array", "items": {"type": "string"}},
+           "packed": {"type": "boolean", "description": "Default true."}}, ["trip", "items"]),
+    _tool("remove_packing_items", "Remove items from a trip's packing list ('all' for every item).",
+          {"trip": _TRIP_REF, "items": {"type": "array", "items": {"type": "string"}}}, ["trip", "items"]),
+    _tool("add_itinerary_item", "Add something to a trip's day-by-day plan (a flight, a booking, a visit).",
+          {"trip": _TRIP_REF, "text": {"type": "string"}, "date": {"type": "string", "description": "A day of the trip."},
+           "time": {"type": "string", "description": "Optional HH:MM."}}, ["trip", "text", "date"]),
+    _tool("remove_itinerary_item", "Remove an itinerary item (its id or words from its text).",
+          {"trip": _TRIP_REF, "item": {"type": "string"}}, ["trip", "item"]),
+]
+
+SEARCH_SCHEMAS = [
+    _tool("search_everything", "Search all your planner data at once (tasks, notes, lists, people, subscriptions, "
+                               "savings, debts, countdowns, supplies, symptoms, recipes, meal plan, trips, objectives, "
+                               "time blocks, reminders, habits, goals) for some words. Results are grouped by area "
+                               "with ids you can use in the matching tools. For things you logged, use search_logs.",
+          {"query": {"type": "string"},
+           "areas": {"type": "array", "items": {"type": "string"}, "description": "Only these areas, e.g. notes, tasks."},
+           "limit": {"type": "integer", "description": "Per area, 1-20, default 5."}}, ["query"]),
+]
+
+CLOSING_SCHEMAS = [
+    _tool("get_closing_summary", "A wrap-up of the day (or the week): what got done, what was logged, spending and "
+                                 "income, habits and what is left open, then a preview of tomorrow (or next week). "
+                                 "Use for 'close my day' or 'weekly review'.",
+          {"period": {"type": "string", "enum": ["day", "week"], "description": "Default day."}}, []),
+]
+
+REPAIR_SCHEMAS = [
+    _tool("get_repair_suggestions", "For every problem the data check finds in the planner data, the exact entry and "
+                                    "the tool call that would fix it. Read-only: nothing is changed.",
+          {}, []),
+]
+
 PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_SCHEMAS + AGENDA_SCHEMAS
                    + LIST_SCHEMAS + SAVINGS_SCHEMAS + SYMPTOM_SCHEMAS + NOTE_SCHEMAS
-                   + INCOME_SCHEMAS + DEBT_SCHEMAS + COUNTDOWN_SCHEMAS + SUPPLY_SCHEMAS)
+                   + INCOME_SCHEMAS + DEBT_SCHEMAS + COUNTDOWN_SCHEMAS + SUPPLY_SCHEMAS
+                   + TIMEBLOCK_SCHEMAS + OKR_SCHEMAS + RECIPE_SCHEMAS + TRIP_SCHEMAS + SEARCH_SCHEMAS
+                   + CLOSING_SCHEMAS + REPAIR_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
                           (PEOPLE_SCHEMAS, "people"), (AGENDA_SCHEMAS, "agenda"), (LIST_SCHEMAS, "lists"),
                           (SAVINGS_SCHEMAS, "savings"), (SYMPTOM_SCHEMAS, "symptoms"), (NOTE_SCHEMAS, "notes"),
                           (INCOME_SCHEMAS, "income"), (DEBT_SCHEMAS, "debts"), (COUNTDOWN_SCHEMAS, "countdowns"),
-                          (SUPPLY_SCHEMAS, "supplies")):
+                          (SUPPLY_SCHEMAS, "supplies"), (TIMEBLOCK_SCHEMAS, "timeblocks"), (OKR_SCHEMAS, "okrs"),
+                          (RECIPE_SCHEMAS, "recipes"), (TRIP_SCHEMAS, "trips"), (SEARCH_SCHEMAS, "finder"),
+                          (CLOSING_SCHEMAS, "closing"), (REPAIR_SCHEMAS, "repair_hints")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module

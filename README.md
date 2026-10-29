@@ -310,6 +310,64 @@ re-encrypted nine files, so after a passphrase change the others could no
 longer be decrypted and silently read back as empty. Backups written while
 a passphrase is set are encrypted too (see "Automatic Backups").
 
+## Time Blocks, Objectives, Recipes & Trips
+
+Five more stores plus three read-only helpers, all local, per profile,
+encrypted with the rest of your data when encryption is on, and covered by
+backup, restore, export and the doctor.
+
+```
+"block 9 to 10:30 tomorrow for deep work"   "when am I free for 45 minutes?"
+"schedule the report task this week"        "how did I spend my week?"
+"objective for Q4: run 100 km"              "I ran 12 km today"
+"save my lentil soup recipe"                "plan soup for dinner on Friday"
+"make a shopping list from the meal plan"   "trip to Rome Nov 1 to Nov 4"
+"what triggers my headaches?"               "find everything about Rome"
+```
+
+- **Time blocks** (`add_time_block`, `get_day_plan`, `update_time_block`,
+  `delete_time_block`, `finish_time_block`, `find_free_time`, `schedule_task`,
+  `get_time_allocation`): put work on the clock. Overlaps are refused, the day
+  plan shows blocks and free gaps (07:00 to 22:00), `find_free_time` lists the
+  first free slots, `schedule_task` places a task in the first slot that fits
+  and the allocation report shows where the hours went by category. Finishing a
+  block can complete its task. A block starting within 15 minutes is nudged.
+- **Objectives and key results** (`add_objective`, `add_key_result`,
+  `record_key_result`, `get_okrs`, `update_okr`, `delete_okr`): an objective for
+  a week, month, quarter (`2026-Q4`) or year with measurable key results
+  (upward or downward targets). Progress is compared with the share of the
+  period that has passed: ahead of pace, on track, slightly behind or behind.
+  Objectives ending within a week below 70% are nudged and shown in the agenda.
+- **Recipes and meal plan** (`add_recipe`, `get_recipes`, `get_recipe`,
+  `update_recipe`, `delete_recipe`, `suggest_recipes`, `plan_meal`,
+  `get_meal_plan`, `clear_meals`, `log_planned_meal`, `shopping_from_plan`):
+  recipes scale to any serving count, `suggest_recipes` surfaces what you have
+  not cooked lately, planned meals can repeat on several days, logging a
+  planned meal creates the meal entry, and `shopping_from_plan` adds the
+  combined ingredients to your shopping list (skipping what is already there).
+- **Trips** (`add_trip`, `get_trips`, `get_trip`, `update_trip`, `delete_trip`,
+  `add_packing_items`, `pack_items`, `remove_packing_items`,
+  `add_itinerary_item`, `remove_itinerary_item`): dates, budget, a packing list
+  from a template (basic, documents, flight, city, beach, hiking, winter,
+  business) and a day-by-day itinerary. A trip within three days with unpacked
+  items is nudged; an ongoing trip shows today's plan in the agenda.
+- **Symptom triggers** (`get_symptom_triggers`): compares your symptom days with
+  sleep, stress, water, caffeine, alcohol, nicotine and workouts of the day
+  before, plus triggers you named yourself. Patterns in your own data, not
+  causes and not medical advice.
+- **Search everything** (`search_everything`): one search over tasks, notes,
+  lists, people, subscriptions, savings, debts, countdowns, supplies, symptoms,
+  recipes, the meal plan, trips, objectives, time blocks, reminders, habits and
+  goals, with the id to use next to every hit.
+- **Closing summary** (`get_closing_summary`): an end-of-day or end-of-week
+  review of what got done, what was logged, what is still open and what is next.
+- **Repair suggestions** (`get_repair_suggestions`): for each problem the doctor
+  finds in planner data, the exact tool call that fixes it. Read-only.
+
+The proactive nudges and `get_today_agenda` include the new sources, and the
+doctor checks the five new stores (blocks, objectives, recipes and planned
+meals it cannot read, trips with unusable dates, shared ids).
+
 ## Project Structure
 
 ```mermaid
@@ -1946,6 +2004,25 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.45.0 - Time Blocks, Objectives, Recipes, Trips**
+- New **time blocks**: `add_time_block`, `get_day_plan`, `update_time_block`,
+  `delete_time_block`, `finish_time_block`, `find_free_time`, `schedule_task`,
+  `get_time_allocation`.
+- New **objectives and key results**: `add_objective`, `add_key_result`,
+  `record_key_result`, `get_okrs`, `update_okr`, `delete_okr` with pace.
+- New **recipes and meal plan**: `add_recipe`, `get_recipes`, `get_recipe`,
+  `update_recipe`, `delete_recipe`, `suggest_recipes`, `plan_meal`,
+  `get_meal_plan`, `clear_meals`, `log_planned_meal`, `shopping_from_plan`.
+- New **trips**: `add_trip`, `get_trips`, `get_trip`, `update_trip`,
+  `delete_trip`, `add_packing_items`, `pack_items`, `remove_packing_items`,
+  `add_itinerary_item`, `remove_itinerary_item`.
+- New **`get_symptom_triggers`**, **`search_everything`**,
+  **`get_closing_summary`** and **`get_repair_suggestions`**.
+- Upcoming blocks, objectives about to end and trips appear in the proactive
+  nudges and in `get_today_agenda`; the doctor checks the five new stores;
+  backup, restore, export and rekey cover them.
+- 665 new tests - suite grew from 3654 to 4319.
 
 **v1.44.0 - Income, Debts, Countdowns, Supplies**
 - New **income** tracker: `log_income` and `get_cash_flow` (income vs logged

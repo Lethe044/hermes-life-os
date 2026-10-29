@@ -70,6 +70,11 @@ INCOME_FILE = HERMES_DIR / "income.json"
 DEBTS_FILE = HERMES_DIR / "debts.json"
 COUNTDOWNS_FILE = HERMES_DIR / "countdowns.json"
 SUPPLIES_FILE = HERMES_DIR / "supplies.json"
+TIMEBLOCKS_FILE = HERMES_DIR / "timeblocks.json"
+OKRS_FILE = HERMES_DIR / "okrs.json"
+RECIPES_FILE = HERMES_DIR / "recipes.json"
+MEALPLAN_FILE = HERMES_DIR / "mealplan.json"
+TRIPS_FILE = HERMES_DIR / "trips.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -99,6 +104,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     global BODY_FILE, TASKS_FILE, SUBSCRIPTIONS_FILE, PEOPLE_FILE
     global LISTS_FILE, SAVINGS_FILE, SYMPTOMS_FILE, NOTES_FILE
     global INCOME_FILE, DEBTS_FILE, COUNTDOWNS_FILE, SUPPLIES_FILE
+    global TIMEBLOCKS_FILE, OKRS_FILE, RECIPES_FILE, MEALPLAN_FILE, TRIPS_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -133,6 +139,11 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     DEBTS_FILE = HERMES_DIR / "debts.json"
     COUNTDOWNS_FILE = HERMES_DIR / "countdowns.json"
     SUPPLIES_FILE = HERMES_DIR / "supplies.json"
+    TIMEBLOCKS_FILE = HERMES_DIR / "timeblocks.json"
+    OKRS_FILE = HERMES_DIR / "okrs.json"
+    RECIPES_FILE = HERMES_DIR / "recipes.json"
+    MEALPLAN_FILE = HERMES_DIR / "mealplan.json"
+    TRIPS_FILE = HERMES_DIR / "trips.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -290,6 +301,16 @@ def load_countdowns() -> List:   return _load(COUNTDOWNS_FILE, [])
 def save_countdowns(x):          _save(COUNTDOWNS_FILE, x)
 def load_supplies() -> List:     return _load(SUPPLIES_FILE, [])
 def save_supplies(x):            _save(SUPPLIES_FILE, x)
+def load_timeblocks() -> List:    return _load(TIMEBLOCKS_FILE, [])
+def save_timeblocks(x):        _save(TIMEBLOCKS_FILE, x)
+def load_okrs() -> List:          return _load(OKRS_FILE, [])
+def save_okrs(x):              _save(OKRS_FILE, x)
+def load_recipes() -> List:       return _load(RECIPES_FILE, [])
+def save_recipes(x):           _save(RECIPES_FILE, x)
+def load_mealplan() -> List:      return _load(MEALPLAN_FILE, [])
+def save_mealplan(x):          _save(MEALPLAN_FILE, x)
+def load_trips() -> List:         return _load(TRIPS_FILE, [])
+def save_trips(x):             _save(TRIPS_FILE, x)
 
 
 # ---------------------------------------------------------------------------
@@ -340,6 +361,11 @@ DATA_STORES: Dict[str, tuple] = {
     "debts":        ("DEBTS_FILE",        "load_debts",        "save_debts",        list),
     "countdowns":   ("COUNTDOWNS_FILE",   "load_countdowns",   "save_countdowns",   list),
     "supplies":     ("SUPPLIES_FILE",     "load_supplies",     "save_supplies",     list),
+    "timeblocks":    ("TIMEBLOCKS_FILE",      "load_timeblocks",   "save_timeblocks",   list),
+    "okrs":          ("OKRS_FILE",            "load_okrs",         "save_okrs",         list),
+    "recipes":       ("RECIPES_FILE",         "load_recipes",      "save_recipes",      list),
+    "mealplan":      ("MEALPLAN_FILE",        "load_mealplan",     "save_mealplan",     list),
+    "trips":         ("TRIPS_FILE",           "load_trips",        "save_trips",        list),
 }
 
 
