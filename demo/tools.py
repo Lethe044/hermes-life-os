@@ -452,7 +452,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         return format_missing_days(tracker, missing, days)
 
     # ── planner modules: tasks, body, subscriptions, people, agenda, lists, savings, symptoms, notes,
-    #    income, debts, countdowns, supplies, timeblocks, okrs, recipes, trips, finder, closing, repair_hints ──
+    #    income, debts, countdowns, supplies, timeblocks, okrs, recipes, trips, finder, closing, repair_hints, chores, expiries, routines, gifts, decisions, weekahead ──
     elif name in _PLANNER_MODULES:
         import importlib
         planner_mod = importlib.import_module(_PLANNER_MODULES[name])
@@ -2851,7 +2851,7 @@ TOOLS = [
 # skipped (never crashes startup) and reported in PLUGIN_LOAD_ERRORS, which
 # demo_life_os.py surfaces once at startup.
 # ---------------------------------------------------------------------------
-TOOLS = TOOLS + PLANNER_SCHEMAS  # tasks, body, subscriptions, people, agenda, lists, savings, symptoms, notes, income, debts, countdowns, supplies, time blocks, okrs, recipes, trips, search, closing, repair hints
+TOOLS = TOOLS + PLANNER_SCHEMAS  # tasks, body, subscriptions, people, agenda, lists, savings, symptoms, notes, income, debts, countdowns, supplies, time blocks, okrs, recipes, trips, search, closing, repair hints, chores, expiry dates, routines, gift ideas, decisions, week ahead
 _BUILT_IN_TOOL_NAMES = {t["function"]["name"] for t in TOOLS}
 PLUGIN_TOOLS, PLUGIN_DISPATCHERS, PLUGIN_LOAD_ERRORS = _plugins.load_plugins(
     built_in_names=_BUILT_IN_TOOL_NAMES

@@ -178,11 +178,49 @@ def _trips(r):
         return ("unreadable or reversed dates", f"update_trip(trip={r['id']!r}, fields={{'start': 'YYYY-MM-DD', 'end': 'YYYY-MM-DD'}})")
 
 
+def _chores(r):
+    import chores
+    if chores.due_date(r) is None:
+        return ("an interval or date that cannot be read",
+                f"update_chore(chore={r['id']!r}, fields={{'every': 'weekly', 'start': 'YYYY-MM-DD'}}) or delete_chore(chore={r['id']!r})")
+
+
+def _expiries(r):
+    if not _day_ok(r.get("date")):
+        return ("the expiry date cannot be read", f"update_expiry(item={r['id']!r}, fields={{'date': 'YYYY-MM-DD'}})")
+
+
+def _routines(r):
+    import routines
+    if not routines.steps_of(r):
+        return ("no usable steps", f"update_routine(routine={r['id']!r}, fields={{'steps': ['first step']}}) or delete_routine(routine={r['id']!r})")
+    days = r.get("days")
+    if days is not None and not (isinstance(days, list) and all(isinstance(d, int) and not isinstance(d, bool) and 0 <= d <= 6 for d in days)):
+        return ("a schedule that cannot be read", f"update_routine(routine={r['id']!r}, fields={{'days': 'daily'}})")
+
+
+def _gifts(r):
+    if not isinstance(r.get("idea"), str) or not r["idea"].strip() or not isinstance(r.get("person"), str) or not r["person"].strip():
+        return ("no person or idea text", f"delete_gift_idea(gift={r['id']!r})")
+    if r.get("status") not in ("idea", "bought", "given"):
+        return ("an unknown status", f"update_gift_idea(gift={r['id']!r}, fields={{'status': 'idea'}})")
+
+
+def _decisions(r):
+    if not isinstance(r.get("title"), str) or not r["title"].strip():
+        return ("no title", f"delete_decision(decision={r['id']!r})")
+    if r.get("status") not in ("open", "reviewed"):
+        return ("an unknown status", f"delete_decision(decision={r['id']!r}) and add it again with add_decision")
+    if r.get("status") != "reviewed" and not _day_ok(r.get("review")):
+        return ("the review date cannot be read", f"update_decision(decision={r['id']!r}, fields={{'review': 'in 7 days'}})")
+
+
 CHECKS: List[Tuple[str, Check]] = [
     ("tasks", _tasks), ("subscriptions", _subscriptions), ("people", _people), ("savings", _savings),
     ("symptoms", _symptoms), ("income", _income), ("body", _body), ("lists", _lists), ("notes", _notes),
     ("debts", _debts), ("countdowns", _countdowns), ("supplies", _supplies), ("timeblocks", _timeblocks),
-    ("okrs", _okrs), ("recipes", _recipes), ("mealplan", _mealplan), ("trips", _trips),
+    ("okrs", _okrs), ("recipes", _recipes), ("mealplan", _mealplan), ("trips", _trips), ("chores", _chores),
+    ("expiries", _expiries), ("routines", _routines), ("gifts", _gifts), ("decisions", _decisions),
 ]
 
 

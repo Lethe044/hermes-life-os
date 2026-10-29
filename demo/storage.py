@@ -75,6 +75,11 @@ OKRS_FILE = HERMES_DIR / "okrs.json"
 RECIPES_FILE = HERMES_DIR / "recipes.json"
 MEALPLAN_FILE = HERMES_DIR / "mealplan.json"
 TRIPS_FILE = HERMES_DIR / "trips.json"
+CHORES_FILE = HERMES_DIR / "chores.json"
+EXPIRIES_FILE = HERMES_DIR / "expiries.json"
+ROUTINES_FILE = HERMES_DIR / "routines.json"
+GIFTS_FILE = HERMES_DIR / "gifts.json"
+DECISIONS_FILE = HERMES_DIR / "decisions.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -105,6 +110,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     global LISTS_FILE, SAVINGS_FILE, SYMPTOMS_FILE, NOTES_FILE
     global INCOME_FILE, DEBTS_FILE, COUNTDOWNS_FILE, SUPPLIES_FILE
     global TIMEBLOCKS_FILE, OKRS_FILE, RECIPES_FILE, MEALPLAN_FILE, TRIPS_FILE
+    global CHORES_FILE, EXPIRIES_FILE, ROUTINES_FILE, GIFTS_FILE, DECISIONS_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -144,6 +150,11 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     RECIPES_FILE = HERMES_DIR / "recipes.json"
     MEALPLAN_FILE = HERMES_DIR / "mealplan.json"
     TRIPS_FILE = HERMES_DIR / "trips.json"
+    CHORES_FILE = HERMES_DIR / "chores.json"
+    EXPIRIES_FILE = HERMES_DIR / "expiries.json"
+    ROUTINES_FILE = HERMES_DIR / "routines.json"
+    GIFTS_FILE = HERMES_DIR / "gifts.json"
+    DECISIONS_FILE = HERMES_DIR / "decisions.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -311,6 +322,16 @@ def load_mealplan() -> List:      return _load(MEALPLAN_FILE, [])
 def save_mealplan(x):          _save(MEALPLAN_FILE, x)
 def load_trips() -> List:         return _load(TRIPS_FILE, [])
 def save_trips(x):             _save(TRIPS_FILE, x)
+def load_chores() -> List:        return _load(CHORES_FILE, [])
+def save_chores(x):            _save(CHORES_FILE, x)
+def load_expiries() -> List:      return _load(EXPIRIES_FILE, [])
+def save_expiries(x):          _save(EXPIRIES_FILE, x)
+def load_routines() -> List:      return _load(ROUTINES_FILE, [])
+def save_routines(x):          _save(ROUTINES_FILE, x)
+def load_gifts() -> List:         return _load(GIFTS_FILE, [])
+def save_gifts(x):             _save(GIFTS_FILE, x)
+def load_decisions() -> List:     return _load(DECISIONS_FILE, [])
+def save_decisions(x):         _save(DECISIONS_FILE, x)
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +387,11 @@ DATA_STORES: Dict[str, tuple] = {
     "recipes":       ("RECIPES_FILE",         "load_recipes",      "save_recipes",      list),
     "mealplan":      ("MEALPLAN_FILE",        "load_mealplan",     "save_mealplan",     list),
     "trips":         ("TRIPS_FILE",           "load_trips",        "save_trips",        list),
+    "chores":        ("CHORES_FILE",          "load_chores",       "save_chores",       list),
+    "expiries":      ("EXPIRIES_FILE",        "load_expiries",     "save_expiries",     list),
+    "routines":      ("ROUTINES_FILE",        "load_routines",     "save_routines",     list),
+    "gifts":         ("GIFTS_FILE",           "load_gifts",        "save_gifts",        list),
+    "decisions":     ("DECISIONS_FILE",       "load_decisions",    "save_decisions",    list),
 }
 
 
