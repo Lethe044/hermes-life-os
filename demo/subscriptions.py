@@ -8,12 +8,16 @@ money after it has been spent; subscriptions are the part of the budget you
 can see coming.
 
 Stored in subscriptions.json as a list of {"id", "name", "amount", "cycle",
-"next_date", "category", "active", "notes", "created", "cancelled"} dicts.
-`cycle` is weekly, monthly, quarterly or yearly. `next_date` is the next
+"next_date", "anchor", "category", "active", "notes", "created", "cancelled"}
+dicts. `cycle` is weekly, monthly, quarterly or yearly. `next_date` is the next
 renewal; once it is in the past the subscription is treated as renewed (the
 date rolls forward by whole cycles, month-end safe) without anything being
 written, and `pay_subscription` is how a payment is actually recorded: it logs
-an expense in the subscription's category and moves `next_date` on.
+an expense in the subscription's category and moves `next_date` on. `anchor`
+is the date the schedule was set from ("YYYY-MM-DD", the unclamped day, so a
+renewal on the 31st comes back on the 31st after a short month): every later
+renewal is `anchor` plus whole cycles, never the previous (clamped) renewal
+plus one cycle. Entries saved before `anchor` existed use `next_date` as it is.
 
 Monthly equivalents: weekly x 52 / 12, quarterly / 3, yearly / 12. No network
 call is made by this module.
@@ -92,12 +96,31 @@ def advance(day: date, cycle: str, steps: int = 1) -> date:
     return clock.add_months(day, _MONTHS_PER_CYCLE[cycle] * steps)
 
 
+MAX_STEPS = 5000
+
+
+def schedule_base(sub: Dict[str, Any], stored: date, cycle: str) -> date:
+    """The date every renewal is counted from: the row's `anchor` when the stored
+    next_date is one of its renewals (so the 31st survives a short month), else
+    the stored next_date itself (an old row, or one whose date was edited)."""
+    try:
+        anchor = clock.parse_day(sub.get("anchor"))
+    except ValueError:
+        return stored
+    if anchor >= stored:
+        return stored
+    k = 0
+    while k < MAX_STEPS and advance(anchor, cycle, k) < stored:
+        k += 1
+    return anchor if k < MAX_STEPS and advance(anchor, cycle, k) == stored else stored
+
+
 def effective_next(sub: Dict[str, Any], today: Optional[date] = None) -> Optional[date]:
     """The next renewal on or after today: the stored next_date, rolled forward
     by whole cycles while it lies in the past. None if it is unreadable. For a
     monthly subscription anchored on the 31st the day sticks to the original
     anchor (Jan 31 -> Feb 28 -> Mar 31), because every step is measured from the
-    stored date, not from the previous step."""
+    schedule's anchor, not from the previous (clamped) renewal."""
     today = today or clock.today()
     try:
         stored = clock.parse_day(sub.get("next_date"))
@@ -108,10 +131,11 @@ def effective_next(sub: Dict[str, Any], today: Optional[date] = None) -> Optiona
     cycle = sub.get("cycle", "monthly")
     if cycle not in CYCLES:
         return None
+    base = schedule_base(sub, stored, cycle)
     k = 1
-    while advance(stored, cycle, k) < today and k < 5000:
+    while advance(base, cycle, k) < today and k < MAX_STEPS:
         k += 1
-    return advance(stored, cycle, k)
+    return advance(base, cycle, k)
 
 
 # ------------------------------------------------------------------ storage
@@ -176,7 +200,7 @@ def add_subscription(name: Any, amount: Any, cycle: Any = None, next_date: Any =
         raise ValueError(f"you already track {MAX_SUBS} subscriptions.")
     if any(s.get("active", True) and str(s.get("name", "")).lower() == clean.lower() for s in _rows(subs)):
         raise ValueError(f"'{clean}' already exists. Use update_subscription to change it.")
-    sub = {"id": new_id(), "name": clean, "amount": amt, "cycle": cyc, "next_date": nxt, "category": cat,
+    sub = {"id": new_id(), "name": clean, "amount": amt, "cycle": cyc, "next_date": nxt, "anchor": nxt, "category": cat,
            "active": True, "notes": notes.strip() if isinstance(notes, str) else "",
            "created": clock.today_str(), "cancelled": None}
     subs.append(sub)
@@ -216,6 +240,8 @@ def update_subscription(ref: Any, fields: Dict[str, Any]) -> Dict[str, Any]:
                         for s in _rows(subs)):
         raise ValueError(f"'{new_name}' already exists.")
     sub.update(changes)
+    if "next_date" in changes or "cycle" in changes:
+        sub["anchor"] = sub.get("next_date")   # a date or cycle set by hand starts a new schedule
     _storage().save_subscriptions(subs)
     return sub
 
@@ -240,9 +266,16 @@ def resume_subscription(ref: Any, next_date: Any = None) -> Dict[str, Any]:
         raise ValueError(f"'{sub.get('name')}' is not cancelled.")
     if next_date is not None and not (isinstance(next_date, str) and not next_date.strip()):
         sub["next_date"] = clock.parse_day(next_date).isoformat()
+        sub["anchor"] = sub["next_date"]
     else:
+        cycle = sub.get("cycle", "monthly")
+        try:
+            base = schedule_base(sub, clock.parse_day(sub.get("next_date")), cycle) if cycle in CYCLES else None
+        except ValueError:
+            base = None
         nxt = effective_next(sub)
-        sub["next_date"] = (nxt or advance(clock.today(), sub.get("cycle", "monthly"))).isoformat()
+        sub["next_date"] = (nxt or advance(clock.today(), cycle if cycle in CYCLES else "monthly")).isoformat()
+        sub["anchor"] = (base or clock.parse_day(sub["next_date"])).isoformat()
     sub["active"] = True
     sub["cancelled"] = None
     _storage().save_subscriptions(subs)
@@ -273,13 +306,18 @@ def mark_paid(ref: Any, paid_on: Optional[str] = None) -> Dict[str, Any]:
     except ValueError:
         raise ValueError(f"'{sub.get('name')}' has no readable renewal date - set one with update_subscription.") from None
     paid_for = stored
-    nxt = advance(stored, cycle)
+    base = schedule_base(sub, stored, cycle)
+    k0 = 0
+    while k0 < MAX_STEPS and advance(base, cycle, k0) < stored:
+        k0 += 1
+    k = k0 + 1
+    nxt = advance(base, cycle, k)
     today = clock.today()
-    k = 1
-    while nxt <= today and k < 5000:  # catching up after missed payments: next renewal lies ahead
+    while nxt <= today and k < MAX_STEPS:  # catching up after missed payments: next renewal lies ahead
         k += 1
-        nxt = advance(stored, cycle, k)
+        nxt = advance(base, cycle, k)
     sub["next_date"] = nxt.isoformat()
+    sub["anchor"] = base.isoformat()
     _storage().save_subscriptions(subs)
     return {"sub": sub, "paid_for": paid_for.isoformat(), "next": nxt.isoformat()}
 
