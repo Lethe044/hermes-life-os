@@ -430,9 +430,16 @@ def check_planner_data() -> List[Dict[str, Any]]:
                           or (d.get("status") != "reviewed" and not _valid_day(d.get("review")))
                           or not isinstance(d.get("title"), str) or not d["title"].strip()),
          "decision(s) have no title, an unknown status or a review date that cannot be read.")
+    warn("trash", sum(1 for e in rows("trash") if e.get("store") not in storage.DATA_STORES or e.get("store") == "trash"
+                      or not isinstance(e.get("rows"), list) or not _valid_day(e.get("deleted"))),
+         "trash entrie(s) have an unknown store, no rows or a deletion date that cannot be read, so restore_deleted "
+         "cannot put them back.")
+    warn("recs", sum(1 for r in rows("recs") if r.get("status") not in ("open", "followed", "skipped", "expired")
+                     or not isinstance(r.get("message"), str) or not _valid_day(r.get("last_seen"))),
+         "recommendation(s) in the ledger have an unknown status, no text or a date that cannot be read.")
     for name in ("tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes", "income", "debts",
                  "countdowns", "supplies", "timeblocks", "okrs", "recipes", "mealplan", "trips", "chores", "expiries",
-                 "routines", "gifts", "decisions"):
+                 "routines", "gifts", "decisions", "trash", "recs"):
         ids = [r["id"] for r in rows(name) if isinstance(r.get("id"), str) and r["id"]]
         dupes = len({i for i in ids if ids.count(i) > 1})
         warn(name, dupes, "id(s) are shared by more than one entry, so editing or deleting by id only reaches "

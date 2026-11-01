@@ -80,6 +80,8 @@ EXPIRIES_FILE = HERMES_DIR / "expiries.json"
 ROUTINES_FILE = HERMES_DIR / "routines.json"
 GIFTS_FILE = HERMES_DIR / "gifts.json"
 DECISIONS_FILE = HERMES_DIR / "decisions.json"
+TRASH_FILE = HERMES_DIR / "trash.json"
+RECS_FILE = HERMES_DIR / "recs.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -110,7 +112,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     global LISTS_FILE, SAVINGS_FILE, SYMPTOMS_FILE, NOTES_FILE
     global INCOME_FILE, DEBTS_FILE, COUNTDOWNS_FILE, SUPPLIES_FILE
     global TIMEBLOCKS_FILE, OKRS_FILE, RECIPES_FILE, MEALPLAN_FILE, TRIPS_FILE
-    global CHORES_FILE, EXPIRIES_FILE, ROUTINES_FILE, GIFTS_FILE, DECISIONS_FILE
+    global CHORES_FILE, EXPIRIES_FILE, ROUTINES_FILE, GIFTS_FILE, DECISIONS_FILE, TRASH_FILE, RECS_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -155,6 +157,8 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     ROUTINES_FILE = HERMES_DIR / "routines.json"
     GIFTS_FILE = HERMES_DIR / "gifts.json"
     DECISIONS_FILE = HERMES_DIR / "decisions.json"
+    TRASH_FILE = HERMES_DIR / "trash.json"
+    RECS_FILE = HERMES_DIR / "recs.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -332,6 +336,10 @@ def load_gifts() -> List:         return _load(GIFTS_FILE, [])
 def save_gifts(x):             _save(GIFTS_FILE, x)
 def load_decisions() -> List:     return _load(DECISIONS_FILE, [])
 def save_decisions(x):         _save(DECISIONS_FILE, x)
+def load_trash() -> List:         return _load(TRASH_FILE, [])
+def save_trash(x):             _save(TRASH_FILE, x)
+def load_recs() -> List:          return _load(RECS_FILE, [])
+def save_recs(x):              _save(RECS_FILE, x)
 
 
 # ---------------------------------------------------------------------------
@@ -392,6 +400,8 @@ DATA_STORES: Dict[str, tuple] = {
     "routines":      ("ROUTINES_FILE",        "load_routines",     "save_routines",     list),
     "gifts":         ("GIFTS_FILE",           "load_gifts",        "save_gifts",        list),
     "decisions":     ("DECISIONS_FILE",       "load_decisions",    "save_decisions",    list),
+    "trash":         ("TRASH_FILE",           "load_trash",        "save_trash",        list),
+    "recs":          ("RECS_FILE",            "load_recs",         "save_recs",         list),
 }
 
 

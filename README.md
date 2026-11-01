@@ -418,6 +418,44 @@ doctor check them (a chore interval it cannot read, an expiry date or review
 date that is not a date, a routine without steps, an unknown gift status,
 shared ids).
 
+## Recently Deleted, Recommendation Ledger & Pinned Backups
+
+Three safety nets, all local, per profile, encrypted with the rest of your data
+when encryption is on, and covered by backup, restore, export and the doctor.
+
+```
+"I deleted the wrong task"               "what did I delete this week?"
+"put the rent task back"                 "empty the trash"
+"which recommendations did I follow?"    "I followed the sleep suggestion"
+"keep today's backup for good"
+```
+
+- **Recently deleted** (`get_trash`, `restore_deleted`, `empty_trash`): what
+  the planner's delete and clear tools remove is kept for 30 days. This covers
+  whole tasks, notes, people, subscriptions, savings goals, debts, countdowns,
+  supplies, time blocks, objectives, recipes, planned meals, trips, chores,
+  expiry dates, routines, gift ideas, decisions and list items (also
+  `clear_done_tasks`, `clear_checked_items`, `remove_list_items`, `delete_list`
+  and `clear_meals`). One delete or clear is one trash entry; restoring it puts
+  all of its entries back. Not covered: logged entries (use `undo_last_log`),
+  parts of an entry (a key result, a packing item) and habits, goals, budgets,
+  reminders and templates. `empty_trash` removes one item, everything older than
+  N days or all of it for good.
+- **Recommendation ledger** (`get_recommendation_history`,
+  `mark_recommendation`): every suggestion `get_recommendations` gives is filed
+  with when it first appeared and how often. Mark one followed or skipped. For
+  suggestions built on a daily average (sleep, hydration, stress) the ledger
+  later compares that metric in the week before with the days after, with
+  "moving the right way" or "about the same". It is arithmetic on your own logs,
+  not proof of cause and not medical advice. An open suggestion that has not
+  appeared for 30 days closes itself.
+- **Pinned backups** (`pin_backup`, `unpin_backup`): a pinned backup is never
+  rotated away and does not count towards the keep limit (at most 10 pins).
+  `get_backup_status` lists them. Pin one before a big clean-up.
+
+The doctor and `get_repair_suggestions` check the trash and the ledger, and
+`search_everything` searches the ledger.
+
 ## Project Structure
 
 ```mermaid
@@ -2054,6 +2092,22 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.47.0 - Recently Deleted, Recommendation Ledger, Pinned Backups**
+- New **recently deleted**: `get_trash`, `restore_deleted`, `empty_trash`. Every
+  planner delete or clear tool now keeps what it removed for 30 days, so a wrong
+  delete can be undone. A test fails when a new delete tool is not covered.
+- New **recommendation ledger**: `get_recommendation_history`,
+  `mark_recommendation`. Suggestions from `get_recommendations` are filed; a
+  followed one is compared with the metric before and after.
+- New **pinned backups**: `pin_backup`, `unpin_backup`. Pinned backups survive
+  rotation and do not count towards the keep limit.
+- The doctor, `get_repair_suggestions`, `search_everything`, backup, restore,
+  export and rekey cover the two new stores (trash and recs).
+- Ideas for these three came from a look at Matt Abate's life-distributable
+  (approval gates, a recommendation ledger, backups that cannot be deleted by
+  the agent); the code is our own.
+- 137 new tests - suite grew from 4722 to 4859.
 
 **v1.46.1 - Subscription renewals keep their day of the month**
 - Fix: `pay_subscription` saved the clamped renewal date as the new schedule, so
