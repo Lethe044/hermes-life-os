@@ -98,6 +98,8 @@ SOURCES: Dict[str, Tuple[str, Callable, Callable, Callable]] = {
                        lambda r: [_s(r.get("choice")), _s(r.get("reasoning")), _s(r.get("outcome")), _s(r.get("lessons"))]
                        + [o for o in (r.get("options") or []) if isinstance(o, str)],
                        lambda r: f"{_s(r.get('title'))} ({_s(r.get('status'))})"),
+    "recs": _spec("load_recs", lambda r: _s(r.get("message")), lambda r: [_s(r.get("note")), _s(r.get("metric"))],
+                  lambda r: f"{_s(r.get('message'))} ({_s(r.get('status'))})"),
     "reminders": _spec("load_reminders", lambda r: _s(r.get("text")), lambda r: [],
                        lambda r: f"{_s(r.get('text'))}" + (f" ({_s(r.get('time'))})" if _s(r.get("time")) else "")),
     "habits": _spec("load_habits", lambda r: _s(r.get("name")), lambda r: [],

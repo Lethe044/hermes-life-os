@@ -452,12 +452,18 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         return format_missing_days(tracker, missing, days)
 
     # ── planner modules: tasks, body, subscriptions, people, agenda, lists, savings, symptoms, notes,
-    #    income, debts, countdowns, supplies, timeblocks, okrs, recipes, trips, finder, closing, repair_hints, chores, expiries, routines, gifts, decisions, weekahead ──
+    #    income, debts, countdowns, supplies, timeblocks, okrs, recipes, trips, finder, closing, repair_hints, chores, expiries, routines, gifts, decisions, weekahead, trash, recledger, backup (pins) ──
     elif name in _PLANNER_MODULES:
         import importlib
         planner_mod = importlib.import_module(_PLANNER_MODULES[name])
-        return planner_mod.run_tool(name, inp, log_date=log_date, log_stamp=log_stamp,
-                                    log_id=log_id, dispatch=dispatch_tool)
+
+        def _run_planner_tool():
+            return planner_mod.run_tool(name, inp, log_date=log_date, log_stamp=log_stamp,
+                                        log_id=log_id, dispatch=dispatch_tool)
+        import trash as _trash
+        if name in _trash.WATCHED:  # deleting tools: what they remove is kept for 30 days (trash.py)
+            return _trash.capture(name, _run_planner_tool)
+        return _run_planner_tool()
 
     # ── get_day_log ───────────────────────────────────────────────────────────
     elif name == "get_day_log":
@@ -669,6 +675,11 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         from recommendations import get_recommendations as _get_recommendations
         days = inp.get("days", 14)
         suggestions = _get_recommendations(days)
+        try:  # every suggestion given is filed in the recommendation ledger (recledger.py)
+            import recledger
+            recledger.record(suggestions)
+        except Exception:  # noqa: BLE001 - the ledger never changes what the user is told
+            pass
         if not suggestions:
             return "No specific suggestions right now - not enough recent data, or everything looks steady."
         return "\n".join(f"- {s['message']}" for s in suggestions)
@@ -2851,7 +2862,7 @@ TOOLS = [
 # skipped (never crashes startup) and reported in PLUGIN_LOAD_ERRORS, which
 # demo_life_os.py surfaces once at startup.
 # ---------------------------------------------------------------------------
-TOOLS = TOOLS + PLANNER_SCHEMAS  # tasks, body, subscriptions, people, agenda, lists, savings, symptoms, notes, income, debts, countdowns, supplies, time blocks, okrs, recipes, trips, search, closing, repair hints, chores, expiry dates, routines, gift ideas, decisions, week ahead
+TOOLS = TOOLS + PLANNER_SCHEMAS  # tasks, body, subscriptions, people, agenda, lists, savings, symptoms, notes, income, debts, countdowns, supplies, time blocks, okrs, recipes, trips, search, closing, repair hints, chores, expiry dates, routines, gift ideas, decisions, week ahead, trash, recommendation ledger, backup pins
 _BUILT_IN_TOOL_NAMES = {t["function"]["name"] for t in TOOLS}
 PLUGIN_TOOLS, PLUGIN_DISPATCHERS, PLUGIN_LOAD_ERRORS = _plugins.load_plugins(
     built_in_names=_BUILT_IN_TOOL_NAMES

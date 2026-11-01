@@ -5,7 +5,8 @@ Pure data: the schemas of the tools that live in tasks.py, body.py,
 subscriptions.py, people.py, agenda.py, lists.py, savings.py,
 symptoms.py, notes.py, income.py, debts.py, countdowns.py,
 supplies.py, timeblocks.py, okrs.py, recipes.py, trips.py, finder.py, closing.py,
-repair_hints.py, chores.py, expiries.py, routines.py, gifts.py, decisions.py and weekahead.py, plus the tool name -> module map
+repair_hints.py, chores.py, expiries.py, routines.py, gifts.py, decisions.py, weekahead.py,
+trash.py, recledger.py and (the pin tools) backup.py, plus the tool name -> module map
 tools.py uses to dispatch them. Kept apart from those modules so that
 importing tools.py never imports (and never binds to) the storage layer of
 modules that only matter when one of their tools is actually called.
@@ -546,6 +547,41 @@ WEEKAHEAD_SCHEMAS = [
           {"days": {"type": "integer", "description": "1-14, default 7."}}, []),
 ]
 
+_TRASH_REF = {"type": "string", "description": "The deleted item's id (from get_trash) or some words from its name."}
+
+TRASH_SCHEMAS = [
+    _tool("get_trash", "What was deleted from the planner in the last 30 days (tasks, notes, people, subscriptions, "
+                       "savings goals, debts, countdowns, supplies, time blocks, objectives, recipes, planned meals, trips, "
+                       "chores, expiry dates, routines, gift ideas, decisions and list items), newest first. Use when "
+                       "something was deleted by mistake.",
+          {"kind": {"type": "string", "description": "Only one kind, e.g. task, note, person, recipe."}}, []),
+    _tool("restore_deleted", "Put a deleted item back where it was (all items of a clear or list deletion come back "
+                             "together). Does not undo a recipe's unlinking from the meal plan.",
+          {"item": _TRASH_REF}, ["item"]),
+    _tool("empty_trash", "Permanently remove deleted items: one item, everything older than N days, or the whole trash. "
+                         "This cannot be undone, so only use it when the user asked for it.",
+          {"item": _TRASH_REF, "older_than_days": {"type": "integer", "description": "0-30."}}, []),
+]
+
+RECLEDGER_SCHEMAS = [
+    _tool("get_recommendation_history", "The ledger of recommendations given so far: when each first appeared, how often, "
+                                        "and whether it was followed or skipped, with how sleep, hydration or stress moved "
+                                        "after a followed one.",
+          {"status": {"type": "string", "enum": ["open", "followed", "skipped", "expired", "all"], "description": "Default open."}}, []),
+    _tool("mark_recommendation", "Record what you did about a recommendation: followed, skipped or open again, with an optional note.",
+          {"recommendation": {"type": "string", "description": "Its id or some words from its text."},
+           "status": {"type": "string", "enum": ["followed", "skipped", "open"]}, "note": {"type": "string"}},
+          ["recommendation", "status"]),
+]
+
+BACKUP_PIN_SCHEMAS = [
+    _tool("pin_backup", "Keep a backup for good: rotation never deletes a pinned backup and it does not count towards the "
+                        "keep limit. At most 10 can be pinned. Use before a big clean-up.",
+          {"backup": {"type": "string", "description": "'latest' (default) or part of a backup file name."}}, []),
+    _tool("unpin_backup", "Let a pinned backup rotate away again like the others.",
+          {"backup": {"type": "string", "description": "'latest' (default) or part of a backup file name."}}, []),
+]
+
 SEARCH_SCHEMAS = [
     _tool("search_everything", "Search all your planner data at once (tasks, notes, lists, people, subscriptions, "
                                "savings, debts, countdowns, supplies, symptoms, recipes, meal plan, trips, objectives, "
@@ -574,7 +610,8 @@ PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_S
                    + INCOME_SCHEMAS + DEBT_SCHEMAS + COUNTDOWN_SCHEMAS + SUPPLY_SCHEMAS
                    + TIMEBLOCK_SCHEMAS + OKR_SCHEMAS + RECIPE_SCHEMAS + TRIP_SCHEMAS + SEARCH_SCHEMAS
                    + CLOSING_SCHEMAS + REPAIR_SCHEMAS + CHORE_SCHEMAS + EXPIRY_SCHEMAS + ROUTINE_SCHEMAS
-                   + GIFT_SCHEMAS + DECISION_SCHEMAS + WEEKAHEAD_SCHEMAS)
+                   + GIFT_SCHEMAS + DECISION_SCHEMAS + WEEKAHEAD_SCHEMAS + TRASH_SCHEMAS + RECLEDGER_SCHEMAS
+                   + BACKUP_PIN_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
@@ -585,6 +622,7 @@ for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBS
                           (RECIPE_SCHEMAS, "recipes"), (TRIP_SCHEMAS, "trips"), (SEARCH_SCHEMAS, "finder"),
                           (CLOSING_SCHEMAS, "closing"), (REPAIR_SCHEMAS, "repair_hints"), (CHORE_SCHEMAS, "chores"),
                           (EXPIRY_SCHEMAS, "expiries"), (ROUTINE_SCHEMAS, "routines"), (GIFT_SCHEMAS, "gifts"),
-                          (DECISION_SCHEMAS, "decisions"), (WEEKAHEAD_SCHEMAS, "weekahead")):
+                          (DECISION_SCHEMAS, "decisions"), (WEEKAHEAD_SCHEMAS, "weekahead"), (TRASH_SCHEMAS, "trash"),
+                          (RECLEDGER_SCHEMAS, "recledger"), (BACKUP_PIN_SCHEMAS, "backup")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module

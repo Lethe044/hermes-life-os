@@ -10,6 +10,9 @@ currently active - set_active_profile() switches this like every
 other storage path), then deletes the oldest backups beyond --keep
 (default 7), keeping the most recent N.
 
+A backup can be pinned (pin_backup): pinned backups are never rotated away and
+do not count towards --keep.
+
 Backups cover every registered data store plus the memory journal (see
 storage.DATA_STORES). To restore one, use restore.py (hermes-life-os-restore).
 
@@ -54,12 +57,76 @@ def _list_backups(directory: Path) -> List[Path]:
     return sorted(p for p in directory.iterdir() if BACKUP_FILENAME_RE.match(p.name))
 
 
+PINNED_FILE = "pinned.json"
+MAX_PINNED = 10
+
+
+def _pinned_path(directory: Path) -> Path:
+    return directory / PINNED_FILE
+
+
+def pinned_names(directory: Optional[Path] = None) -> List[str]:
+    """Names of the pinned backups that still exist, oldest first. A pinned
+    backup is never rotated away; the list lives in backups/pinned.json."""
+    directory = directory or backups_dir()
+    try:
+        data = json.loads(_pinned_path(directory).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    names = {p.name for p in _list_backups(directory)}
+    return sorted(n for n in data if isinstance(n, str) and n in names) if isinstance(data, list) else []
+
+
+def _write_pinned(directory: Path, names: List[str]) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    _pinned_path(directory).write_text(json.dumps(sorted(set(names))), encoding="utf-8")
+
+
+def _find_backup(ref: Any) -> Path:
+    backups = list_backups()
+    if not backups:
+        raise ValueError("there are no backups yet. Use backup_now first.")
+    if not isinstance(ref, str) or not ref.strip() or ref.strip().lower() == "latest":
+        return backups[0]
+    key = ref.strip().lower()
+    hits = [p for p in backups if key == p.name.lower() or key in p.name.lower()]
+    if len(hits) == 1:
+        return hits[0]
+    if not hits:
+        raise ValueError(f"no backup matches '{ref.strip()}'. Use 'latest' or part of a file name from get_backup_status.")
+    raise ValueError(f"'{ref.strip()}' matches {len(hits)} backups. Use more of the file name.")
+
+
+def pin_backup(ref: Any = "latest") -> Path:
+    """Marks a backup as kept for good (rotation skips it). Raises ValueError
+    for an unknown backup, one that is already pinned or when 10 are pinned."""
+    path = _find_backup(ref)
+    names = pinned_names()
+    if path.name in names:
+        raise ValueError(f"{path.name} is already pinned.")
+    if len(names) >= MAX_PINNED:
+        raise ValueError(f"{MAX_PINNED} backups are pinned already. Unpin one first.")
+    _write_pinned(backups_dir(), names + [path.name])
+    return path
+
+
+def unpin_backup(ref: Any = "latest") -> Path:
+    path = _find_backup(ref)
+    names = pinned_names()
+    if path.name not in names:
+        raise ValueError(f"{path.name} is not pinned.")
+    _write_pinned(backups_dir(), [n for n in names if n != path.name])
+    return path
+
+
 def rotate_backups(directory: Path, keep: int) -> List[Path]:
-    """Delete the oldest backups in directory until at most `keep`
-    remain. Returns the list of paths that were deleted."""
+    """Delete the oldest unpinned backups in directory until at most `keep`
+    unpinned ones remain. Pinned backups are never deleted and do not count
+    towards `keep`. Returns the list of paths that were deleted."""
     if keep < 0:
         raise ValueError("keep must be >= 0")
-    existing = _list_backups(directory)
+    pinned = set(pinned_names(directory))
+    existing = [p for p in _list_backups(directory) if p.name not in pinned]
     excess = len(existing) - keep
     if excess <= 0:
         return []
@@ -203,6 +270,9 @@ def format_backup_status(now: Optional[datetime] = None) -> str:
         if latest["missing_stores"]:
             lines.append("Note: it predates complete backups and is missing: "
                          + ", ".join(latest["missing_stores"]) + ". Run backup_now for a full one.")
+    pins = pinned_names()
+    if pins:
+        lines.append(f"Pinned (kept whatever the keep count): {', '.join(pins)}.")
     lines.append("To restore, run `hermes-life-os-restore --latest --dry-run` from a terminal "
                  "(restoring is deliberately not available from chat).")
     return "\n".join(lines)
@@ -230,6 +300,19 @@ def backup_alert(now: Optional[datetime] = None,
         return (f"Your last backup is {(now - created).days} days old. "
                 f"Run backup_now (the scheduler takes one daily while it is running).")
     return None
+
+
+def run_tool(name: str, inp: Dict[str, Any], **_ctx: Any) -> str:
+    try:
+        if name == "pin_backup":
+            p = pin_backup(inp.get("backup", "latest"))
+            return f"Pinned {p.name}: it is kept until you unpin it, however many newer backups are written."
+        if name == "unpin_backup":
+            p = unpin_backup(inp.get("backup", "latest"))
+            return f"Unpinned {p.name}: it now counts towards the keep limit and is rotated away when it is old enough."
+    except (ValueError, TypeError) as e:
+        return f"{'Not pinned' if name == 'pin_backup' else 'Not unpinned'}: {e}"
+    return f"Unknown backup tool: {name}"
 
 
 def main() -> None:

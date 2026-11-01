@@ -215,12 +215,28 @@ def _decisions(r):
         return ("the review date cannot be read", f"update_decision(decision={r['id']!r}, fields={{'review': 'in 7 days'}})")
 
 
+def _trash(r):
+    import storage
+    if r.get("store") not in storage.DATA_STORES or r.get("store") == "trash" or not isinstance(r.get("rows"), list):
+        return ("an unknown store or no rows to restore", f"empty_trash(item={r['id']!r})")
+    if not _day_ok(r.get("deleted")):
+        return ("a deletion date that cannot be read", f"empty_trash(item={r['id']!r})")
+
+
+def _recs(r):
+    if r.get("status") not in ("open", "followed", "skipped", "expired") or not isinstance(r.get("message"), str):
+        return ("an unknown status or no text", f"mark_recommendation(recommendation={r['id']!r}, status='skipped')")
+    if not _day_ok(r.get("last_seen")):
+        return ("a last-seen date that cannot be read", f"mark_recommendation(recommendation={r['id']!r}, status='skipped')")
+
+
 CHECKS: List[Tuple[str, Check]] = [
     ("tasks", _tasks), ("subscriptions", _subscriptions), ("people", _people), ("savings", _savings),
     ("symptoms", _symptoms), ("income", _income), ("body", _body), ("lists", _lists), ("notes", _notes),
     ("debts", _debts), ("countdowns", _countdowns), ("supplies", _supplies), ("timeblocks", _timeblocks),
     ("okrs", _okrs), ("recipes", _recipes), ("mealplan", _mealplan), ("trips", _trips), ("chores", _chores),
     ("expiries", _expiries), ("routines", _routines), ("gifts", _gifts), ("decisions", _decisions),
+    ("trash", _trash), ("recs", _recs),
 ]
 
 
