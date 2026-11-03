@@ -82,6 +82,9 @@ GIFTS_FILE = HERMES_DIR / "gifts.json"
 DECISIONS_FILE = HERMES_DIR / "decisions.json"
 TRASH_FILE = HERMES_DIR / "trash.json"
 RECS_FILE = HERMES_DIR / "recs.json"
+PRIORITIES_FILE = HERMES_DIR / "priorities.json"
+WHEEL_FILE = HERMES_DIR / "wheel.json"
+LIBRARY_FILE = HERMES_DIR / "library.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -113,6 +116,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     global INCOME_FILE, DEBTS_FILE, COUNTDOWNS_FILE, SUPPLIES_FILE
     global TIMEBLOCKS_FILE, OKRS_FILE, RECIPES_FILE, MEALPLAN_FILE, TRIPS_FILE
     global CHORES_FILE, EXPIRIES_FILE, ROUTINES_FILE, GIFTS_FILE, DECISIONS_FILE, TRASH_FILE, RECS_FILE
+    global PRIORITIES_FILE, WHEEL_FILE, LIBRARY_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -159,6 +163,9 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     DECISIONS_FILE = HERMES_DIR / "decisions.json"
     TRASH_FILE = HERMES_DIR / "trash.json"
     RECS_FILE = HERMES_DIR / "recs.json"
+    PRIORITIES_FILE = HERMES_DIR / "priorities.json"
+    WHEEL_FILE = HERMES_DIR / "wheel.json"
+    LIBRARY_FILE = HERMES_DIR / "library.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -340,6 +347,12 @@ def load_trash() -> List:         return _load(TRASH_FILE, [])
 def save_trash(x):             _save(TRASH_FILE, x)
 def load_recs() -> List:          return _load(RECS_FILE, [])
 def save_recs(x):              _save(RECS_FILE, x)
+def load_priorities() -> List:    return _load(PRIORITIES_FILE, [])
+def save_priorities(x):        _save(PRIORITIES_FILE, x)
+def load_wheel() -> List:         return _load(WHEEL_FILE, [])
+def save_wheel(x):             _save(WHEEL_FILE, x)
+def load_library() -> List:       return _load(LIBRARY_FILE, [])
+def save_library(x):           _save(LIBRARY_FILE, x)
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +415,9 @@ DATA_STORES: Dict[str, tuple] = {
     "decisions":     ("DECISIONS_FILE",       "load_decisions",    "save_decisions",    list),
     "trash":         ("TRASH_FILE",           "load_trash",        "save_trash",        list),
     "recs":          ("RECS_FILE",            "load_recs",         "save_recs",         list),
+    "priorities":    ("PRIORITIES_FILE",      "load_priorities",   "save_priorities",   list),
+    "wheel":         ("WHEEL_FILE",           "load_wheel",        "save_wheel",        list),
+    "library":       ("LIBRARY_FILE",         "load_library",      "save_library",      list),
 }
 
 

@@ -437,9 +437,23 @@ def check_planner_data() -> List[Dict[str, Any]]:
     warn("recs", sum(1 for r in rows("recs") if r.get("status") not in ("open", "followed", "skipped", "expired")
                      or not isinstance(r.get("message"), str) or not _valid_day(r.get("last_seen"))),
          "recommendation(s) in the ledger have an unknown status, no text or a date that cannot be read.")
+    warn("priorities", sum(1 for p in rows("priorities") if not _valid_day(p.get("date"))
+                           or not isinstance(p.get("text"), str) or not p["text"].strip()),
+         "priority entrie(s) have no text or a date that cannot be read.")
+    import library
+    import wheel
+    warn("wheel", sum(1 for w in rows("wheel") if not wheel._valid(w) or not _valid_day(w.get("date"))
+                      or any(a not in wheel.AREAS or isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 10
+                             for a, v in (w.get("scores") or {}).items() if isinstance(w.get("scores"), dict))),
+         "life wheel check-in(s) have no scores, an unknown area, a score outside 1 to 10 or a date that cannot be read.")
+    warn("library", sum(1 for i in rows("library") if i.get("status") not in library.STATUSES or i.get("kind") not in library.KINDS
+                        or not isinstance(i.get("title"), str) or not i["title"].strip()
+                        or (i.get("progress") is not None and (isinstance(i.get("progress"), bool) or not isinstance(i.get("progress"), int)
+                                                               or not 0 <= i["progress"] <= 100))),
+         "library item(s) have no title, an unknown kind or status, or a progress outside 0 to 100.")
     for name in ("tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes", "income", "debts",
                  "countdowns", "supplies", "timeblocks", "okrs", "recipes", "mealplan", "trips", "chores", "expiries",
-                 "routines", "gifts", "decisions", "trash", "recs"):
+                 "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library"):
         ids = [r["id"] for r in rows(name) if isinstance(r.get("id"), str) and r["id"]]
         dupes = len({i for i in ids if ids.count(i) > 1})
         warn(name, dupes, "id(s) are shared by more than one entry, so editing or deleting by id only reaches "

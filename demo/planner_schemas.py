@@ -6,7 +6,7 @@ subscriptions.py, people.py, agenda.py, lists.py, savings.py,
 symptoms.py, notes.py, income.py, debts.py, countdowns.py,
 supplies.py, timeblocks.py, okrs.py, recipes.py, trips.py, finder.py, closing.py,
 repair_hints.py, chores.py, expiries.py, routines.py, gifts.py, decisions.py, weekahead.py,
-trash.py, recledger.py and (the pin tools) backup.py, plus the tool name -> module map
+trash.py, recledger.py, priorities.py, planday.py, wheel.py, library.py, calendar_export.py and (the pin tools) backup.py, plus the tool name -> module map
 tools.py uses to dispatch them. Kept apart from those modules so that
 importing tools.py never imports (and never binds to) the storage layer of
 modules that only matter when one of their tools is actually called.
@@ -40,7 +40,9 @@ TASK_SCHEMAS = [
            "priority": {"type": "string", "enum": ["high", "normal", "low"]},
            "tags": {"type": "array", "items": {"type": "string"}},
            "repeat": {"type": "string", "enum": ["daily", "weekdays", "weekly", "monthly"]},
-           "notes": {"type": "string"}}, ["text"]),
+           "notes": {"type": "string"},
+           "minutes": {"type": "integer", "description": "Optional effort estimate, 5-480 minutes; plan_my_day uses it."}},
+          ["text"]),
     _tool("list_tasks", "List to-dos, most urgent first (overdue, then by due date and priority).",
           {"status": {"type": "string", "enum": ["open", "done", "all"], "description": "Default open."},
            "tag": {"type": "string"},
@@ -48,7 +50,7 @@ TASK_SCHEMAS = [
            "limit": {"type": "integer", "description": "Default 30, at most 200."}}, []),
     _tool("complete_task", "Mark a to-do done (by id or words from its text).", {"task": _TASK_REF}, ["task"]),
     _tool("update_task", "Change a to-do: text, due ('' clears), priority, tags, repeat ('' clears), notes, "
-                         "or done=false to reopen it.",
+                         "minutes (effort estimate) or done=false to reopen it.",
           {"task": _TASK_REF, "fields": {"type": "object", "description": "Only the fields to change."}},
           ["task", "fields"]),
     _tool("delete_task", "Delete a to-do.", {"task": _TASK_REF}, ["task"]),
@@ -585,7 +587,7 @@ BACKUP_PIN_SCHEMAS = [
 SEARCH_SCHEMAS = [
     _tool("search_everything", "Search all your planner data at once (tasks, notes, lists, people, subscriptions, "
                                "savings, debts, countdowns, supplies, symptoms, recipes, meal plan, trips, objectives, "
-                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, reminders, habits, goals) for some words. Results are grouped by area "
+                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library, reminders, habits, goals) for some words. Results are grouped by area "
                                "with ids you can use in the matching tools. For things you logged, use search_logs.",
           {"query": {"type": "string"},
            "areas": {"type": "array", "items": {"type": "string"}, "description": "Only these areas, e.g. notes, tasks."},
@@ -597,6 +599,76 @@ CLOSING_SCHEMAS = [
                                  "income, habits and what is left open, then a preview of tomorrow (or next week). "
                                  "Use for 'close my day' or 'weekly review'.",
           {"period": {"type": "string", "enum": ["day", "week"], "description": "Default day."}}, []),
+]
+
+_PRIORITY_REF = {"type": "string", "description": "The priority's id or some words from it."}
+
+PRIORITY_SCHEMAS = [
+    _tool("add_priority", "Pick one of today's (at most three) priorities: free text, or an open task whose completion "
+                          "then follows the priority.",
+          {"text": {"type": "string"}, "task": {"type": "string", "description": "An open task's id or words."},
+           "date": {"type": "string", "description": "Default today."}}, []),
+    _tool("get_priorities", "The day's priorities, how many are done and the streak of days with all of them done.",
+          {"date": {"type": "string", "description": "Default today."}}, []),
+    _tool("complete_priority", "Mark a priority done (its linked task is completed too).", {"priority": _PRIORITY_REF},
+          ["priority"]),
+    _tool("carry_over_priorities", "Copy the unfinished priorities of an earlier day (yesterday by default) to today.",
+          {"from_date": {"type": "string"}, "date": {"type": "string", "description": "Target day, default today."}}, []),
+    _tool("delete_priority", "Delete a priority.", {"priority": _PRIORITY_REF}, ["priority"]),
+]
+
+PLANDAY_SCHEMAS = [
+    _tool("plan_my_day", "Fit the day's priorities and overdue or due tasks into the free gaps of the day plan, using each "
+                         "task's minutes estimate. Shows a proposal by default; apply=true saves it as time blocks.",
+          {"date": {"type": "string", "description": "Default today."},
+           "apply": {"type": "boolean", "description": "Save the proposal as time blocks. Default false."},
+           "max_tasks": {"type": "integer", "description": "1-10, default 5."},
+           "default_minutes": {"type": "integer", "description": "Length for tasks without an estimate, default 30."}}, []),
+]
+
+WHEEL_SCHEMAS = [
+    _tool("log_life_wheel", "Rate areas of your life from 1 to 10 (health, career, money, relationships, growth, fun, "
+                            "environment, purpose). Logging again on the same day merges into that day's check-in.",
+          {"scores": {"type": "object", "description": "For example {\"health\": 7, \"money\": 4}."},
+           "note": {"type": "string"}}, ["scores"]),
+    _tool("get_life_wheel", "The latest life wheel as bars, the change since the previous check-in and the lowest areas.",
+          {"history": {"type": "boolean", "description": "Also list earlier check-ins."}}, []),
+    _tool("delete_wheel_checkin", "Delete a life wheel check-in by id or date.",
+          {"checkin": {"type": "string", "description": "The check-in's id or YYYY-MM-DD date."}}, ["checkin"]),
+]
+
+_LIBRARY_REF = {"type": "string", "description": "The item's id or some words from its title."}
+_LIBRARY_KINDS = ["book", "movie", "show", "game", "podcast", "course", "other"]
+_LIBRARY_STATUSES = ["want", "doing", "done", "dropped"]
+
+LIBRARY_SCHEMAS = [
+    _tool("add_library_item", "Add something to read, watch, play or learn to your library backlog.",
+          {"title": {"type": "string"}, "kind": {"type": "string", "enum": _LIBRARY_KINDS, "description": "Default book."},
+           "creator": {"type": "string", "description": "Author, director, studio or host."},
+           "status": {"type": "string", "enum": _LIBRARY_STATUSES, "description": "Default want."},
+           "notes": {"type": "string"}}, ["title"]),
+    _tool("get_library", "List the library, items in progress first. Filter by status and kind.",
+          {"status": {"type": "string", "enum": _LIBRARY_STATUSES}, "kind": {"type": "string", "enum": _LIBRARY_KINDS}}, []),
+    _tool("update_library_item", "Change an item: title, kind, creator, status, progress (0-100), rating (1-5) or notes.",
+          {"item": _LIBRARY_REF, "fields": {"type": "object"}}, ["item", "fields"]),
+    _tool("finish_library_item", "Mark an item done, optionally with a 1-5 rating and a note.",
+          {"item": _LIBRARY_REF, "rating": {"type": "integer", "description": "1-5."}, "notes": {"type": "string"}},
+          ["item"]),
+    _tool("suggest_library_item", "What to pick up next: something already in progress, else what has waited longest.",
+          {"kind": {"type": "string", "enum": _LIBRARY_KINDS}}, []),
+    _tool("get_library_stats", "Counts by status, what you finished this year by kind, average rating and favourites.",
+          {"year": {"type": "integer"}}, []),
+    _tool("delete_library_item", "Delete a library item.", {"item": _LIBRARY_REF}, ["item"]),
+]
+
+CALENDAR_SCHEMAS = [
+    _tool("export_calendar", "Write an .ics calendar file (time blocks, task due dates, birthdays, countdowns, trips, expiry "
+                             "dates, chores, renewals, decision reviews) that Google, Apple and Outlook calendars can import.",
+          {"days": {"type": "integer", "description": "How far ahead, 1-1100, default 365."},
+           "sections": {"type": "array", "items": {"type": "string", "enum": ["blocks", "tasks", "birthdays", "countdowns",
+                                                                                "trips", "expiries", "chores", "renewals",
+                                                                                "decisions"]},
+                        "description": "Default: all."}}, []),
 ]
 
 REPAIR_SCHEMAS = [
@@ -611,7 +683,8 @@ PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_S
                    + TIMEBLOCK_SCHEMAS + OKR_SCHEMAS + RECIPE_SCHEMAS + TRIP_SCHEMAS + SEARCH_SCHEMAS
                    + CLOSING_SCHEMAS + REPAIR_SCHEMAS + CHORE_SCHEMAS + EXPIRY_SCHEMAS + ROUTINE_SCHEMAS
                    + GIFT_SCHEMAS + DECISION_SCHEMAS + WEEKAHEAD_SCHEMAS + TRASH_SCHEMAS + RECLEDGER_SCHEMAS
-                   + BACKUP_PIN_SCHEMAS)
+                   + BACKUP_PIN_SCHEMAS + PRIORITY_SCHEMAS + PLANDAY_SCHEMAS + WHEEL_SCHEMAS + LIBRARY_SCHEMAS
+                   + CALENDAR_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
@@ -623,6 +696,8 @@ for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBS
                           (CLOSING_SCHEMAS, "closing"), (REPAIR_SCHEMAS, "repair_hints"), (CHORE_SCHEMAS, "chores"),
                           (EXPIRY_SCHEMAS, "expiries"), (ROUTINE_SCHEMAS, "routines"), (GIFT_SCHEMAS, "gifts"),
                           (DECISION_SCHEMAS, "decisions"), (WEEKAHEAD_SCHEMAS, "weekahead"), (TRASH_SCHEMAS, "trash"),
-                          (RECLEDGER_SCHEMAS, "recledger"), (BACKUP_PIN_SCHEMAS, "backup")):
+                          (RECLEDGER_SCHEMAS, "recledger"), (BACKUP_PIN_SCHEMAS, "backup"), (PRIORITY_SCHEMAS, "priorities"),
+                          (PLANDAY_SCHEMAS, "planday"), (WHEEL_SCHEMAS, "wheel"), (LIBRARY_SCHEMAS, "library"),
+                          (CALENDAR_SCHEMAS, "calendar_export")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module

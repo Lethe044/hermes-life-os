@@ -46,11 +46,13 @@ WATCHED: Dict[str, tuple] = {
     "delete_chore": ("chores",), "delete_expiry": ("expiries",), "delete_routine": ("routines",),
     "delete_gift_idea": ("gifts",), "delete_decision": ("decisions",), "delete_list": ("lists",),
     "remove_list_items": ("lists",), "clear_checked_items": ("lists",),
+    "delete_priority": ("priorities",), "delete_wheel_checkin": ("wheel",), "delete_library_item": ("library",),
 }
 NOUNS = {"tasks": "task", "notes": "note", "people": "person", "subscriptions": "subscription", "savings": "savings goal",
          "debts": "debt", "countdowns": "countdown", "supplies": "supply", "timeblocks": "time block", "okrs": "objective",
          "recipes": "recipe", "mealplan": "planned meal", "trips": "trip", "chores": "chore", "expiries": "expiry date",
-         "routines": "routine", "gifts": "gift idea", "decisions": "decision", "lists": "list item"}
+         "routines": "routine", "gifts": "gift idea", "decisions": "decision", "lists": "list item", "priorities": "priority",
+         "wheel": "life wheel check-in", "library": "library item"}
 _LABEL_KEYS = ("name", "title", "text", "idea", "who", "symptom")
 
 
