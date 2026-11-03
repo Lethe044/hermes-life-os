@@ -134,6 +134,8 @@ def _day_lines() -> List[str]:
         import decisions
         lines += [f"chore: {x}" for x in _safe_list(chores.agenda_lines)]
         lines += [f"review decision: {x['item'].get('title')}" for x in _safe_list(decisions.due_for_review)]
+        import priorities
+        lines += [f"priority: {r.get('text')}" for r in _safe_list(priorities.open_today)]
         lines += [f"habit streak at risk: {h['name']} ({h['streak']} days)" for h in _rows("load_habits")
                   if isinstance(h.get("streak"), int) and h["streak"] > 0 and h.get("last_done") != d]
         return lines

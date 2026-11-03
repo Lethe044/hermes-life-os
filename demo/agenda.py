@@ -145,7 +145,8 @@ def build_agenda() -> str:
         sections.append(_section("Trips:", away))
 
     for title, module in (("Chores due:", "chores"), ("Expiring soon:", "expiries"), ("Routines to finish:", "routines"),
-                          ("Gifts to buy:", "gifts"), ("Decisions to review:", "decisions")):
+                          ("Gifts to buy:", "gifts"), ("Decisions to review:", "decisions"),
+                          ("Top priorities today:", "priorities")):
         try:
             lines = __import__(module).agenda_lines()
         except Exception:  # noqa: BLE001

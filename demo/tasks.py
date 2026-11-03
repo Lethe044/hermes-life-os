@@ -224,8 +224,17 @@ def _resolve(tasks: List[Dict[str, Any]], ref: Any, open_only: bool = False,
 
 # ------------------------------------------------------------------ operations
 
+def parse_minutes(value: Any) -> Optional[int]:
+    """Estimated effort in whole minutes (5 to 480), None when empty."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value != int(value) or not 5 <= value <= 480:
+        raise ValueError("minutes must be a whole number from 5 to 480.")
+    return int(value)
+
+
 def add_task(text: Any, due: Any = None, priority: Any = None, tags: Any = None,
-             repeat: Any = None, notes: Any = None) -> Dict[str, Any]:
+             repeat: Any = None, notes: Any = None, minutes: Any = None) -> Dict[str, Any]:
     """Creates a task. Raises ValueError, adding nothing, for blank/too long
     text, an unreadable due date, a bad priority/repeat/tags, or when 1000
     tasks are already open."""
@@ -234,6 +243,7 @@ def add_task(text: Any, due: Any = None, priority: Any = None, tags: Any = None,
     prio = parse_priority(priority)
     rep = parse_repeat(repeat)
     tag_list = parse_tags(tags)
+    est = parse_minutes(minutes)
     if rep and not due_s:
         due_s = clock.today_str()  # a repeating task needs an anchor day
     tasks = _load()
@@ -243,6 +253,8 @@ def add_task(text: Any, due: Any = None, priority: Any = None, tags: Any = None,
             "priority": prio, "tags": tag_list, "repeat": rep,
             "notes": str(notes).strip() if isinstance(notes, str) else "",
             "done": False, "done_date": None}
+    if est:
+        task["minutes"] = est
     tasks.append(task)
     _storage().save_tasks(tasks)
     return task
@@ -273,8 +285,8 @@ def update_task(ref: Any, fields: Dict[str, Any]) -> Dict[str, Any]:
     Everything is validated before anything changes."""
     if not isinstance(fields, dict) or not fields:
         raise ValueError("nothing to change - give at least one of text, due, priority, tags, repeat, "
-                         "notes or done.")
-    allowed = {"text", "due", "priority", "tags", "repeat", "notes", "done"}
+                         "notes, minutes or done.")
+    allowed = {"text", "due", "priority", "tags", "repeat", "notes", "done", "minutes"}
     unknown = sorted(set(fields) - allowed)
     if unknown:
         raise ValueError(f"cannot change {', '.join(unknown)}. Editable: {', '.join(sorted(allowed))}.")
@@ -293,6 +305,8 @@ def update_task(ref: Any, fields: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(fields["notes"], str):
             raise ValueError("notes must be text.")
         changes["notes"] = fields["notes"].strip()
+    if "minutes" in fields:
+        changes["minutes"] = parse_minutes(fields["minutes"])
     if "done" in fields:
         if fields["done"] is not False:
             raise ValueError("done can only be set to false (to reopen); use complete_task to finish a task.")
@@ -390,6 +404,8 @@ def format_task(task: Dict[str, Any]) -> str:
         bits.append(f"- {label}")
     if task.get("done") and task.get("done_date"):
         bits.append(f"- done {task['done_date']}")
+    if isinstance(task.get("minutes"), int) and not isinstance(task.get("minutes"), bool):
+        bits.append(f"- ~{task['minutes']} min")
     if task.get("repeat"):
         bits.append(f"- repeats {task['repeat']}")
     if task.get("tags"):
@@ -448,7 +464,7 @@ def run_tool(name: str, inp: Dict[str, Any], **_ctx: Any) -> str:
     try:
         if name == "add_task":
             t = add_task(inp.get("text"), inp.get("due"), inp.get("priority"), inp.get("tags"),
-                         inp.get("repeat"), inp.get("notes"))
+                         inp.get("repeat"), inp.get("notes"), inp.get("minutes"))
             return "Task added: " + format_task(t)
         if name == "list_tasks":
             status = inp.get("status") or "open"

@@ -215,6 +215,35 @@ def _decisions(r):
         return ("the review date cannot be read", f"update_decision(decision={r['id']!r}, fields={{'review': 'in 7 days'}})")
 
 
+def _priorities(r):
+    if not isinstance(r.get("text"), str) or not r["text"].strip():
+        return ("no text", f"delete_priority(priority={r['id']!r})")
+    if not _day_ok(r.get("date")):
+        return ("a date that cannot be read", f"delete_priority(priority={r['id']!r}) and add it again with add_priority")
+
+
+def _wheel(r):
+    import wheel
+    if not wheel._valid(r) or not _day_ok(r.get("date")):
+        return ("no scores or a date that cannot be read", f"delete_wheel_checkin(checkin={r['id']!r}) and log it again with log_life_wheel")
+    bad = [a for a, v in r["scores"].items() if a not in wheel.AREAS or isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 10]
+    if bad:
+        return (f"unusable scores ({', '.join(str(b) for b in bad)})", f"delete_wheel_checkin(checkin={r['id']!r}) and log it again with log_life_wheel")
+
+
+def _library(r):
+    import library
+    if not isinstance(r.get("title"), str) or not r["title"].strip():
+        return ("no title", f"delete_library_item(item={r['id']!r})")
+    if r.get("status") not in library.STATUSES:
+        return ("an unknown status", f"update_library_item(item={r['id']!r}, fields={{'status': 'want'}})")
+    if r.get("kind") not in library.KINDS:
+        return ("an unknown kind", f"update_library_item(item={r['id']!r}, fields={{'kind': 'other'}})")
+    p = r.get("progress")
+    if p is not None and (isinstance(p, bool) or not isinstance(p, int) or not 0 <= p <= 100):
+        return ("a progress outside 0 to 100", f"update_library_item(item={r['id']!r}, fields={{'progress': 0}})")
+
+
 def _trash(r):
     import storage
     if r.get("store") not in storage.DATA_STORES or r.get("store") == "trash" or not isinstance(r.get("rows"), list):
@@ -236,7 +265,7 @@ CHECKS: List[Tuple[str, Check]] = [
     ("debts", _debts), ("countdowns", _countdowns), ("supplies", _supplies), ("timeblocks", _timeblocks),
     ("okrs", _okrs), ("recipes", _recipes), ("mealplan", _mealplan), ("trips", _trips), ("chores", _chores),
     ("expiries", _expiries), ("routines", _routines), ("gifts", _gifts), ("decisions", _decisions),
-    ("trash", _trash), ("recs", _recs),
+    ("trash", _trash), ("recs", _recs), ("priorities", _priorities), ("wheel", _wheel), ("library", _library),
 ]
 
 
