@@ -275,6 +275,21 @@ def _networth(r):
         return ("a missing name, kind, history or balance", f"delete_account(account={r['id']!r}) and record it again with set_account_balance")
 
 
+def _projects(r):
+    import projects
+    if not isinstance(r.get("name"), str) or not r["name"].strip() or not isinstance(r.get("tag"), str) or not r.get("tag"):
+        return ("no name or tag", f"delete_project(project={r['id']!r}) and create it again with add_project")
+    if r.get("status") not in projects.STATUSES:
+        return ("an unknown status", f"update_project(project={r['id']!r}, fields={{'status': 'active'}})")
+
+
+def _waiting(r):
+    if not isinstance(r.get("what"), str) or not r["what"].strip():
+        return ("no text", f"delete_waiting(item={r['id']!r})")
+    if not _day_ok(r.get("chase")):
+        return ("a follow-up date that cannot be read", f"delete_waiting(item={r['id']!r}) and add it again with add_waiting")
+
+
 def _trash(r):
     import storage
     if r.get("store") not in storage.DATA_STORES or r.get("store") == "trash" or not isinstance(r.get("rows"), list):
@@ -296,7 +311,7 @@ CHECKS: List[Tuple[str, Check]] = [
     ("debts", _debts), ("countdowns", _countdowns), ("supplies", _supplies), ("timeblocks", _timeblocks),
     ("okrs", _okrs), ("recipes", _recipes), ("mealplan", _mealplan), ("trips", _trips), ("chores", _chores),
     ("expiries", _expiries), ("routines", _routines), ("gifts", _gifts), ("decisions", _decisions),
-    ("trash", _trash), ("recs", _recs), ("priorities", _priorities), ("wheel", _wheel), ("library", _library), ("inbox", _inbox), ("reviews", _reviews), ("cards", _cards), ("networth", _networth),
+    ("trash", _trash), ("recs", _recs), ("priorities", _priorities), ("wheel", _wheel), ("library", _library), ("inbox", _inbox), ("reviews", _reviews), ("cards", _cards), ("networth", _networth), ("projects", _projects), ("waiting", _waiting),
 ]
 
 

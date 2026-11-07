@@ -49,13 +49,14 @@ WATCHED: Dict[str, tuple] = {
     "delete_priority": ("priorities",), "delete_wheel_checkin": ("wheel",), "delete_library_item": ("library",),
     "delete_inbox_item": ("inbox",), "delete_weekly_review": ("reviews",),
     "delete_flashcard": ("cards",), "delete_account": ("networth",),
+    "delete_project": ("projects",), "delete_waiting": ("waiting",),
 }
 NOUNS = {"tasks": "task", "notes": "note", "people": "person", "subscriptions": "subscription", "savings": "savings goal",
          "debts": "debt", "countdowns": "countdown", "supplies": "supply", "timeblocks": "time block", "okrs": "objective",
          "recipes": "recipe", "mealplan": "planned meal", "trips": "trip", "chores": "chore", "expiries": "expiry date",
          "routines": "routine", "gifts": "gift idea", "decisions": "decision", "lists": "list item", "priorities": "priority",
-         "wheel": "life wheel check-in", "library": "library item", "inbox": "inbox item", "reviews": "weekly review", "cards": "flashcard", "networth": "account"}
-_LABEL_KEYS = ("name", "title", "text", "idea", "who", "symptom", "front", "week")
+         "wheel": "life wheel check-in", "library": "library item", "inbox": "inbox item", "reviews": "weekly review", "cards": "flashcard", "networth": "account", "projects": "project", "waiting": "waiting item"}
+_LABEL_KEYS = ("name", "title", "text", "idea", "what", "who", "symptom", "front", "week")
 
 
 def _storage():

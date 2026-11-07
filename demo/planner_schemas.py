@@ -6,7 +6,7 @@ subscriptions.py, people.py, agenda.py, lists.py, savings.py,
 symptoms.py, notes.py, income.py, debts.py, countdowns.py,
 supplies.py, timeblocks.py, okrs.py, recipes.py, trips.py, finder.py, closing.py,
 repair_hints.py, chores.py, expiries.py, routines.py, gifts.py, decisions.py, weekahead.py,
-trash.py, recledger.py, priorities.py, planday.py, wheel.py, library.py, calendar_export.py, inbox.py, weekly_review.py, flashcards.py, networth.py and (the pin tools) backup.py, plus the tool name -> module map
+trash.py, recledger.py, priorities.py, planday.py, wheel.py, library.py, calendar_export.py, inbox.py, weekly_review.py, flashcards.py, networth.py, projects.py, waiting.py and (the pin tools) backup.py, plus the tool name -> module map
 tools.py uses to dispatch them. Kept apart from those modules so that
 importing tools.py never imports (and never binds to) the storage layer of
 modules that only matter when one of their tools is actually called.
@@ -587,7 +587,7 @@ BACKUP_PIN_SCHEMAS = [
 SEARCH_SCHEMAS = [
     _tool("search_everything", "Search all your planner data at once (tasks, notes, lists, people, subscriptions, "
                                "savings, debts, countdowns, supplies, symptoms, recipes, meal plan, trips, objectives, "
-                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library, inbox, weekly reviews, flashcards, accounts, reminders, habits, goals) for some words. Results are grouped by area "
+                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library, inbox, weekly reviews, flashcards, accounts, projects, waiting items, reminders, habits, goals) for some words. Results are grouped by area "
                                "with ids you can use in the matching tools. For things you logged, use search_logs.",
           {"query": {"type": "string"},
            "areas": {"type": "array", "items": {"type": "string"}, "description": "Only these areas, e.g. notes, tasks."},
@@ -735,6 +735,39 @@ NETWORTH_SCHEMAS = [
     _tool("delete_account", "Delete an account and its history.", {"account": {"type": "string"}}, ["account"]),
 ]
 
+_PROJECT_REF = {"type": "string", "description": "The project's id or some words from its name."}
+_WAIT_REF = {"type": "string", "description": "The waiting item's id or some words from it."}
+
+PROJECT_SCHEMAS = [
+    _tool("add_project", "Create a project: an outcome that needs several tasks. The tasks that carry its tag belong to it.",
+          {"name": {"type": "string"}, "outcome": {"type": "string", "description": "What done looks like."},
+           "due": {"type": "string"}, "tag": {"type": "string", "description": "One word, default from the name."},
+           "notes": {"type": "string"}}, ["name"]),
+    _tool("get_projects", "Projects with progress, next action flags (overdue, no next action). Filter by status.",
+          {"status": {"type": "string", "enum": ["active", "paused", "done"]}}, []),
+    _tool("get_project", "One project in detail: outcome, progress and the next action.", {"project": _PROJECT_REF},
+          ["project"]),
+    _tool("update_project", "Change a project: name, outcome, status (active, paused, done), due or notes.",
+          {"project": _PROJECT_REF, "fields": {"type": "object"}}, ["project", "fields"]),
+    _tool("add_project_task", "Add a task to a project (it gets the project's tag).",
+          {"project": _PROJECT_REF, "text": {"type": "string"}, "due": {"type": "string"},
+           "priority": {"type": "string", "enum": ["high", "normal", "low"]}, "minutes": {"type": "integer"}},
+          ["project", "text"]),
+    _tool("delete_project", "Delete a project (its tasks stay).", {"project": _PROJECT_REF}, ["project"]),
+]
+
+WAITING_SCHEMAS = [
+    _tool("add_waiting", "Track something you are waiting for from someone, with a follow-up date (a week out by default).",
+          {"what": {"type": "string"}, "who": {"type": "string"}, "follow_up": {"type": "string"},
+           "notes": {"type": "string"}}, ["what"]),
+    _tool("get_waiting", "Everything you are still waiting for, the earliest follow-up first.", {}, []),
+    _tool("chase_waiting", "Record that you followed up and set the next follow-up date.",
+          {"item": _WAIT_REF, "days": {"type": "integer", "description": "Days until the next follow-up, default 7."}},
+          ["item"]),
+    _tool("resolve_waiting", "Mark a waiting item as received.", {"item": _WAIT_REF}, ["item"]),
+    _tool("delete_waiting", "Delete a waiting item.", {"item": _WAIT_REF}, ["item"]),
+]
+
 REPAIR_SCHEMAS = [
     _tool("get_repair_suggestions", "For every problem the data check finds in the planner data, the exact entry and "
                                     "the tool call that would fix it. Read-only: nothing is changed.",
@@ -749,7 +782,8 @@ PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_S
                    + GIFT_SCHEMAS + DECISION_SCHEMAS + WEEKAHEAD_SCHEMAS + TRASH_SCHEMAS + RECLEDGER_SCHEMAS
                    + BACKUP_PIN_SCHEMAS + PRIORITY_SCHEMAS + PLANDAY_SCHEMAS + WHEEL_SCHEMAS + LIBRARY_SCHEMAS
                    + CALENDAR_SCHEMAS + INBOX_SCHEMAS + REVIEW_SCHEMAS
-                   + FLASHCARD_SCHEMAS + NETWORTH_SCHEMAS)
+                   + FLASHCARD_SCHEMAS + NETWORTH_SCHEMAS
+                   + PROJECT_SCHEMAS + WAITING_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
@@ -765,6 +799,7 @@ for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBS
                           (PLANDAY_SCHEMAS, "planday"), (WHEEL_SCHEMAS, "wheel"), (LIBRARY_SCHEMAS, "library"),
                           (CALENDAR_SCHEMAS, "calendar_export"), (INBOX_SCHEMAS, "inbox"),
                           (REVIEW_SCHEMAS, "weekly_review"), (FLASHCARD_SCHEMAS, "flashcards"),
-                          (NETWORTH_SCHEMAS, "networth")):
+                          (NETWORTH_SCHEMAS, "networth"), (PROJECT_SCHEMAS, "projects"),
+                          (WAITING_SCHEMAS, "waiting")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module

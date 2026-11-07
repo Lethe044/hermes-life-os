@@ -89,6 +89,8 @@ INBOX_FILE = HERMES_DIR / "inbox.json"
 REVIEWS_FILE = HERMES_DIR / "reviews.json"
 CARDS_FILE = HERMES_DIR / "cards.json"
 NETWORTH_FILE = HERMES_DIR / "networth.json"
+PROJECTS_FILE = HERMES_DIR / "projects.json"
+WAITING_FILE = HERMES_DIR / "waiting.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -120,7 +122,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     global INCOME_FILE, DEBTS_FILE, COUNTDOWNS_FILE, SUPPLIES_FILE
     global TIMEBLOCKS_FILE, OKRS_FILE, RECIPES_FILE, MEALPLAN_FILE, TRIPS_FILE
     global CHORES_FILE, EXPIRIES_FILE, ROUTINES_FILE, GIFTS_FILE, DECISIONS_FILE, TRASH_FILE, RECS_FILE
-    global PRIORITIES_FILE, WHEEL_FILE, LIBRARY_FILE, INBOX_FILE, REVIEWS_FILE, CARDS_FILE, NETWORTH_FILE
+    global PRIORITIES_FILE, WHEEL_FILE, LIBRARY_FILE, INBOX_FILE, REVIEWS_FILE, CARDS_FILE, NETWORTH_FILE, PROJECTS_FILE, WAITING_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -174,6 +176,8 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     REVIEWS_FILE = HERMES_DIR / "reviews.json"
     CARDS_FILE = HERMES_DIR / "cards.json"
     NETWORTH_FILE = HERMES_DIR / "networth.json"
+    PROJECTS_FILE = HERMES_DIR / "projects.json"
+    WAITING_FILE = HERMES_DIR / "waiting.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -369,6 +373,10 @@ def load_cards() -> List:         return _load(CARDS_FILE, [])
 def save_cards(x):             _save(CARDS_FILE, x)
 def load_networth() -> List:      return _load(NETWORTH_FILE, [])
 def save_networth(x):          _save(NETWORTH_FILE, x)
+def load_projects() -> List:      return _load(PROJECTS_FILE, [])
+def save_projects(x):          _save(PROJECTS_FILE, x)
+def load_waiting() -> List:       return _load(WAITING_FILE, [])
+def save_waiting(x):           _save(WAITING_FILE, x)
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +446,8 @@ DATA_STORES: Dict[str, tuple] = {
     "reviews":       ("REVIEWS_FILE",         "load_reviews",      "save_reviews",      list),
     "cards":         ("CARDS_FILE",           "load_cards",        "save_cards",        list),
     "networth":      ("NETWORTH_FILE",        "load_networth",     "save_networth",     list),
+    "projects":      ("PROJECTS_FILE",        "load_projects",     "save_projects",     list),
+    "waiting":       ("WAITING_FILE",         "load_waiting",      "save_waiting",      list),
 }
 
 

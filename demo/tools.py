@@ -452,7 +452,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         return format_missing_days(tracker, missing, days)
 
     # ── planner modules: tasks, body, subscriptions, people, agenda, lists, savings, symptoms, notes,
-    #    income, debts, countdowns, supplies, timeblocks, okrs, recipes, trips, finder, closing, repair_hints, chores, expiries, routines, gifts, decisions, weekahead, trash, recledger, backup (pins), priorities, planday, wheel, library, calendar_export, inbox, weekly_review, flashcards, networth ──
+    #    income, debts, countdowns, supplies, timeblocks, okrs, recipes, trips, finder, closing, repair_hints, chores, expiries, routines, gifts, decisions, weekahead, trash, recledger, backup (pins), priorities, planday, wheel, library, calendar_export, inbox, weekly_review, flashcards, networth, projects, waiting ──
     elif name in _PLANNER_MODULES:
         import importlib
         planner_mod = importlib.import_module(_PLANNER_MODULES[name])
@@ -2862,7 +2862,7 @@ TOOLS = [
 # skipped (never crashes startup) and reported in PLUGIN_LOAD_ERRORS, which
 # demo_life_os.py surfaces once at startup.
 # ---------------------------------------------------------------------------
-TOOLS = TOOLS + PLANNER_SCHEMAS  # tasks, body, subscriptions, people, agenda, lists, savings, symptoms, notes, income, debts, countdowns, supplies, time blocks, okrs, recipes, trips, search, closing, repair hints, chores, expiry dates, routines, gift ideas, decisions, week ahead, trash, recommendation ledger, backup pins, priorities, plan my day, life wheel, library, calendar export, inbox, weekly review, flashcards, net worth
+TOOLS = TOOLS + PLANNER_SCHEMAS  # tasks, body, subscriptions, people, agenda, lists, savings, symptoms, notes, income, debts, countdowns, supplies, time blocks, okrs, recipes, trips, search, closing, repair hints, chores, expiry dates, routines, gift ideas, decisions, week ahead, trash, recommendation ledger, backup pins, priorities, plan my day, life wheel, library, calendar export, inbox, weekly review, flashcards, net worth, projects, waiting for
 _BUILT_IN_TOOL_NAMES = {t["function"]["name"] for t in TOOLS}
 PLUGIN_TOOLS, PLUGIN_DISPATCHERS, PLUGIN_LOAD_ERRORS = _plugins.load_plugins(
     built_in_names=_BUILT_IN_TOOL_NAMES

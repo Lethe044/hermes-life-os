@@ -37,16 +37,18 @@ Ask in plain language; Hermes calls the right tool and answers from your own dat
 | Close the week | "start my weekly review" | `start_weekly_review` |
 | Learn something for good | "quiz me on my Spanish cards" | `review_flashcards` |
 | See the money picture | "what is my net worth?" | `get_net_worth` |
+| Move a big goal forward | "start a project: launch the website" | `add_project` |
+| Stop forgetting follow-ups | "I am waiting for a quote from the plumber" | `add_waiting` |
 | Undo a mistake | "put the rent task back" | `restore_deleted` |
 | Understand yourself | "what affects my sleep?" | `get_correlations` |
 
-All 288 tools are listed in the [tool reference](docs/TOOLS.md).
+All 299 tools are listed in the [tool reference](docs/TOOLS.md).
 
 ## Contents
 
 - **Start here:** [What it does](#what-it-does) · [Architecture](#architecture) · [Quick start](#quick-start) · [Chat mode](#chat-mode)
 - **Your data:** [Encryption](#encryption-at-rest-optional) · [Automatic backups](#automatic-backups) · [Restore](#restore) · [Health check](#health-check-doctor) · [Data export](#data-export)
-- **Planner:** [Tasks, agenda](#planner-tasks-body-metrics-subscriptions-people--todays-agenda) · [Priorities, plan my day, life wheel, library](#daily-priorities-plan-my-day-life-wheel-library--calendar-export) · [Inbox, weekly review](#inbox--weekly-review) · [Flashcards, net worth](#flashcards--net-worth) · [Time blocks, objectives, recipes, trips](#time-blocks-objectives-recipes--trips) · [Chores, routines, decisions](#chores-expiry-dates-routines-gift-ideas--decisions) · [Recently deleted](#recently-deleted-recommendation-ledger--pinned-backups)
+- **Planner:** [Tasks, agenda](#planner-tasks-body-metrics-subscriptions-people--todays-agenda) · [Priorities, plan my day, life wheel, library](#daily-priorities-plan-my-day-life-wheel-library--calendar-export) · [Inbox, weekly review](#inbox--weekly-review) · [Flashcards, net worth](#flashcards--net-worth) · [Projects, waiting for](#projects--waiting-for) · [Time blocks, objectives, recipes, trips](#time-blocks-objectives-recipes--trips) · [Chores, routines, decisions](#chores-expiry-dates-routines-gift-ideas--decisions) · [Recently deleted](#recently-deleted-recommendation-ledger--pinned-backups)
 - **Insights:** [Pattern detection](#pattern-detection) · [Life review](#life-review---the-flagship-retrospective-report) · [Dashboard](#dashboard)
 - **Connect:** [Telegram](#telegram-bot) · [Discord](#discord-bot) · [Slack](#slack-bot) · [Local REST API](#local-rest-api) · [Plugins](#plugin-system-add-your-own-tools-no-fork-required)
 - **Project:** [Project structure](#project-structure) · [What's new](#whats-new) · [Running tests](#running-tests)
@@ -548,6 +550,21 @@ recently deleted list.
   it. Stats cover cards per deck and box, mastered cards and your accuracy.
 - **Net worth**: assets minus liabilities from the balances you record. Every update is kept, so
   you get the change since the last update and a month-end trend. Amounts have no currency.
+
+## Projects & Waiting For
+
+```
+"start a project: launch the website, due December 1"     "add a task to the website project: write copy"
+"how is the website project going?"                       "pause the website project"
+"I am waiting for the contract from Sam, check in Friday" "I chased Sam, ask again in 3 days"
+"the contract arrived"                                    "what am I waiting for?"
+```
+
+- **Projects**: an outcome with a status (active, paused, done), an optional due date and a tag.
+  Tasks carrying the tag count toward progress; Hermes shows the next action and warns about
+  overdue projects and active projects with no open task. Deleting a project keeps its tasks.
+- **Waiting for**: things you handed to someone else, each with a follow-up date. Due items show
+  in the agenda and as a nudge; `chase_waiting` records a follow-up and pushes the date out.
 
 ## Project Structure
 
@@ -2185,6 +2202,21 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.51.0 - Projects and Waiting For**
+- New **projects**: `add_project`, `get_projects`, `get_project`, `update_project`,
+  `add_project_task`, `delete_project`. A project is an outcome that needs several tasks;
+  every project owns a tag and the tasks carrying it belong to it. Hermes shows progress, the
+  next action and flags projects that are overdue or have no open task. The agenda lists
+  project actions due today and a nudge points at stuck or overdue projects.
+- New **waiting for** list: `add_waiting`, `get_waiting`, `chase_waiting`, `resolve_waiting`,
+  `delete_waiting`. Track what you need back from someone, with a follow-up date (a week out
+  by default). Items due for a follow-up show in the agenda and nudges; chasing pushes the
+  date out and resolving closes the item.
+- Recently deleted now labels waiting items by what you were waiting for.
+- Doctor, repair suggestions, search, backup, restore, export and recently deleted cover the
+  two new stores.
+- 37 new tests - suite grew from 5017 to 5054.
 
 **v1.50.0 - Flashcards and Net Worth**
 - New **flashcards** with spaced repetition (Leitner boxes): `add_flashcards`,

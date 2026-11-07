@@ -2,6 +2,21 @@
 
 All notable changes to Hermes Life OS, newest first. The latest releases are also summarised in the [README](README.md#whats-new).
 
+**v1.51.0 - Projects and Waiting For**
+- New **projects**: `add_project`, `get_projects`, `get_project`, `update_project`,
+  `add_project_task`, `delete_project`. A project is an outcome that needs several tasks;
+  every project owns a tag and the tasks carrying it belong to it. Hermes shows progress, the
+  next action and flags projects that are overdue or have no open task. The agenda lists
+  project actions due today and a nudge points at stuck or overdue projects.
+- New **waiting for** list: `add_waiting`, `get_waiting`, `chase_waiting`, `resolve_waiting`,
+  `delete_waiting`. Track what you need back from someone, with a follow-up date (a week out
+  by default). Items due for a follow-up show in the agenda and nudges; chasing pushes the
+  date out and resolving closes the item.
+- Recently deleted now labels waiting items by what you were waiting for.
+- Doctor, repair suggestions, search, backup, restore, export and recently deleted cover the
+  two new stores.
+- 37 new tests - suite grew from 5017 to 5054.
+
 **v1.50.0 - Flashcards and Net Worth**
 - New **flashcards** with spaced repetition (Leitner boxes): `add_flashcards`,
   `review_flashcards`, `reveal_flashcard`, `answer_flashcard`, `get_flashcard_stats`,
