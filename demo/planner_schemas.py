@@ -6,7 +6,7 @@ subscriptions.py, people.py, agenda.py, lists.py, savings.py,
 symptoms.py, notes.py, income.py, debts.py, countdowns.py,
 supplies.py, timeblocks.py, okrs.py, recipes.py, trips.py, finder.py, closing.py,
 repair_hints.py, chores.py, expiries.py, routines.py, gifts.py, decisions.py, weekahead.py,
-trash.py, recledger.py, priorities.py, planday.py, wheel.py, library.py, calendar_export.py and (the pin tools) backup.py, plus the tool name -> module map
+trash.py, recledger.py, priorities.py, planday.py, wheel.py, library.py, calendar_export.py, inbox.py, weekly_review.py and (the pin tools) backup.py, plus the tool name -> module map
 tools.py uses to dispatch them. Kept apart from those modules so that
 importing tools.py never imports (and never binds to) the storage layer of
 modules that only matter when one of their tools is actually called.
@@ -587,7 +587,7 @@ BACKUP_PIN_SCHEMAS = [
 SEARCH_SCHEMAS = [
     _tool("search_everything", "Search all your planner data at once (tasks, notes, lists, people, subscriptions, "
                                "savings, debts, countdowns, supplies, symptoms, recipes, meal plan, trips, objectives, "
-                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library, reminders, habits, goals) for some words. Results are grouped by area "
+                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library, inbox, weekly reviews, reminders, habits, goals) for some words. Results are grouped by area "
                                "with ids you can use in the matching tools. For things you logged, use search_logs.",
           {"query": {"type": "string"},
            "areas": {"type": "array", "items": {"type": "string"}, "description": "Only these areas, e.g. notes, tasks."},
@@ -671,6 +671,38 @@ CALENDAR_SCHEMAS = [
                         "description": "Default: all."}}, []),
 ]
 
+_INBOX_REF = {"type": "string", "description": "The inbox item's id or some words from it."}
+
+INBOX_SCHEMAS = [
+    _tool("add_to_inbox", "Capture anything that crossed your mind without deciding what it is. Sort it later with "
+                          "process_inbox_item.", {"text": {"type": "string"}, "source": {"type": "string"}}, ["text"]),
+    _tool("get_inbox", "Everything waiting in the inbox, oldest first, with its age.", {}, []),
+    _tool("process_inbox_item", "Turn an inbox item into a task, note, library item or today's priority (it then leaves "
+                                "the inbox).",
+          {"item": _INBOX_REF, "as": {"type": "string", "enum": ["task", "note", "library", "priority"]},
+           "due": {"type": "string", "description": "Task due date, or the day of a priority."},
+           "priority": {"type": "string", "enum": ["high", "normal", "low"]},
+           "tags": {"type": "array", "items": {"type": "string"}},
+           "minutes": {"type": "integer", "description": "Task effort estimate."},
+           "kind": {"type": "string", "enum": ["book", "movie", "show", "game", "podcast", "course", "other"]}},
+          ["item", "as"]),
+    _tool("delete_inbox_item", "Drop an inbox item without keeping it.", {"item": _INBOX_REF}, ["item"]),
+]
+
+REVIEW_SCHEMAS = [
+    _tool("start_weekly_review", "Begin the weekly review: the facts of the last seven days (tasks, priorities, time "
+                                 "blocks, overdue, inbox, life wheel) and three questions to answer.", {}, []),
+    _tool("save_weekly_review", "Save this week's review: wins, lessons, up to five focus items for next week and a 1-5 "
+                                "rating. create_tasks=true turns the focus items into tasks due next Monday.",
+          {"wins": {"type": "string"}, "lessons": {"type": "string"},
+           "focus": {"type": "array", "items": {"type": "string"}},
+           "rating": {"type": "integer", "description": "1-5."}, "create_tasks": {"type": "boolean"}}, []),
+    _tool("get_weekly_reviews", "Past weekly reviews, newest first.",
+          {"limit": {"type": "integer", "description": "1-52, default 5."}}, []),
+    _tool("delete_weekly_review", "Delete a weekly review by id or the Monday date of its week.",
+          {"review": {"type": "string"}}, ["review"]),
+]
+
 REPAIR_SCHEMAS = [
     _tool("get_repair_suggestions", "For every problem the data check finds in the planner data, the exact entry and "
                                     "the tool call that would fix it. Read-only: nothing is changed.",
@@ -684,7 +716,7 @@ PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_S
                    + CLOSING_SCHEMAS + REPAIR_SCHEMAS + CHORE_SCHEMAS + EXPIRY_SCHEMAS + ROUTINE_SCHEMAS
                    + GIFT_SCHEMAS + DECISION_SCHEMAS + WEEKAHEAD_SCHEMAS + TRASH_SCHEMAS + RECLEDGER_SCHEMAS
                    + BACKUP_PIN_SCHEMAS + PRIORITY_SCHEMAS + PLANDAY_SCHEMAS + WHEEL_SCHEMAS + LIBRARY_SCHEMAS
-                   + CALENDAR_SCHEMAS)
+                   + CALENDAR_SCHEMAS + INBOX_SCHEMAS + REVIEW_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
@@ -698,6 +730,7 @@ for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBS
                           (DECISION_SCHEMAS, "decisions"), (WEEKAHEAD_SCHEMAS, "weekahead"), (TRASH_SCHEMAS, "trash"),
                           (RECLEDGER_SCHEMAS, "recledger"), (BACKUP_PIN_SCHEMAS, "backup"), (PRIORITY_SCHEMAS, "priorities"),
                           (PLANDAY_SCHEMAS, "planday"), (WHEEL_SCHEMAS, "wheel"), (LIBRARY_SCHEMAS, "library"),
-                          (CALENDAR_SCHEMAS, "calendar_export")):
+                          (CALENDAR_SCHEMAS, "calendar_export"), (INBOX_SCHEMAS, "inbox"),
+                          (REVIEW_SCHEMAS, "weekly_review")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module

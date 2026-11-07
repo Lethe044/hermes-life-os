@@ -48,9 +48,9 @@ def test_readme_keeps_its_diagram_and_balanced_fences():
 
 def test_changelog_has_every_recent_release_once():
     log = _text("CHANGELOG.md")
-    for v in ("1.48.0", "1.47.0", "1.46.1", "1.46.0", "1.45.0"):
+    for v in ("1.49.0", "1.48.0", "1.47.0", "1.46.1", "1.46.0", "1.45.0"):
         assert len(re.findall(rf"^\*\*v{re.escape(v)} - ", log, re.M)) == 1
-    assert re.search(r"^\*\*v1\.48\.0 - ", _text("README.md"), re.M)
+    assert re.search(r"^\*\*v1\.49\.0 - ", _text("README.md"), re.M)
 
 
 def test_version_matches_the_newest_changelog_entry():
@@ -63,3 +63,8 @@ def test_community_files_exist():
     for name in ("SECURITY.md", "CONTRIBUTING.md", "LICENSE", ".github/pull_request_template.md",
                  "docs/images/social-preview.png", "docs/images/demo.svg"):
         assert (ROOT / name).exists(), name
+
+
+def test_readme_tool_count_matches_the_tool_reference():
+    total = re.search(r"\((\d+) in total\)", _text("docs/TOOLS.md")).group(1)
+    assert f"All {total} tools are listed" in _text("README.md")

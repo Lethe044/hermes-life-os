@@ -33,16 +33,18 @@ Ask in plain language; Hermes calls the right tool and answers from your own dat
 | Check in on your life | "rate my health 7 and money 3" | `log_life_wheel` |
 | Keep a backlog | "add Dune to my books" | `add_library_item` |
 | Use your own calendar app | "export my calendar" | `export_calendar` |
+| Empty your head | "remind me to look into cello lessons" | `add_to_inbox` |
+| Close the week | "start my weekly review" | `start_weekly_review` |
 | Undo a mistake | "put the rent task back" | `restore_deleted` |
 | Understand yourself | "what affects my sleep?" | `get_correlations` |
 
-All 270 tools are listed in the [tool reference](docs/TOOLS.md).
+All 278 tools are listed in the [tool reference](docs/TOOLS.md).
 
 ## Contents
 
 - **Start here:** [What it does](#what-it-does) · [Architecture](#architecture) · [Quick start](#quick-start) · [Chat mode](#chat-mode)
 - **Your data:** [Encryption](#encryption-at-rest-optional) · [Automatic backups](#automatic-backups) · [Restore](#restore) · [Health check](#health-check-doctor) · [Data export](#data-export)
-- **Planner:** [Tasks, agenda](#planner-tasks-body-metrics-subscriptions-people--todays-agenda) · [Priorities, plan my day, life wheel, library](#daily-priorities-plan-my-day-life-wheel-library--calendar-export) · [Time blocks, objectives, recipes, trips](#time-blocks-objectives-recipes--trips) · [Chores, routines, decisions](#chores-expiry-dates-routines-gift-ideas--decisions) · [Recently deleted](#recently-deleted-recommendation-ledger--pinned-backups)
+- **Planner:** [Tasks, agenda](#planner-tasks-body-metrics-subscriptions-people--todays-agenda) · [Priorities, plan my day, life wheel, library](#daily-priorities-plan-my-day-life-wheel-library--calendar-export) · [Inbox, weekly review](#inbox--weekly-review) · [Time blocks, objectives, recipes, trips](#time-blocks-objectives-recipes--trips) · [Chores, routines, decisions](#chores-expiry-dates-routines-gift-ideas--decisions) · [Recently deleted](#recently-deleted-recommendation-ledger--pinned-backups)
 - **Insights:** [Pattern detection](#pattern-detection) · [Life review](#life-review---the-flagship-retrospective-report) · [Dashboard](#dashboard)
 - **Connect:** [Telegram](#telegram-bot) · [Discord](#discord-bot) · [Slack](#slack-bot) · [Local REST API](#local-rest-api) · [Plugins](#plugin-system-add-your-own-tools-no-fork-required)
 - **Project:** [Project structure](#project-structure) · [What's new](#whats-new) · [Running tests](#running-tests)
@@ -513,6 +515,22 @@ The doctor and `get_repair_suggestions` check the trash and the ledger, and
 
 All three new stores are included in backup, restore, export, the doctor, search and the
 recently deleted list.
+
+## Inbox & Weekly Review
+
+```
+"inbox: look into cello lessons"        "what's in my inbox?"
+"make the cello one a task for Friday"  "drop the lamp idea"
+"start my weekly review"                "save my review: wins shipped v1.49, focus on scales and taxes"
+```
+
+- **Inbox**: capture first, decide later. `process_inbox_item` turns an item into a task (with
+  due date, priority and minutes), a note, a library item or a priority, and removes it from
+  the inbox only when the new entry was created.
+- **Weekly review**: shows the last seven days (finished tasks, priorities done, time blocks,
+  overdue, unsorted inbox, the life wheel's lowest areas) and what you planned to focus on last
+  week, then saves your wins, lessons, rating and next week's focus. `create_tasks=true` turns
+  the focus items into tasks due next Monday.
 
 ## Project Structure
 
@@ -2150,6 +2168,21 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.49.0 - Inbox and Weekly Review**
+- New **inbox**: `add_to_inbox`, `get_inbox`, `process_inbox_item`, `delete_inbox_item`.
+  Capture anything the moment it crosses your mind, then turn it into a task, a note, a
+  library item or one of today's priorities. The agenda shows what is unsorted and a nudge
+  appears when items have waited three days or the inbox reaches ten.
+- New **weekly review**: `start_weekly_review`, `save_weekly_review`, `get_weekly_reviews`,
+  `delete_weekly_review`. A guided end-of-week ritual: the facts of the week (tasks,
+  priorities, time blocks, overdue, inbox, life wheel), three questions, a 1 to 5 rating and
+  up to five focus items for next week that can become tasks. Friday to Sunday a nudge asks
+  for it once you have done one.
+- The tool reference and the README tool count stay in sync through tests.
+- Doctor, repair suggestions, search, backup, restore, export and recently deleted cover the
+  two new stores.
+- 38 new tests - suite grew from 4940 to 4978.
 
 **v1.48.0 - Daily Priorities, Plan My Day, Life Wheel, Library, Calendar Export**
 - New **daily priorities** (the "Big 3"): `add_priority`, `get_priorities`, `complete_priority`,

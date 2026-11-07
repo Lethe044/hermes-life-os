@@ -451,9 +451,17 @@ def check_planner_data() -> List[Dict[str, Any]]:
                         or (i.get("progress") is not None and (isinstance(i.get("progress"), bool) or not isinstance(i.get("progress"), int)
                                                                or not 0 <= i["progress"] <= 100))),
          "library item(s) have no title, an unknown kind or status, or a progress outside 0 to 100.")
+    warn("inbox", sum(1 for i in rows("inbox") if not isinstance(i.get("text"), str) or not i["text"].strip()
+                      or not _valid_day(i.get("added"))),
+         "inbox item(s) have no text or a date that cannot be read.")
+    warn("reviews", sum(1 for r in rows("reviews") if not _valid_day(r.get("week"))
+                        or (r.get("focus") is not None and not isinstance(r.get("focus"), list))
+                        or (r.get("rating") is not None and (isinstance(r.get("rating"), bool) or not isinstance(r.get("rating"), int)
+                                                              or not 1 <= r["rating"] <= 5))),
+         "weekly review(s) have a week that cannot be read, a focus list that is not a list or a rating outside 1 to 5.")
     for name in ("tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes", "income", "debts",
                  "countdowns", "supplies", "timeblocks", "okrs", "recipes", "mealplan", "trips", "chores", "expiries",
-                 "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library"):
+                 "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library", "inbox", "reviews"):
         ids = [r["id"] for r in rows(name) if isinstance(r.get("id"), str) and r["id"]]
         dupes = len({i for i in ids if ids.count(i) > 1})
         warn(name, dupes, "id(s) are shared by more than one entry, so editing or deleting by id only reaches "
