@@ -459,9 +459,16 @@ def check_planner_data() -> List[Dict[str, Any]]:
                         or (r.get("rating") is not None and (isinstance(r.get("rating"), bool) or not isinstance(r.get("rating"), int)
                                                               or not 1 <= r["rating"] <= 5))),
          "weekly review(s) have a week that cannot be read, a focus list that is not a list or a rating outside 1 to 5.")
+    import flashcards
+    import networth
+    warn("flashcards", sum(1 for c in rows("cards") if not flashcards._valid(c) or not _valid_day(c.get("due"))),
+         "flashcard(s) have no front or back, a box outside 1 to 5 or a due date that cannot be read.")
+    warn("networth", sum(1 for a in rows("networth") if not networth._valid(a)
+                         or isinstance(a.get("balance"), bool) or not isinstance(a.get("balance"), (int, float))),
+         "account(s) have no name, an unknown kind, no history list or a balance that is not a number.")
     for name in ("tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes", "income", "debts",
                  "countdowns", "supplies", "timeblocks", "okrs", "recipes", "mealplan", "trips", "chores", "expiries",
-                 "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library", "inbox", "reviews"):
+                 "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library", "inbox", "reviews", "cards", "networth"):
         ids = [r["id"] for r in rows(name) if isinstance(r.get("id"), str) and r["id"]]
         dupes = len({i for i in ids if ids.count(i) > 1})
         warn(name, dupes, "id(s) are shared by more than one entry, so editing or deleting by id only reaches "

@@ -45,7 +45,7 @@ class TestExportJson:
             "achievements", "templates", "budgets", "reminders",
             "body", "tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes",
             "income", "debts", "countdowns", "supplies",
-            "timeblocks", "okrs", "recipes", "mealplan", "trips", "chores", "expiries", "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library", "inbox", "reviews", "_meta",
+            "timeblocks", "okrs", "recipes", "mealplan", "trips", "chores", "expiries", "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library", "inbox", "reviews", "cards", "networth", "_meta",
         }
         assert payload["memory"] == []
 

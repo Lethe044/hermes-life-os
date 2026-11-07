@@ -261,6 +261,20 @@ def _reviews(r):
         return ("a rating outside 1 to 5", f"delete_weekly_review(review={r['id']!r}) and save it again")
 
 
+def _cards(r):
+    import flashcards
+    if not flashcards._valid(r):
+        return ("no front or back, or a box outside 1 to 5", f"delete_flashcard(card={r['id']!r}) and add it again with add_flashcards")
+    if not _day_ok(r.get("due")):
+        return ("a due date that cannot be read", f"delete_flashcard(card={r['id']!r}) and add it again with add_flashcards")
+
+
+def _networth(r):
+    import networth
+    if not networth._valid(r) or isinstance(r.get("balance"), bool) or not isinstance(r.get("balance"), (int, float)):
+        return ("a missing name, kind, history or balance", f"delete_account(account={r['id']!r}) and record it again with set_account_balance")
+
+
 def _trash(r):
     import storage
     if r.get("store") not in storage.DATA_STORES or r.get("store") == "trash" or not isinstance(r.get("rows"), list):
@@ -282,7 +296,7 @@ CHECKS: List[Tuple[str, Check]] = [
     ("debts", _debts), ("countdowns", _countdowns), ("supplies", _supplies), ("timeblocks", _timeblocks),
     ("okrs", _okrs), ("recipes", _recipes), ("mealplan", _mealplan), ("trips", _trips), ("chores", _chores),
     ("expiries", _expiries), ("routines", _routines), ("gifts", _gifts), ("decisions", _decisions),
-    ("trash", _trash), ("recs", _recs), ("priorities", _priorities), ("wheel", _wheel), ("library", _library), ("inbox", _inbox), ("reviews", _reviews),
+    ("trash", _trash), ("recs", _recs), ("priorities", _priorities), ("wheel", _wheel), ("library", _library), ("inbox", _inbox), ("reviews", _reviews), ("cards", _cards), ("networth", _networth),
 ]
 
 

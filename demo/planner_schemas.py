@@ -6,7 +6,7 @@ subscriptions.py, people.py, agenda.py, lists.py, savings.py,
 symptoms.py, notes.py, income.py, debts.py, countdowns.py,
 supplies.py, timeblocks.py, okrs.py, recipes.py, trips.py, finder.py, closing.py,
 repair_hints.py, chores.py, expiries.py, routines.py, gifts.py, decisions.py, weekahead.py,
-trash.py, recledger.py, priorities.py, planday.py, wheel.py, library.py, calendar_export.py, inbox.py, weekly_review.py and (the pin tools) backup.py, plus the tool name -> module map
+trash.py, recledger.py, priorities.py, planday.py, wheel.py, library.py, calendar_export.py, inbox.py, weekly_review.py, flashcards.py, networth.py and (the pin tools) backup.py, plus the tool name -> module map
 tools.py uses to dispatch them. Kept apart from those modules so that
 importing tools.py never imports (and never binds to) the storage layer of
 modules that only matter when one of their tools is actually called.
@@ -587,7 +587,7 @@ BACKUP_PIN_SCHEMAS = [
 SEARCH_SCHEMAS = [
     _tool("search_everything", "Search all your planner data at once (tasks, notes, lists, people, subscriptions, "
                                "savings, debts, countdowns, supplies, symptoms, recipes, meal plan, trips, objectives, "
-                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library, inbox, weekly reviews, reminders, habits, goals) for some words. Results are grouped by area "
+                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library, inbox, weekly reviews, flashcards, accounts, reminders, habits, goals) for some words. Results are grouped by area "
                                "with ids you can use in the matching tools. For things you logged, use search_logs.",
           {"query": {"type": "string"},
            "areas": {"type": "array", "items": {"type": "string"}, "description": "Only these areas, e.g. notes, tasks."},
@@ -703,6 +703,38 @@ REVIEW_SCHEMAS = [
           {"review": {"type": "string"}}, ["review"]),
 ]
 
+FLASHCARD_SCHEMAS = [
+    _tool("add_flashcards", "Add one or more flashcards (spaced repetition, Leitner boxes) to a deck.",
+          {"cards": {"type": "array", "items": {"type": "object", "properties": {"front": {"type": "string"},
+                                                                                  "back": {"type": "string"}}},
+                     "description": "Up to 50 cards as {front, back}."},
+           "deck": {"type": "string", "description": "Default general."}}, ["cards"]),
+    _tool("review_flashcards", "Show the next due flashcard (front only). Think of the answer, then reveal_flashcard.",
+          {"deck": {"type": "string"}}, []),
+    _tool("reveal_flashcard", "Show the back of a flashcard.", {"card": {"type": "string", "description": "Card id."}},
+          ["card"]),
+    _tool("answer_flashcard", "Record whether you knew a due card: correct moves it up a box (back after 1, 3, 7, 16, 35 "
+                              "days), wrong sends it to box 1 for tomorrow.",
+          {"card": {"type": "string", "description": "Card id."}, "correct": {"type": "boolean"}}, ["card", "correct"]),
+    _tool("get_flashcard_stats", "Cards per deck and box, how many are due, mastered and your accuracy.", {}, []),
+    _tool("delete_flashcard", "Delete a flashcard.", {"card": {"type": "string", "description": "Card id or front."}},
+          ["card"]),
+]
+
+NETWORTH_SCHEMAS = [
+    _tool("set_account_balance", "Record the balance of an account you own (asset) or owe (liability). A new name creates "
+                                 "the account and needs a kind; liabilities are entered as positive amounts.",
+          {"name": {"type": "string"}, "balance": {"type": "number"},
+           "kind": {"type": "string", "enum": ["asset", "liability"]},
+           "category": {"type": "string", "description": "For example cash, savings, investments, property, loan."}},
+          ["name", "balance"]),
+    _tool("get_net_worth", "Net worth today (assets minus liabilities), the change since the previous update and every "
+                           "account.", {}, []),
+    _tool("get_net_worth_trend", "Net worth at the end of each of the last months, as a small bar chart.",
+          {"months": {"type": "integer", "description": "2-36, default 6."}}, []),
+    _tool("delete_account", "Delete an account and its history.", {"account": {"type": "string"}}, ["account"]),
+]
+
 REPAIR_SCHEMAS = [
     _tool("get_repair_suggestions", "For every problem the data check finds in the planner data, the exact entry and "
                                     "the tool call that would fix it. Read-only: nothing is changed.",
@@ -716,7 +748,8 @@ PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_S
                    + CLOSING_SCHEMAS + REPAIR_SCHEMAS + CHORE_SCHEMAS + EXPIRY_SCHEMAS + ROUTINE_SCHEMAS
                    + GIFT_SCHEMAS + DECISION_SCHEMAS + WEEKAHEAD_SCHEMAS + TRASH_SCHEMAS + RECLEDGER_SCHEMAS
                    + BACKUP_PIN_SCHEMAS + PRIORITY_SCHEMAS + PLANDAY_SCHEMAS + WHEEL_SCHEMAS + LIBRARY_SCHEMAS
-                   + CALENDAR_SCHEMAS + INBOX_SCHEMAS + REVIEW_SCHEMAS)
+                   + CALENDAR_SCHEMAS + INBOX_SCHEMAS + REVIEW_SCHEMAS
+                   + FLASHCARD_SCHEMAS + NETWORTH_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
@@ -731,6 +764,7 @@ for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBS
                           (RECLEDGER_SCHEMAS, "recledger"), (BACKUP_PIN_SCHEMAS, "backup"), (PRIORITY_SCHEMAS, "priorities"),
                           (PLANDAY_SCHEMAS, "planday"), (WHEEL_SCHEMAS, "wheel"), (LIBRARY_SCHEMAS, "library"),
                           (CALENDAR_SCHEMAS, "calendar_export"), (INBOX_SCHEMAS, "inbox"),
-                          (REVIEW_SCHEMAS, "weekly_review")):
+                          (REVIEW_SCHEMAS, "weekly_review"), (FLASHCARD_SCHEMAS, "flashcards"),
+                          (NETWORTH_SCHEMAS, "networth")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module

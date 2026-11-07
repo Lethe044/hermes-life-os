@@ -4,7 +4,7 @@ Hermes Life OS - Search Everything
 One search over all the planner data that is kept as lists of entries: tasks,
 notes, lists, people, subscriptions, savings goals, debts, countdowns, supplies,
 symptoms, recipes, the meal plan, trips (with their packing and itinerary),
-objectives, time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library items, inbox items, weekly reviews, reminders, habits and goals. Every word of the query
+objectives, time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library items, inbox items, weekly reviews, flashcards, accounts, reminders, habits and goals. Every word of the query
 has to appear somewhere in an entry (any case); results are grouped by area, an
 entry whose main name matches comes first, and each line carries the id to use
 with the tool of that area. Logged entries (meals, sleep, spending and so on)
@@ -107,6 +107,10 @@ SOURCES: Dict[str, Tuple[str, Callable, Callable, Callable]] = {
     "reviews": _spec("load_reviews", lambda r: _s(r.get("wins")) or _s(r.get("week")),
                      lambda r: [_s(r.get("lessons"))] + [x for x in (r.get("focus") or []) if isinstance(x, str)],
                      lambda r: f"Weekly review {_s(r.get('week'))}"),
+    "cards": _spec("load_cards", lambda r: _s(r.get("front")), lambda r: [_s(r.get("back")), _s(r.get("deck"))],
+                   lambda r: f"{_s(r.get('front'))} ({_s(r.get('deck'))} deck, box {_s(r.get('box'))})"),
+    "networth": _spec("load_networth", lambda r: _s(r.get("name")), lambda r: [_s(r.get("category"))],
+                      lambda r: f"{_s(r.get('name'))} ({_s(r.get('kind'))}, {_s(r.get('balance'))})"),
     "recs": _spec("load_recs", lambda r: _s(r.get("message")), lambda r: [_s(r.get("note")), _s(r.get("metric"))],
                   lambda r: f"{_s(r.get('message'))} ({_s(r.get('status'))})"),
     "reminders": _spec("load_reminders", lambda r: _s(r.get("text")), lambda r: [],
