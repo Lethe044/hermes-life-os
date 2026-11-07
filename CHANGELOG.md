@@ -2,6 +2,21 @@
 
 All notable changes to Hermes Life OS, newest first. The latest releases are also summarised in the [README](README.md#whats-new).
 
+**v1.50.0 - Flashcards and Net Worth**
+- New **flashcards** with spaced repetition (Leitner boxes): `add_flashcards`,
+  `review_flashcards`, `reveal_flashcard`, `answer_flashcard`, `get_flashcard_stats`,
+  `delete_flashcard`. A correct answer moves a card up a box (it returns after 1, 3, 7, 16 and
+  35 days), a wrong one sends it back to box 1 for tomorrow. The agenda and a nudge show how
+  many cards are due.
+- New **net worth**: `set_account_balance`, `get_net_worth`, `get_net_worth_trend`,
+  `delete_account`. Record what you own and owe whenever you look at it; Hermes keeps each
+  account's history and shows net worth today, the change since the last update and a
+  month-by-month trend. A nudge appears after five weeks without an update.
+- Recently deleted now labels flashcards by their front and weekly reviews by their week.
+- Doctor, repair suggestions, search, backup, restore, export and recently deleted cover the
+  two new stores.
+- 39 new tests - suite grew from 4978 to 5017.
+
 **v1.49.0 - Inbox and Weekly Review**
 - New **inbox**: `add_to_inbox`, `get_inbox`, `process_inbox_item`, `delete_inbox_item`.
   Capture anything the moment it crosses your mind, then turn it into a task, a note, a

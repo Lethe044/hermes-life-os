@@ -35,16 +35,18 @@ Ask in plain language; Hermes calls the right tool and answers from your own dat
 | Use your own calendar app | "export my calendar" | `export_calendar` |
 | Empty your head | "remind me to look into cello lessons" | `add_to_inbox` |
 | Close the week | "start my weekly review" | `start_weekly_review` |
+| Learn something for good | "quiz me on my Spanish cards" | `review_flashcards` |
+| See the money picture | "what is my net worth?" | `get_net_worth` |
 | Undo a mistake | "put the rent task back" | `restore_deleted` |
 | Understand yourself | "what affects my sleep?" | `get_correlations` |
 
-All 278 tools are listed in the [tool reference](docs/TOOLS.md).
+All 288 tools are listed in the [tool reference](docs/TOOLS.md).
 
 ## Contents
 
 - **Start here:** [What it does](#what-it-does) · [Architecture](#architecture) · [Quick start](#quick-start) · [Chat mode](#chat-mode)
 - **Your data:** [Encryption](#encryption-at-rest-optional) · [Automatic backups](#automatic-backups) · [Restore](#restore) · [Health check](#health-check-doctor) · [Data export](#data-export)
-- **Planner:** [Tasks, agenda](#planner-tasks-body-metrics-subscriptions-people--todays-agenda) · [Priorities, plan my day, life wheel, library](#daily-priorities-plan-my-day-life-wheel-library--calendar-export) · [Inbox, weekly review](#inbox--weekly-review) · [Time blocks, objectives, recipes, trips](#time-blocks-objectives-recipes--trips) · [Chores, routines, decisions](#chores-expiry-dates-routines-gift-ideas--decisions) · [Recently deleted](#recently-deleted-recommendation-ledger--pinned-backups)
+- **Planner:** [Tasks, agenda](#planner-tasks-body-metrics-subscriptions-people--todays-agenda) · [Priorities, plan my day, life wheel, library](#daily-priorities-plan-my-day-life-wheel-library--calendar-export) · [Inbox, weekly review](#inbox--weekly-review) · [Flashcards, net worth](#flashcards--net-worth) · [Time blocks, objectives, recipes, trips](#time-blocks-objectives-recipes--trips) · [Chores, routines, decisions](#chores-expiry-dates-routines-gift-ideas--decisions) · [Recently deleted](#recently-deleted-recommendation-ledger--pinned-backups)
 - **Insights:** [Pattern detection](#pattern-detection) · [Life review](#life-review---the-flagship-retrospective-report) · [Dashboard](#dashboard)
 - **Connect:** [Telegram](#telegram-bot) · [Discord](#discord-bot) · [Slack](#slack-bot) · [Local REST API](#local-rest-api) · [Plugins](#plugin-system-add-your-own-tools-no-fork-required)
 - **Project:** [Project structure](#project-structure) · [What's new](#whats-new) · [Running tests](#running-tests)
@@ -531,6 +533,21 @@ recently deleted list.
   overdue, unsorted inbox, the life wheel's lowest areas) and what you planned to focus on last
   week, then saves your wins, lessons, rating and next week's focus. `create_tasks=true` turns
   the focus items into tasks due next Monday.
+
+## Flashcards & Net Worth
+
+```
+"add flashcards: casa = house, perro = dog (deck spanish)"   "quiz me"
+"I knew that one"                                           "how are my flashcards doing?"
+"my savings account is 4200"  "my loan is 1800 (liability)"  "what is my net worth?"
+"show my net worth trend for 12 months"
+```
+
+- **Flashcards**: Leitner boxes 1 to 5 with return intervals of 1, 3, 7, 16 and 35 days. Hermes
+  shows the front of the next due card, reveals the back on request and records whether you knew
+  it. Stats cover cards per deck and box, mastered cards and your accuracy.
+- **Net worth**: assets minus liabilities from the balances you record. Every update is kept, so
+  you get the change since the last update and a month-end trend. Amounts have no currency.
 
 ## Project Structure
 
@@ -2168,6 +2185,21 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.50.0 - Flashcards and Net Worth**
+- New **flashcards** with spaced repetition (Leitner boxes): `add_flashcards`,
+  `review_flashcards`, `reveal_flashcard`, `answer_flashcard`, `get_flashcard_stats`,
+  `delete_flashcard`. A correct answer moves a card up a box (it returns after 1, 3, 7, 16 and
+  35 days), a wrong one sends it back to box 1 for tomorrow. The agenda and a nudge show how
+  many cards are due.
+- New **net worth**: `set_account_balance`, `get_net_worth`, `get_net_worth_trend`,
+  `delete_account`. Record what you own and owe whenever you look at it; Hermes keeps each
+  account's history and shows net worth today, the change since the last update and a
+  month-by-month trend. A nudge appears after five weeks without an update.
+- Recently deleted now labels flashcards by their front and weekly reviews by their week.
+- Doctor, repair suggestions, search, backup, restore, export and recently deleted cover the
+  two new stores.
+- 39 new tests - suite grew from 4978 to 5017.
 
 **v1.49.0 - Inbox and Weekly Review**
 - New **inbox**: `add_to_inbox`, `get_inbox`, `process_inbox_item`, `delete_inbox_item`.

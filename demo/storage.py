@@ -87,6 +87,8 @@ WHEEL_FILE = HERMES_DIR / "wheel.json"
 LIBRARY_FILE = HERMES_DIR / "library.json"
 INBOX_FILE = HERMES_DIR / "inbox.json"
 REVIEWS_FILE = HERMES_DIR / "reviews.json"
+CARDS_FILE = HERMES_DIR / "cards.json"
+NETWORTH_FILE = HERMES_DIR / "networth.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -118,7 +120,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     global INCOME_FILE, DEBTS_FILE, COUNTDOWNS_FILE, SUPPLIES_FILE
     global TIMEBLOCKS_FILE, OKRS_FILE, RECIPES_FILE, MEALPLAN_FILE, TRIPS_FILE
     global CHORES_FILE, EXPIRIES_FILE, ROUTINES_FILE, GIFTS_FILE, DECISIONS_FILE, TRASH_FILE, RECS_FILE
-    global PRIORITIES_FILE, WHEEL_FILE, LIBRARY_FILE, INBOX_FILE, REVIEWS_FILE
+    global PRIORITIES_FILE, WHEEL_FILE, LIBRARY_FILE, INBOX_FILE, REVIEWS_FILE, CARDS_FILE, NETWORTH_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -170,6 +172,8 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     LIBRARY_FILE = HERMES_DIR / "library.json"
     INBOX_FILE = HERMES_DIR / "inbox.json"
     REVIEWS_FILE = HERMES_DIR / "reviews.json"
+    CARDS_FILE = HERMES_DIR / "cards.json"
+    NETWORTH_FILE = HERMES_DIR / "networth.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -361,6 +365,10 @@ def load_inbox() -> List:         return _load(INBOX_FILE, [])
 def save_inbox(x):             _save(INBOX_FILE, x)
 def load_reviews() -> List:       return _load(REVIEWS_FILE, [])
 def save_reviews(x):           _save(REVIEWS_FILE, x)
+def load_cards() -> List:         return _load(CARDS_FILE, [])
+def save_cards(x):             _save(CARDS_FILE, x)
+def load_networth() -> List:      return _load(NETWORTH_FILE, [])
+def save_networth(x):          _save(NETWORTH_FILE, x)
 
 
 # ---------------------------------------------------------------------------
@@ -428,6 +436,8 @@ DATA_STORES: Dict[str, tuple] = {
     "library":       ("LIBRARY_FILE",         "load_library",      "save_library",      list),
     "inbox":         ("INBOX_FILE",           "load_inbox",        "save_inbox",        list),
     "reviews":       ("REVIEWS_FILE",         "load_reviews",      "save_reviews",      list),
+    "cards":         ("CARDS_FILE",           "load_cards",        "save_cards",        list),
+    "networth":      ("NETWORTH_FILE",        "load_networth",     "save_networth",     list),
 }
 
 
