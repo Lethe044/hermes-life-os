@@ -176,7 +176,7 @@ class TestDataStoreRegistry:
             "achievements", "templates", "budgets", "reminders",
             "body", "tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes",
             "income", "debts", "countdowns", "supplies",
-            "timeblocks", "okrs", "recipes", "mealplan", "trips", "chores", "expiries", "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library",
+            "timeblocks", "okrs", "recipes", "mealplan", "trips", "chores", "expiries", "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library", "inbox", "reviews",
         }
 
     def test_every_file_constant_is_registered(self, storage):

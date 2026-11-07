@@ -68,7 +68,7 @@ def _planner_nudges() -> List[str]:
     except Exception:  # noqa: BLE001
         pass
     for module, count in (("debts", 1), ("countdowns", 1), ("supplies", 1), ("timeblocks", 1), ("okrs", 1),
-                          ("trips", 1), ("chores", 1), ("expiries", 1), ("gifts", 1), ("decisions", 1), ("priorities", 1), ("wheel", 1), ("library", 1)):
+                          ("trips", 1), ("chores", 1), ("expiries", 1), ("gifts", 1), ("decisions", 1), ("priorities", 1), ("wheel", 1), ("library", 1), ("inbox", 1), ("weekly_review", 1)):
         try:
             out.extend(__import__(module).nudges(count))
         except Exception:  # noqa: BLE001

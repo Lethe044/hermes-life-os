@@ -244,6 +244,23 @@ def _library(r):
         return ("a progress outside 0 to 100", f"update_library_item(item={r['id']!r}, fields={{'progress': 0}})")
 
 
+def _inbox(r):
+    if not isinstance(r.get("text"), str) or not r["text"].strip():
+        return ("no text", f"delete_inbox_item(item={r['id']!r})")
+    if not _day_ok(r.get("added")):
+        return ("a date that cannot be read", f"delete_inbox_item(item={r['id']!r}) and add it again with add_to_inbox")
+
+
+def _reviews(r):
+    if not _day_ok(r.get("week")):
+        return ("a week that cannot be read", f"delete_weekly_review(review={r['id']!r}) and save it again")
+    if r.get("focus") is not None and not isinstance(r.get("focus"), list):
+        return ("a focus list that is not a list", f"delete_weekly_review(review={r['id']!r}) and save it again")
+    g = r.get("rating")
+    if g is not None and (isinstance(g, bool) or not isinstance(g, int) or not 1 <= g <= 5):
+        return ("a rating outside 1 to 5", f"delete_weekly_review(review={r['id']!r}) and save it again")
+
+
 def _trash(r):
     import storage
     if r.get("store") not in storage.DATA_STORES or r.get("store") == "trash" or not isinstance(r.get("rows"), list):
@@ -265,7 +282,7 @@ CHECKS: List[Tuple[str, Check]] = [
     ("debts", _debts), ("countdowns", _countdowns), ("supplies", _supplies), ("timeblocks", _timeblocks),
     ("okrs", _okrs), ("recipes", _recipes), ("mealplan", _mealplan), ("trips", _trips), ("chores", _chores),
     ("expiries", _expiries), ("routines", _routines), ("gifts", _gifts), ("decisions", _decisions),
-    ("trash", _trash), ("recs", _recs), ("priorities", _priorities), ("wheel", _wheel), ("library", _library),
+    ("trash", _trash), ("recs", _recs), ("priorities", _priorities), ("wheel", _wheel), ("library", _library), ("inbox", _inbox), ("reviews", _reviews),
 ]
 
 

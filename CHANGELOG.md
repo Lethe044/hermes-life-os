@@ -2,6 +2,21 @@
 
 All notable changes to Hermes Life OS, newest first. The latest releases are also summarised in the [README](README.md#whats-new).
 
+**v1.49.0 - Inbox and Weekly Review**
+- New **inbox**: `add_to_inbox`, `get_inbox`, `process_inbox_item`, `delete_inbox_item`.
+  Capture anything the moment it crosses your mind, then turn it into a task, a note, a
+  library item or one of today's priorities. The agenda shows what is unsorted and a nudge
+  appears when items have waited three days or the inbox reaches ten.
+- New **weekly review**: `start_weekly_review`, `save_weekly_review`, `get_weekly_reviews`,
+  `delete_weekly_review`. A guided end-of-week ritual: the facts of the week (tasks,
+  priorities, time blocks, overdue, inbox, life wheel), three questions, a 1 to 5 rating and
+  up to five focus items for next week that can become tasks. Friday to Sunday a nudge asks
+  for it once you have done one.
+- The tool reference and the README tool count stay in sync through tests.
+- Doctor, repair suggestions, search, backup, restore, export and recently deleted cover the
+  two new stores.
+- 38 new tests - suite grew from 4940 to 4978.
+
 **v1.48.0 - Daily Priorities, Plan My Day, Life Wheel, Library, Calendar Export**
 - New **daily priorities** (the "Big 3"): `add_priority`, `get_priorities`, `complete_priority`,
   `carry_over_priorities`, `delete_priority`. At most three per day, free text or an open task

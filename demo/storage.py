@@ -85,6 +85,8 @@ RECS_FILE = HERMES_DIR / "recs.json"
 PRIORITIES_FILE = HERMES_DIR / "priorities.json"
 WHEEL_FILE = HERMES_DIR / "wheel.json"
 LIBRARY_FILE = HERMES_DIR / "library.json"
+INBOX_FILE = HERMES_DIR / "inbox.json"
+REVIEWS_FILE = HERMES_DIR / "reviews.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -116,7 +118,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     global INCOME_FILE, DEBTS_FILE, COUNTDOWNS_FILE, SUPPLIES_FILE
     global TIMEBLOCKS_FILE, OKRS_FILE, RECIPES_FILE, MEALPLAN_FILE, TRIPS_FILE
     global CHORES_FILE, EXPIRIES_FILE, ROUTINES_FILE, GIFTS_FILE, DECISIONS_FILE, TRASH_FILE, RECS_FILE
-    global PRIORITIES_FILE, WHEEL_FILE, LIBRARY_FILE
+    global PRIORITIES_FILE, WHEEL_FILE, LIBRARY_FILE, INBOX_FILE, REVIEWS_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -166,6 +168,8 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     PRIORITIES_FILE = HERMES_DIR / "priorities.json"
     WHEEL_FILE = HERMES_DIR / "wheel.json"
     LIBRARY_FILE = HERMES_DIR / "library.json"
+    INBOX_FILE = HERMES_DIR / "inbox.json"
+    REVIEWS_FILE = HERMES_DIR / "reviews.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -353,6 +357,10 @@ def load_wheel() -> List:         return _load(WHEEL_FILE, [])
 def save_wheel(x):             _save(WHEEL_FILE, x)
 def load_library() -> List:       return _load(LIBRARY_FILE, [])
 def save_library(x):           _save(LIBRARY_FILE, x)
+def load_inbox() -> List:         return _load(INBOX_FILE, [])
+def save_inbox(x):             _save(INBOX_FILE, x)
+def load_reviews() -> List:       return _load(REVIEWS_FILE, [])
+def save_reviews(x):           _save(REVIEWS_FILE, x)
 
 
 # ---------------------------------------------------------------------------
@@ -418,6 +426,8 @@ DATA_STORES: Dict[str, tuple] = {
     "priorities":    ("PRIORITIES_FILE",      "load_priorities",   "save_priorities",   list),
     "wheel":         ("WHEEL_FILE",           "load_wheel",        "save_wheel",        list),
     "library":       ("LIBRARY_FILE",         "load_library",      "save_library",      list),
+    "inbox":         ("INBOX_FILE",           "load_inbox",        "save_inbox",        list),
+    "reviews":       ("REVIEWS_FILE",         "load_reviews",      "save_reviews",      list),
 }
 
 
