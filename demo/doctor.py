@@ -466,9 +466,16 @@ def check_planner_data() -> List[Dict[str, Any]]:
     warn("networth", sum(1 for a in rows("networth") if not networth._valid(a)
                          or isinstance(a.get("balance"), bool) or not isinstance(a.get("balance"), (int, float))),
          "account(s) have no name, an unknown kind, no history list or a balance that is not a number.")
+    import projects
+    warn("projects", sum(1 for p in rows("projects") if not isinstance(p.get("name"), str) or not p["name"].strip()
+                         or p.get("status") not in projects.STATUSES or not isinstance(p.get("tag"), str) or not p["tag"]),
+         "project(s) have no name or tag or an unknown status.")
+    warn("waiting", sum(1 for w in rows("waiting") if not isinstance(w.get("what"), str) or not w["what"].strip()
+                        or not _valid_day(w.get("chase"))),
+         "waiting item(s) have no text or a follow-up date that cannot be read.")
     for name in ("tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes", "income", "debts",
                  "countdowns", "supplies", "timeblocks", "okrs", "recipes", "mealplan", "trips", "chores", "expiries",
-                 "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library", "inbox", "reviews", "cards", "networth"):
+                 "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library", "inbox", "reviews", "cards", "networth", "projects", "waiting"):
         ids = [r["id"] for r in rows(name) if isinstance(r.get("id"), str) and r["id"]]
         dupes = len({i for i in ids if ids.count(i) > 1})
         warn(name, dupes, "id(s) are shared by more than one entry, so editing or deleting by id only reaches "
