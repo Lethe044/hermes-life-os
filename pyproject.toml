@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-life-os"
-version = "1.51.0"
+version = "1.52.0"
 description = "The personal OS that grows with you - mood, sleep, nutrition and habit tracking with pattern detection, built for Ollama/OpenAI/Anthropic/OpenRouter."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -72,6 +72,7 @@ hermes-life-os-plugins = "hermes_life_os.plugins:main"
 hermes-life-os-rekey = "hermes_life_os.rekey:main"
 hermes-life-os-restore = "hermes_life_os.restore:main"
 hermes-life-os-doctor = "hermes_life_os.doctor:main"
+hermes-life-os-tool = "hermes_life_os.toolcli:main"
 hermes-life-os-api = "hermes_life_os.local_api:main"
 hermes-life-os-web = "hermes_life_os.web_dashboard:main"
 hermes-life-os-whatsapp = "hermes_life_os.whatsapp_bot:main"

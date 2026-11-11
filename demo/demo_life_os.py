@@ -841,6 +841,7 @@ def main():
                              "falling back to ollama.")
     parser.add_argument("--model",     default=None,
                         help="Overrides the provider's default model.")
+    parser.add_argument("--version", action="version", version=__import__("versioninfo").banner())
     parser.add_argument("--max-turns", type=int, default=25)
     parser.add_argument("--fresh",     action="store_true", help="Clear all data and start fresh")
     parser.add_argument("--voice",     action="store_true", help="Voice mode - speak to Hermes")

@@ -14,7 +14,7 @@
 **The personal OS that grows with you.** Track how you feel, plan your day, keep your life
 organised, and let an agent connect the dots. Local first, encrypted if you want, no account needed.
 
-[Quick start](#quick-start) · [Tool reference](docs/TOOLS.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[Quick start](#quick-start) · [Tool reference](docs/TOOLS.md) · [Command line](docs/CLI.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 > Built for the NousResearch "Show us what Hermes Agent can do" hackathon.
 
@@ -187,6 +187,18 @@ hermes-life-os --mode morning --provider anthropic
 Prefer running from source instead of installing? Clone the repo and use
 `python demo/demo_life_os.py ...` in place of `hermes-life-os ...` above
 (same flags, same behavior) - see [Project Structure](#project-structure).
+
+### Use it without an AI model
+
+Every tool also runs straight from the shell, with no language model and no API key:
+
+```bash
+hermes-life-os-tool run add_task text="Pay rent" due=friday priority=high
+hermes-life-os-tool run plan_my_day
+hermes-life-os-tool list --match calendar
+```
+
+See [docs/CLI.md](docs/CLI.md) for arguments, scripting and cron examples.
 
 ### Or run it with Docker - zero Python setup
 
@@ -2202,6 +2214,16 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.52.0 - Tools From the Shell**
+- New **`hermes-life-os-tool`** command: run any of the tools straight from the terminal with
+  no language model and no API key. `list` (with `--match`), `show <tool>` and
+  `run <tool> key=value ...` or `--json`. Handy for scripts, shortcuts and cron jobs; see
+  [docs/CLI.md](docs/CLI.md).
+- `--version` for `hermes-life-os` and `hermes-life-os-tool`.
+- Fixed the package `__version__`, which still said 1.13.0; a test now keeps it equal to
+  the version in `pyproject.toml`.
+- 10 new tests - suite grew from 5054 to 5064.
 
 **v1.51.0 - Projects and Waiting For**
 - New **projects**: `add_project`, `get_projects`, `get_project`, `update_project`,
