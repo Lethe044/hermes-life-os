@@ -119,7 +119,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_run.add_argument("pairs", nargs="*", help="key=value arguments.")
     p_run.add_argument("--json", dest="json_input", default=None,
                        help="Arguments as a JSON object, or - to read it from standard input.")
-    args = parser.parse_args(argv)
+    args, extra = parser.parse_known_args(argv)
+    # Older argparse (3.10, 3.11) does not accept key=value arguments that come after an option such
+    # as --json, so anything left over that is not an option is treated as more key=value pairs.
+    stray = [e for e in extra if e.startswith("-")]
+    if stray or (extra and args.cmd != "run"):
+        parser.error(f"unrecognized arguments: {' '.join(stray or extra)}")
+    if extra:
+        args.pairs = list(args.pairs) + extra
 
     storage.set_active_profile(args.profile or os.environ.get("LIFE_OS_PROFILE"))
     catalog = _catalog()

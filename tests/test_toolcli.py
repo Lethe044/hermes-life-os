@@ -53,6 +53,18 @@ def test_run_with_pairs_json_and_stdin(cli):
     assert "new" in out and "old" not in out
 
 
+def test_pairs_after_an_option_work_on_every_python(cli):
+    # Python 3.10 and 3.11 argparse rejects positionals that follow an option; the command accepts them.
+    code, out, _ = cli("run", "add_task", "--json", '{"text": "old"}', "text=new", "minutes=20")
+    assert code == 0 and "new" in out and "~20 min" in out
+    with pytest.raises(SystemExit) as e:
+        cli("run", "add_task", "text=x", "--bogus")
+    assert e.value.code == 2
+    with pytest.raises(SystemExit) as e:
+        cli("list", "stray")
+    assert e.value.code == 2
+
+
 def test_value_parsing():
     import toolcli
     assert toolcli.parse_pairs(["a=1", "b=true", 'c=["x"]', "d=plain text", "e=", "f=a=b"]) == \

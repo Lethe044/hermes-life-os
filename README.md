@@ -2223,7 +2223,9 @@ phrased as a nudge, nothing more.
 - `--version` for `hermes-life-os` and `hermes-life-os-tool`.
 - Fixed the package `__version__`, which still said 1.13.0; a test now keeps it equal to
   the version in `pyproject.toml`.
-- 10 new tests - suite grew from 5054 to 5064.
+- Fixed an invalid escape sequence in the calendar export (a warning on Python 3.12 and later) and made the
+  command accept `key=value` arguments after `--json` on Python 3.10 and 3.11, which the CI matrix caught.
+- 11 new tests - suite grew from 5054 to 5065.
 
 **v1.51.0 - Projects and Waiting For**
 - New **projects**: `add_project`, `get_projects`, `get_project`, `update_project`,

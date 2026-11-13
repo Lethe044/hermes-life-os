@@ -28,7 +28,7 @@ PRODID = "-//Hermes Life OS//Calendar Export//EN"
 def escape(text: Any) -> str:
     """RFC 5545 TEXT escaping."""
     s = str(text if text is not None else "")
-    s = s.replace("\\", "\\\\").replace(";", "\;").replace(",", "\\,")
+    s = s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,")
     return s.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n")
 
 
