@@ -304,6 +304,12 @@ def _tripwires(r):
                 f"delete_tripwire(tripwire={r['id']!r}) and add it again with add_tripwire")
 
 
+def _timebudgets(r):
+    import timebudgets
+    if not timebudgets._valid(r):
+        return ("a missing category, hours or kind", f"delete_time_budget(category={r['id']!r}) and set it again with set_time_budget")
+
+
 def _trash(r):
     import storage
     if r.get("store") not in storage.DATA_STORES or r.get("store") == "trash" or not isinstance(r.get("rows"), list):
@@ -327,6 +333,7 @@ CHECKS: List[Tuple[str, Check]] = [
     ("expiries", _expiries), ("routines", _routines), ("gifts", _gifts), ("decisions", _decisions),
     ("trash", _trash), ("recs", _recs), ("priorities", _priorities), ("wheel", _wheel), ("library", _library), ("inbox", _inbox), ("reviews", _reviews), ("cards", _cards), ("networth", _networth), ("projects", _projects), ("waiting", _waiting),
     ("experiments", _experiments), ("tripwires", _tripwires),
+    ("timebudgets", _timebudgets),
 ]
 
 

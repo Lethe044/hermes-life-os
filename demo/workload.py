@@ -5,7 +5,7 @@ Looks ahead at the next days and answers "can I actually do all this?". For
 each day Hermes adds up the minutes of the open tasks due then (30 minutes
 when a task has no estimate; overdue tasks count against today; tasks that
 already have a time block are skipped because the block holds their time)
-and compares that with the free time left in the day plan, capped at eight
+(scaled by how long your finished tasks really took, once the focus log has enough data) and compares that with the free time left in the day plan, capped at eight
 hours of focused work. Days are marked clear, ok, tight or overloaded, and
 for overloaded days Hermes proposes which lower priority tasks to move to the
 next day with room. Nothing is changed by this module: it only reads, and no
@@ -28,9 +28,10 @@ TIGHT_AT = 0.7
 _RANK = {"low": 0, "normal": 1, "high": 2}
 
 
-def _minutes(t: Dict[str, Any]) -> int:
+def _minutes(t: Dict[str, Any], factor: float = 1.0) -> int:
     m = t.get("minutes")
-    return m if isinstance(m, int) and not isinstance(m, bool) and m > 0 else DEFAULT_MINUTES
+    base = m if isinstance(m, int) and not isinstance(m, bool) and m > 0 else DEFAULT_MINUTES
+    return max(1, round(base * factor))
 
 
 def _free(day: str) -> int:
@@ -51,7 +52,7 @@ def _label(load: int, free: int) -> str:
     return "tight" if load > free * TIGHT_AT else "ok"
 
 
-def forecast(days: Any = None) -> Dict[str, Any]:
+def forecast(days: Any = None, calibrate: Any = None) -> Dict[str, Any]:
     """{"days": [{"date", "load", "free", "status", "tasks": [...]}],
     "moves": [{"task", "minutes", "from", "to"}]}."""
     import tasks
@@ -59,6 +60,11 @@ def forecast(days: Any = None) -> Dict[str, Any]:
     span = DEFAULT_DAYS if days in (None, "") else days
     if isinstance(span, bool) or not isinstance(span, int) or not 1 <= span <= MAX_DAYS:
         raise ValueError(f"days must be a whole number from 1 to {MAX_DAYS}.")
+    if calibrate not in (None, True, False):
+        raise ValueError("calibrate must be true or false.")
+    import estimates
+    factor = estimates.calibration_factor() if calibrate is not False else None
+    f = factor or 1.0
     today = clock.today()
     dates = [(today + timedelta(days=i)).isoformat() for i in range(span)]
     open_rows = [t for t in tasks._rows(tasks._load()) if not t.get("done") and isinstance(t.get("due"), str)]
@@ -67,13 +73,13 @@ def forecast(days: Any = None) -> Dict[str, Any]:
         blocks = timeblocks.day_plan(day)["blocks"]
         held = {b.get("task_id") for b in blocks if b.get("task_id")}
         due = [t for t in open_rows if (t["due"] == day or (day == dates[0] and t["due"] < day)) and t.get("id") not in held]
-        load = sum(_minutes(t) for t in due)
+        load = sum(_minutes(t, f) for t in due)
         free = _free(day)
         out.append({"date": day, "load": load, "free": free, "status": _label(load, free), "tasks": due})
-    return {"days": out, "moves": _moves(out)}
+    return {"days": out, "moves": _moves(out, f), "factor": factor}
 
 
-def _moves(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _moves(rows: List[Dict[str, Any]], factor: float = 1.0) -> List[Dict[str, Any]]:
     """Greedy proposals: from each overloaded day, the lowest priority tasks
     that are due that day (not overdue ones) go to the next day with room."""
     room = {r["date"]: r["free"] - r["load"] for r in rows}
@@ -83,11 +89,11 @@ def _moves(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if over <= 0:
             continue
         movable = sorted((t for t in r["tasks"] if t["due"] == r["date"]),
-                         key=lambda t: (_RANK.get(t.get("priority"), 1), -_minutes(t)))
+                         key=lambda t: (_RANK.get(t.get("priority"), 1), -_minutes(t, factor)))
         for t in movable:
             if over <= 0:
                 break
-            need = _minutes(t)
+            need = _minutes(t, factor)
             target = next((x["date"] for x in rows[i + 1:] if room[x["date"]] >= need), None)
             if target is None:
                 continue
@@ -108,6 +114,7 @@ def format_forecast(res: Dict[str, Any]) -> str:
     if not any(r["load"] for r in rows):
         return (f"Nothing is due in the next {kit.plural(len(rows), 'day')}, so there is no workload to forecast. "
                 f"Add due dates and minutes with add_task.")
+    scale = res.get("factor")
     lines = [f"Workload for the next {kit.plural(len(rows), 'day')} (task minutes due vs free time, max 8h a day):"]
     for r in rows:
         day = clock.parse_day(r["date"]).strftime("%a %d %b")
@@ -116,6 +123,9 @@ def format_forecast(res: Dict[str, Any]) -> str:
             lines.append(f"- {day}: {_hm(r['load'])} of work, {_hm(r['free'])} free [{mark}]")
         else:
             lines.append(f"- {day}: nothing due, {_hm(r['free'])} free")
+    if scale and abs(scale - 1.0) >= 0.05:
+        lines.append(f"Estimates are scaled by {scale:.2f} because that is how long your finished tasks really took "
+                     f"(see get_estimate_accuracy).")
     over = [r for r in rows if r["status"] == "overloaded"]
     if not over:
         lines.append("No day is overloaded.")
@@ -155,6 +165,6 @@ def run_tool(name: str, inp: Dict[str, Any], **_ctx: Any) -> str:
     if name != "get_workload_forecast":
         return f"Unknown workload tool: {name}"
     try:
-        return format_forecast(forecast(inp.get("days")))
+        return format_forecast(forecast(inp.get("days"), inp.get("calibrate")))
     except (ValueError, TypeError) as e:
         return f"Cannot forecast the workload: {e}"

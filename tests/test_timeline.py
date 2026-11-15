@@ -52,3 +52,11 @@ def test_line_cap_and_damaged_rows(planner):
                        + [{"done": True, "done_date": "bad"}, "x"])
     out = planner.dispatch_tool("get_life_timeline", {"kinds": "tasks"})
     assert "130 events" in out and "...and 10 older events" in out
+
+
+def test_focus_sessions_are_summed_per_day(planner):
+    import storage
+    storage.save_focus([{"date": "2026-10-12", "duration": 50, "task": "a"}, {"date": "2026-10-12", "duration": 40},
+                        {"date": "2026-10-11", "duration": 30}, {"date": "2026-10-11", "duration": "x"}, "junk"])
+    out = planner.dispatch_tool("get_life_timeline", {"kinds": "focus"})
+    assert "Focused for 1h30" in out and "Focused for 30m" in out
