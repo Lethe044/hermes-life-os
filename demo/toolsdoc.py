@@ -25,7 +25,8 @@ HEADING = {"tasks": "Tasks", "body": "Body metrics", "subscriptions": "Subscript
            "library": "Library", "calendar_export": "Calendar export", "inbox": "Inbox",
            "weekly_review": "Weekly review", "flashcards": "Flashcards",
            "networth": "Net worth", "projects": "Projects",
-           "waiting": "Waiting for"}
+           "waiting": "Waiting for", "experiments": "Experiments", "tripwires": "Tripwires",
+           "workload": "Workload forecast", "timeline": "Life timeline"}
 
 
 def _first_sentence(text: str, limit: int = 170) -> str:

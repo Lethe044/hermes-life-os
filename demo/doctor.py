@@ -473,9 +473,16 @@ def check_planner_data() -> List[Dict[str, Any]]:
     warn("waiting", sum(1 for w in rows("waiting") if not isinstance(w.get("what"), str) or not w["what"].strip()
                         or not _valid_day(w.get("chase"))),
          "waiting item(s) have no text or a follow-up date that cannot be read.")
+    import experiments
+    import metricseries
+    import tripwires
+    warn("experiments", sum(1 for e in rows("experiments") if not experiments._valid(e)),
+         "experiment(s) have no name, an unknown metric or status, no day counts or a start date that cannot be read.")
+    warn("tripwires", sum(1 for w in rows("tripwires") if not tripwires._valid(w) or w.get("metric") not in metricseries.METRICS),
+         "tripwire(s) have no name, an unknown metric or condition or a threshold that is not a number.")
     for name in ("tasks", "subscriptions", "people", "lists", "savings", "symptoms", "notes", "income", "debts",
                  "countdowns", "supplies", "timeblocks", "okrs", "recipes", "mealplan", "trips", "chores", "expiries",
-                 "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library", "inbox", "reviews", "cards", "networth", "projects", "waiting"):
+                 "routines", "gifts", "decisions", "trash", "recs", "priorities", "wheel", "library", "inbox", "reviews", "cards", "networth", "projects", "waiting", "experiments", "tripwires"):
         ids = [r["id"] for r in rows(name) if isinstance(r.get("id"), str) and r["id"]]
         dupes = len({i for i in ids if ids.count(i) > 1})
         warn(name, dupes, "id(s) are shared by more than one entry, so editing or deleting by id only reaches "

@@ -290,6 +290,20 @@ def _waiting(r):
         return ("a follow-up date that cannot be read", f"delete_waiting(item={r['id']!r}) and add it again with add_waiting")
 
 
+def _experiments(r):
+    import experiments
+    if not experiments._valid(r):
+        return ("a missing name, an unknown metric or status or an unreadable start",
+                f"delete_experiment(experiment={r['id']!r}) and start it again with start_experiment")
+
+
+def _tripwires(r):
+    import tripwires
+    if not tripwires._valid(r):
+        return ("a missing name, an unknown metric or condition or a threshold that is not a number",
+                f"delete_tripwire(tripwire={r['id']!r}) and add it again with add_tripwire")
+
+
 def _trash(r):
     import storage
     if r.get("store") not in storage.DATA_STORES or r.get("store") == "trash" or not isinstance(r.get("rows"), list):
@@ -312,6 +326,7 @@ CHECKS: List[Tuple[str, Check]] = [
     ("okrs", _okrs), ("recipes", _recipes), ("mealplan", _mealplan), ("trips", _trips), ("chores", _chores),
     ("expiries", _expiries), ("routines", _routines), ("gifts", _gifts), ("decisions", _decisions),
     ("trash", _trash), ("recs", _recs), ("priorities", _priorities), ("wheel", _wheel), ("library", _library), ("inbox", _inbox), ("reviews", _reviews), ("cards", _cards), ("networth", _networth), ("projects", _projects), ("waiting", _waiting),
+    ("experiments", _experiments), ("tripwires", _tripwires),
 ]
 
 
