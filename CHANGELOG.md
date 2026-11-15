@@ -2,6 +2,27 @@
 
 All notable changes to Hermes Life OS, newest first. The latest releases are also summarised in the [README](README.md#whats-new).
 
+**v1.53.0 - Experiments, Tripwires and Foresight**
+- New **personal experiments**: `start_experiment`, `get_experiments`, `get_experiment`,
+  `conclude_experiment`, `delete_experiment`. Change one thing for a few days ("no coffee after
+  2pm") and Hermes compares the metric you already log (sleep, mood, stress, ...) before and
+  during, with both averages, the change, an effect size and a plain verdict. Only one running
+  experiment per metric, so two changes never get mixed up.
+- New **tripwires**: `add_tripwire`, `get_tripwires`, `delete_tripwire`. Rules you write while
+  you are thinking clearly ("sleep below 6 for 3 days: protect tonight", "more than 5 overdue
+  tasks: stop adding new ones") that speak up in the agenda and the nudges when they trip.
+  They watch logged metrics or live counts (overdue tasks, open tasks, inbox size, overdue
+  follow-ups).
+- New **workload forecast**: `get_workload_forecast` compares the minutes of work due on each of
+  the next days with the free time in your day plan, marks overloaded days and proposes which
+  tasks to move. Today or tomorrow being overloaded also shows up as a nudge and in the agenda.
+- New **life timeline**: `get_life_timeline` merges finished tasks and priorities, completed
+  time blocks, library items, trips, reviews, life wheel check-ins, decisions, things you
+  received, experiments and daily health logs into one chronological view.
+- Doctor, repair suggestions, search, backup, restore, export and recently deleted cover the
+  two new stores.
+- 51 new tests - suite grew from 5065 to 5116.
+
 **v1.52.0 - Tools From the Shell**
 - New **`hermes-life-os-tool`** command: run any of the tools straight from the terminal with
   no language model and no API key. `list` (with `--match`), `show <tool>` and

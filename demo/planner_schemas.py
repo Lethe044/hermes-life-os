@@ -6,7 +6,7 @@ subscriptions.py, people.py, agenda.py, lists.py, savings.py,
 symptoms.py, notes.py, income.py, debts.py, countdowns.py,
 supplies.py, timeblocks.py, okrs.py, recipes.py, trips.py, finder.py, closing.py,
 repair_hints.py, chores.py, expiries.py, routines.py, gifts.py, decisions.py, weekahead.py,
-trash.py, recledger.py, priorities.py, planday.py, wheel.py, library.py, calendar_export.py, inbox.py, weekly_review.py, flashcards.py, networth.py, projects.py, waiting.py and (the pin tools) backup.py, plus the tool name -> module map
+trash.py, recledger.py, priorities.py, planday.py, wheel.py, library.py, calendar_export.py, inbox.py, weekly_review.py, flashcards.py, networth.py, projects.py, waiting.py, experiments.py, tripwires.py, workload.py, timeline.py and (the pin tools) backup.py, plus the tool name -> module map
 tools.py uses to dispatch them. Kept apart from those modules so that
 importing tools.py never imports (and never binds to) the storage layer of
 modules that only matter when one of their tools is actually called.
@@ -587,7 +587,7 @@ BACKUP_PIN_SCHEMAS = [
 SEARCH_SCHEMAS = [
     _tool("search_everything", "Search all your planner data at once (tasks, notes, lists, people, subscriptions, "
                                "savings, debts, countdowns, supplies, symptoms, recipes, meal plan, trips, objectives, "
-                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library, inbox, weekly reviews, flashcards, accounts, projects, waiting items, reminders, habits, goals) for some words. Results are grouped by area "
+                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library, inbox, weekly reviews, flashcards, accounts, projects, waiting items, experiments, tripwires, reminders, habits, goals) for some words. Results are grouped by area "
                                "with ids you can use in the matching tools. For things you logged, use search_logs.",
           {"query": {"type": "string"},
            "areas": {"type": "array", "items": {"type": "string"}, "description": "Only these areas, e.g. notes, tasks."},
@@ -768,6 +768,58 @@ WAITING_SCHEMAS = [
     _tool("delete_waiting", "Delete a waiting item.", {"item": _WAIT_REF}, ["item"]),
 ]
 
+_EXP_REF = {"type": "string", "description": "The experiment's id or some words from its name."}
+_METRIC_ENUM = ["mood", "energy", "stress", "sleep", "hydration", "meeting_hours", "readiness", "spending",
+                "social_quality", "caffeine", "reading_min"]
+
+EXPERIMENT_SCHEMAS = [
+    _tool("start_experiment", "Start a personal experiment: change one thing for some days and see whether a logged metric "
+                              "moves compared with the days before. Only one running experiment per metric.",
+          {"name": {"type": "string"}, "metric": {"type": "string", "enum": _METRIC_ENUM},
+           "change": {"type": "string", "description": "What you will do differently."},
+           "days": {"type": "integer", "description": "Length, 3 to 60, default 14."},
+           "baseline_days": {"type": "integer", "description": "Days before the start to compare with, default 14."},
+           "start": {"type": "string", "description": "Default today; YYYY-MM-DD, tomorrow or a weekday."}},
+          ["name", "metric"]),
+    _tool("get_experiments", "All experiments with their current verdict. Filter by status.",
+          {"status": {"type": "string", "enum": ["running", "done"]}}, []),
+    _tool("get_experiment", "One experiment in detail: averages before and during, the change, effect size and verdict.",
+          {"experiment": _EXP_REF}, ["experiment"]),
+    _tool("conclude_experiment", "Close an experiment and keep its result, optionally with a decision (keep, drop, unsure).",
+          {"experiment": _EXP_REF, "decision": {"type": "string", "enum": ["keep", "drop", "unsure"]}}, ["experiment"]),
+    _tool("delete_experiment", "Delete an experiment.", {"experiment": _EXP_REF}, ["experiment"]),
+]
+
+TRIPWIRE_SCHEMAS = [
+    _tool("add_tripwire", "A rule that speaks up in the agenda and nudges when a metric holds above or below a threshold "
+                          "for some days in a row. Metrics: logged ones (mood, sleep, stress, ...) or live counts "
+                          "(overdue_tasks, open_tasks, inbox_items, overdue_follow_ups).",
+          {"name": {"type": "string"},
+           "metric": {"type": "string", "enum": _METRIC_ENUM + ["overdue_tasks", "open_tasks", "inbox_items", "overdue_follow_ups"]},
+           "condition": {"type": "string", "enum": ["above", "below"]}, "threshold": {"type": "number"},
+           "days": {"type": "integer", "description": "Days in a row, 1 to 30, default 3 (live counts use the current value)."},
+           "message": {"type": "string", "description": "What to tell yourself when it trips."}},
+          ["name", "metric", "condition", "threshold"]),
+    _tool("get_tripwires", "Every tripwire with its state: tripped, ok or no data.", {}, []),
+    _tool("delete_tripwire", "Delete a tripwire.", {"tripwire": {"type": "string", "description": "Its id or some words from its name."}},
+          ["tripwire"]),
+]
+
+WORKLOAD_SCHEMAS = [
+    _tool("get_workload_forecast", "Look ahead: minutes of work due each day against the free time in the day plan. "
+                                   "Marks overloaded days and suggests which tasks to move. Read-only.",
+          {"days": {"type": "integer", "description": "How many days ahead, 1 to 30, default 14."}}, []),
+]
+
+TIMELINE_SCHEMAS = [
+    _tool("get_life_timeline", "A chronological timeline of what happened: finished tasks and priorities, completed time "
+                               "blocks, library items, trips, reviews, wheel check-ins, decisions, things received, "
+                               "experiments and daily health logs.",
+          {"days": {"type": "integer", "description": "How many days back, 1 to 90, default 7."},
+           "kinds": {"type": "string", "description": "Comma separated filter: tasks, priorities, blocks, library, trips, "
+                                                      "reviews, wheel, decisions, waiting, experiments, health."}}, []),
+]
+
 REPAIR_SCHEMAS = [
     _tool("get_repair_suggestions", "For every problem the data check finds in the planner data, the exact entry and "
                                     "the tool call that would fix it. Read-only: nothing is changed.",
@@ -783,7 +835,8 @@ PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_S
                    + BACKUP_PIN_SCHEMAS + PRIORITY_SCHEMAS + PLANDAY_SCHEMAS + WHEEL_SCHEMAS + LIBRARY_SCHEMAS
                    + CALENDAR_SCHEMAS + INBOX_SCHEMAS + REVIEW_SCHEMAS
                    + FLASHCARD_SCHEMAS + NETWORTH_SCHEMAS
-                   + PROJECT_SCHEMAS + WAITING_SCHEMAS)
+                   + PROJECT_SCHEMAS + WAITING_SCHEMAS
+                   + EXPERIMENT_SCHEMAS + TRIPWIRE_SCHEMAS + WORKLOAD_SCHEMAS + TIMELINE_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
@@ -800,6 +853,8 @@ for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBS
                           (CALENDAR_SCHEMAS, "calendar_export"), (INBOX_SCHEMAS, "inbox"),
                           (REVIEW_SCHEMAS, "weekly_review"), (FLASHCARD_SCHEMAS, "flashcards"),
                           (NETWORTH_SCHEMAS, "networth"), (PROJECT_SCHEMAS, "projects"),
-                          (WAITING_SCHEMAS, "waiting")):
+                          (WAITING_SCHEMAS, "waiting"), (EXPERIMENT_SCHEMAS, "experiments"),
+                          (TRIPWIRE_SCHEMAS, "tripwires"), (WORKLOAD_SCHEMAS, "workload"),
+                          (TIMELINE_SCHEMAS, "timeline")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module

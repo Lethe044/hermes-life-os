@@ -28,6 +28,10 @@ Ask in plain language; Hermes calls the right tool and answers from your own dat
 
 | You want to | Say something like | Tool |
 | --- | --- | --- |
+| Test a habit on yourself | "no coffee after 2pm for 14 days, watch my sleep" | `start_experiment` |
+| Set a rule that warns you | "warn me if sleep stays below 6 hours for 3 days" | `add_tripwire` |
+| See if the week is too full | "can I do everything due this week?" | `get_workload_forecast` |
+| Look back at what happened | "what did I get done in the last two weeks?" | `get_life_timeline` |
 | Pick today's focus | "my top three today are the report, the gym and calling mum" | `add_priority` |
 | Get a plan | "plan my day" | `plan_my_day` |
 | Check in on your life | "rate my health 7 and money 3" | `log_life_wheel` |
@@ -42,13 +46,13 @@ Ask in plain language; Hermes calls the right tool and answers from your own dat
 | Undo a mistake | "put the rent task back" | `restore_deleted` |
 | Understand yourself | "what affects my sleep?" | `get_correlations` |
 
-All 299 tools are listed in the [tool reference](docs/TOOLS.md).
+All 309 tools are listed in the [tool reference](docs/TOOLS.md).
 
 ## Contents
 
 - **Start here:** [What it does](#what-it-does) · [Architecture](#architecture) · [Quick start](#quick-start) · [Chat mode](#chat-mode)
 - **Your data:** [Encryption](#encryption-at-rest-optional) · [Automatic backups](#automatic-backups) · [Restore](#restore) · [Health check](#health-check-doctor) · [Data export](#data-export)
-- **Planner:** [Tasks, agenda](#planner-tasks-body-metrics-subscriptions-people--todays-agenda) · [Priorities, plan my day, life wheel, library](#daily-priorities-plan-my-day-life-wheel-library--calendar-export) · [Inbox, weekly review](#inbox--weekly-review) · [Flashcards, net worth](#flashcards--net-worth) · [Projects, waiting for](#projects--waiting-for) · [Time blocks, objectives, recipes, trips](#time-blocks-objectives-recipes--trips) · [Chores, routines, decisions](#chores-expiry-dates-routines-gift-ideas--decisions) · [Recently deleted](#recently-deleted-recommendation-ledger--pinned-backups)
+- **Planner:** [Tasks, agenda](#planner-tasks-body-metrics-subscriptions-people--todays-agenda) · [Priorities, plan my day, life wheel, library](#daily-priorities-plan-my-day-life-wheel-library--calendar-export) · [Inbox, weekly review](#inbox--weekly-review) · [Flashcards, net worth](#flashcards--net-worth) · [Projects, waiting for](#projects--waiting-for) · [Experiments, tripwires, foresight](#experiments-tripwires--foresight) · [Time blocks, objectives, recipes, trips](#time-blocks-objectives-recipes--trips) · [Chores, routines, decisions](#chores-expiry-dates-routines-gift-ideas--decisions) · [Recently deleted](#recently-deleted-recommendation-ledger--pinned-backups)
 - **Insights:** [Pattern detection](#pattern-detection) · [Life review](#life-review---the-flagship-retrospective-report) · [Dashboard](#dashboard)
 - **Connect:** [Telegram](#telegram-bot) · [Discord](#discord-bot) · [Slack](#slack-bot) · [Local REST API](#local-rest-api) · [Plugins](#plugin-system-add-your-own-tools-no-fork-required)
 - **Project:** [Project structure](#project-structure) · [What's new](#whats-new) · [Running tests](#running-tests)
@@ -577,6 +581,28 @@ recently deleted list.
   overdue projects and active projects with no open task. Deleting a project keeps its tasks.
 - **Waiting for**: things you handed to someone else, each with a follow-up date. Due items show
   in the agenda and as a nudge; `chase_waiting` records a follow-up and pushes the date out.
+
+## Experiments, Tripwires & Foresight
+
+```
+"start an experiment: no coffee after 2pm, watch my sleep for 14 days"   "how is the coffee experiment going?"
+"warn me if my sleep stays below 6 hours for 3 days"                    "if more than 5 tasks are overdue, tell me to stop adding new ones"
+"can I actually do everything due this week?"                           "what did I get done in the last two weeks?"
+```
+
+- **Experiments**: pick one metric Hermes already tracks and a length. Hermes compares the days
+  before the start with the days of the experiment and reports both averages, the change, an
+  effect size and a verdict (better, worse, no clear effect, not enough data). It needs at least
+  three days with a reading on each side. It is a hint about your own numbers, not proof of
+  cause. Conclude an experiment to keep its result and your decision (keep, drop, unsure).
+- **Tripwires**: a metric, a direction (above or below), a threshold and how many days in a row
+  it must hold. A tripped wire shows its message in the agenda and as a nudge. Live counts
+  (`overdue_tasks`, `open_tasks`, `inbox_items`, `overdue_follow_ups`) use the current value.
+- **Workload forecast**: minutes of work due per day (30 when a task has no estimate; tasks that
+  already have a time block are skipped) against free time in the day plan, capped at eight
+  hours. Overloaded days come with suggested moves. Read-only.
+- **Life timeline**: what happened, newest day first. Filter with `kinds` (tasks, priorities,
+  blocks, library, trips, reviews, wheel, decisions, waiting, experiments, health).
 
 ## Project Structure
 
@@ -2214,6 +2240,27 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.53.0 - Experiments, Tripwires and Foresight**
+- New **personal experiments**: `start_experiment`, `get_experiments`, `get_experiment`,
+  `conclude_experiment`, `delete_experiment`. Change one thing for a few days ("no coffee after
+  2pm") and Hermes compares the metric you already log (sleep, mood, stress, ...) before and
+  during, with both averages, the change, an effect size and a plain verdict. Only one running
+  experiment per metric, so two changes never get mixed up.
+- New **tripwires**: `add_tripwire`, `get_tripwires`, `delete_tripwire`. Rules you write while
+  you are thinking clearly ("sleep below 6 for 3 days: protect tonight", "more than 5 overdue
+  tasks: stop adding new ones") that speak up in the agenda and the nudges when they trip.
+  They watch logged metrics or live counts (overdue tasks, open tasks, inbox size, overdue
+  follow-ups).
+- New **workload forecast**: `get_workload_forecast` compares the minutes of work due on each of
+  the next days with the free time in your day plan, marks overloaded days and proposes which
+  tasks to move. Today or tomorrow being overloaded also shows up as a nudge and in the agenda.
+- New **life timeline**: `get_life_timeline` merges finished tasks and priorities, completed
+  time blocks, library items, trips, reviews, life wheel check-ins, decisions, things you
+  received, experiments and daily health logs into one chronological view.
+- Doctor, repair suggestions, search, backup, restore, export and recently deleted cover the
+  two new stores.
+- 51 new tests - suite grew from 5065 to 5116.
 
 **v1.52.0 - Tools From the Shell**
 - New **`hermes-life-os-tool`** command: run any of the tools straight from the terminal with
