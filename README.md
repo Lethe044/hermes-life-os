@@ -30,6 +30,8 @@ Ask in plain language; Hermes calls the right tool and answers from your own dat
 | --- | --- | --- |
 | Test a habit on yourself | "no coffee after 2pm for 14 days, watch my sleep" | `start_experiment` |
 | Set a rule that warns you | "warn me if sleep stays below 6 hours for 3 days" | `add_tripwire` |
+| Budget your week | "at least 10 hours of deep work a week" | `set_time_budget` |
+| Check your estimates | "how good am I at estimating?" | `get_estimate_accuracy` |
 | See if the week is too full | "can I do everything due this week?" | `get_workload_forecast` |
 | Look back at what happened | "what did I get done in the last two weeks?" | `get_life_timeline` |
 | Pick today's focus | "my top three today are the report, the gym and calling mum" | `add_priority` |
@@ -46,7 +48,7 @@ Ask in plain language; Hermes calls the right tool and answers from your own dat
 | Undo a mistake | "put the rent task back" | `restore_deleted` |
 | Understand yourself | "what affects my sleep?" | `get_correlations` |
 
-All 309 tools are listed in the [tool reference](docs/TOOLS.md).
+All 313 tools are listed in the [tool reference](docs/TOOLS.md).
 
 ## Contents
 
@@ -602,7 +604,12 @@ recently deleted list.
   already have a time block are skipped) against free time in the day plan, capped at eight
   hours. Overloaded days come with suggested moves. Read-only.
 - **Life timeline**: what happened, newest day first. Filter with `kinds` (tasks, priorities,
-  blocks, library, trips, reviews, wheel, decisions, waiting, experiments, health).
+  blocks, library, trips, reviews, wheel, decisions, waiting, experiments, health, focus).
+- **Time budgets**: a weekly hour budget per time block category, as a minimum or a limit,
+  checked against blocks done since Monday and blocks still planned. From Thursday on, a nudge
+  when one is short or over.
+- **Estimate accuracy**: how long finished tasks really took (from focus sessions with the same
+  task name) against their estimate. With three such tasks the workload forecast scales by it.
 
 ## Project Structure
 
@@ -2240,6 +2247,21 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.54.0 - Time Budgets and Honest Estimates**
+- New **weekly time budgets**: `set_time_budget`, `get_time_budget`, `delete_time_budget`. Give a
+  time block category an hour budget, either at least (deep work, exercise) or at most (meetings).
+  Hermes compares it with the blocks you marked done since Monday and the blocks still planned
+  for the rest of the week and reports each budget as met, on course, short, close or over. From
+  Thursday on, budgets that are short or over show up in the agenda and as a nudge.
+- New **estimate accuracy**: `get_estimate_accuracy` compares the `minutes` estimate of finished
+  tasks with the focus sessions you logged under the same task name and tells you how much you
+  under- or overestimate. Once three finished tasks have both, the **workload forecast scales its
+  numbers by that factor** (switch it off with `calibrate=false`).
+- The life timeline now includes the focus time you logged each day (`kinds=focus`).
+- Doctor, repair suggestions, search, backup, restore, export and recently deleted cover the new
+  time budgets store.
+- 26 new tests - suite grew from 5116 to 5142.
 
 **v1.53.0 - Experiments, Tripwires and Foresight**
 - New **personal experiments**: `start_experiment`, `get_experiments`, `get_experiment`,

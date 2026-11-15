@@ -6,7 +6,7 @@ subscriptions.py, people.py, agenda.py, lists.py, savings.py,
 symptoms.py, notes.py, income.py, debts.py, countdowns.py,
 supplies.py, timeblocks.py, okrs.py, recipes.py, trips.py, finder.py, closing.py,
 repair_hints.py, chores.py, expiries.py, routines.py, gifts.py, decisions.py, weekahead.py,
-trash.py, recledger.py, priorities.py, planday.py, wheel.py, library.py, calendar_export.py, inbox.py, weekly_review.py, flashcards.py, networth.py, projects.py, waiting.py, experiments.py, tripwires.py, workload.py, timeline.py and (the pin tools) backup.py, plus the tool name -> module map
+trash.py, recledger.py, priorities.py, planday.py, wheel.py, library.py, calendar_export.py, inbox.py, weekly_review.py, flashcards.py, networth.py, projects.py, waiting.py, experiments.py, tripwires.py, workload.py, timeline.py, estimates.py, timebudgets.py and (the pin tools) backup.py, plus the tool name -> module map
 tools.py uses to dispatch them. Kept apart from those modules so that
 importing tools.py never imports (and never binds to) the storage layer of
 modules that only matter when one of their tools is actually called.
@@ -587,7 +587,7 @@ BACKUP_PIN_SCHEMAS = [
 SEARCH_SCHEMAS = [
     _tool("search_everything", "Search all your planner data at once (tasks, notes, lists, people, subscriptions, "
                                "savings, debts, countdowns, supplies, symptoms, recipes, meal plan, trips, objectives, "
-                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library, inbox, weekly reviews, flashcards, accounts, projects, waiting items, experiments, tripwires, reminders, habits, goals) for some words. Results are grouped by area "
+                               "time blocks, chores, expiry dates, routines, gift ideas, decisions, priorities, library, inbox, weekly reviews, flashcards, accounts, projects, waiting items, experiments, tripwires, time budgets, reminders, habits, goals) for some words. Results are grouped by area "
                                "with ids you can use in the matching tools. For things you logged, use search_logs.",
           {"query": {"type": "string"},
            "areas": {"type": "array", "items": {"type": "string"}, "description": "Only these areas, e.g. notes, tasks."},
@@ -808,7 +808,9 @@ TRIPWIRE_SCHEMAS = [
 WORKLOAD_SCHEMAS = [
     _tool("get_workload_forecast", "Look ahead: minutes of work due each day against the free time in the day plan. "
                                    "Marks overloaded days and suggests which tasks to move. Read-only.",
-          {"days": {"type": "integer", "description": "How many days ahead, 1 to 30, default 14."}}, []),
+          {"days": {"type": "integer", "description": "How many days ahead, 1 to 30, default 14."},
+           "calibrate": {"type": "boolean", "description": "Scale estimates by how long finished tasks really took "
+                                                          "(default: automatic once enough focus sessions match finished tasks)."}}, []),
 ]
 
 TIMELINE_SCHEMAS = [
@@ -817,7 +819,22 @@ TIMELINE_SCHEMAS = [
                                "experiments and daily health logs.",
           {"days": {"type": "integer", "description": "How many days back, 1 to 90, default 7."},
            "kinds": {"type": "string", "description": "Comma separated filter: tasks, priorities, blocks, library, trips, "
-                                                      "reviews, wheel, decisions, waiting, experiments, health."}}, []),
+                                                      "reviews, wheel, decisions, waiting, experiments, health, focus."}}, []),
+]
+
+ESTIMATE_SCHEMAS = [
+    _tool("get_estimate_accuracy", "How long finished tasks really took (from logged focus sessions with the same task "
+                                   "name) compared with their minutes estimate, and the factor the workload forecast uses.",
+          {}, []),
+]
+
+TIMEBUDGET_SCHEMAS = [
+    _tool("set_time_budget", "Set (or change) a weekly hour budget for a time block category: at least (min) or at most (max).",
+          {"category": {"type": "string"}, "hours": {"type": "number", "description": "0.5 to 80 hours a week."},
+           "kind": {"type": "string", "enum": ["min", "max"], "description": "Default min."}}, ["category", "hours"]),
+    _tool("get_time_budget", "This week's time budgets against the time blocks done and still planned.", {}, []),
+    _tool("delete_time_budget", "Delete a time budget.", {"category": {"type": "string", "description": "Its category."}},
+          ["category"]),
 ]
 
 REPAIR_SCHEMAS = [
@@ -836,7 +853,8 @@ PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_S
                    + CALENDAR_SCHEMAS + INBOX_SCHEMAS + REVIEW_SCHEMAS
                    + FLASHCARD_SCHEMAS + NETWORTH_SCHEMAS
                    + PROJECT_SCHEMAS + WAITING_SCHEMAS
-                   + EXPERIMENT_SCHEMAS + TRIPWIRE_SCHEMAS + WORKLOAD_SCHEMAS + TIMELINE_SCHEMAS)
+                   + EXPERIMENT_SCHEMAS + TRIPWIRE_SCHEMAS + WORKLOAD_SCHEMAS + TIMELINE_SCHEMAS
+                   + ESTIMATE_SCHEMAS + TIMEBUDGET_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
@@ -855,6 +873,7 @@ for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBS
                           (NETWORTH_SCHEMAS, "networth"), (PROJECT_SCHEMAS, "projects"),
                           (WAITING_SCHEMAS, "waiting"), (EXPERIMENT_SCHEMAS, "experiments"),
                           (TRIPWIRE_SCHEMAS, "tripwires"), (WORKLOAD_SCHEMAS, "workload"),
-                          (TIMELINE_SCHEMAS, "timeline")):
+                          (TIMELINE_SCHEMAS, "timeline"), (ESTIMATE_SCHEMAS, "estimates"),
+                          (TIMEBUDGET_SCHEMAS, "timebudgets")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module

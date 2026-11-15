@@ -2,6 +2,21 @@
 
 All notable changes to Hermes Life OS, newest first. The latest releases are also summarised in the [README](README.md#whats-new).
 
+**v1.54.0 - Time Budgets and Honest Estimates**
+- New **weekly time budgets**: `set_time_budget`, `get_time_budget`, `delete_time_budget`. Give a
+  time block category an hour budget, either at least (deep work, exercise) or at most (meetings).
+  Hermes compares it with the blocks you marked done since Monday and the blocks still planned
+  for the rest of the week and reports each budget as met, on course, short, close or over. From
+  Thursday on, budgets that are short or over show up in the agenda and as a nudge.
+- New **estimate accuracy**: `get_estimate_accuracy` compares the `minutes` estimate of finished
+  tasks with the focus sessions you logged under the same task name and tells you how much you
+  under- or overestimate. Once three finished tasks have both, the **workload forecast scales its
+  numbers by that factor** (switch it off with `calibrate=false`).
+- The life timeline now includes the focus time you logged each day (`kinds=focus`).
+- Doctor, repair suggestions, search, backup, restore, export and recently deleted cover the new
+  time budgets store.
+- 26 new tests - suite grew from 5116 to 5142.
+
 **v1.53.0 - Experiments, Tripwires and Foresight**
 - New **personal experiments**: `start_experiment`, `get_experiments`, `get_experiment`,
   `conclude_experiment`, `delete_experiment`. Change one thing for a few days ("no coffee after

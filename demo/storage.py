@@ -93,6 +93,7 @@ PROJECTS_FILE = HERMES_DIR / "projects.json"
 WAITING_FILE = HERMES_DIR / "waiting.json"
 EXPERIMENTS_FILE = HERMES_DIR / "experiments.json"
 TRIPWIRES_FILE = HERMES_DIR / "tripwires.json"
+TIMEBUDGETS_FILE = HERMES_DIR / "timebudgets.json"
 
 
 def _profile_dir(profile: Optional[str]) -> Path:
@@ -125,7 +126,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     global TIMEBLOCKS_FILE, OKRS_FILE, RECIPES_FILE, MEALPLAN_FILE, TRIPS_FILE
     global CHORES_FILE, EXPIRIES_FILE, ROUTINES_FILE, GIFTS_FILE, DECISIONS_FILE, TRASH_FILE, RECS_FILE
     global PRIORITIES_FILE, WHEEL_FILE, LIBRARY_FILE, INBOX_FILE, REVIEWS_FILE, CARDS_FILE, NETWORTH_FILE, PROJECTS_FILE, WAITING_FILE
-    global EXPERIMENTS_FILE, TRIPWIRES_FILE
+    global EXPERIMENTS_FILE, TRIPWIRES_FILE, TIMEBUDGETS_FILE
 
     ACTIVE_PROFILE = profile or "default"
     HERMES_DIR = _profile_dir(ACTIVE_PROFILE)
@@ -183,6 +184,7 @@ def set_active_profile(profile: Optional[str] = None) -> Path:
     WAITING_FILE = HERMES_DIR / "waiting.json"
     EXPERIMENTS_FILE = HERMES_DIR / "experiments.json"
     TRIPWIRES_FILE = HERMES_DIR / "tripwires.json"
+    TIMEBUDGETS_FILE = HERMES_DIR / "timebudgets.json"
 
     HERMES_DIR.mkdir(parents=True, exist_ok=True)
     return HERMES_DIR
@@ -386,6 +388,8 @@ def load_experiments() -> List:  return _load(EXPERIMENTS_FILE, [])
 def save_experiments(x):       _save(EXPERIMENTS_FILE, x)
 def load_tripwires() -> List:    return _load(TRIPWIRES_FILE, [])
 def save_tripwires(x):         _save(TRIPWIRES_FILE, x)
+def load_timebudgets() -> List:  return _load(TIMEBUDGETS_FILE, [])
+def save_timebudgets(x):       _save(TIMEBUDGETS_FILE, x)
 
 
 # ---------------------------------------------------------------------------
@@ -459,6 +463,7 @@ DATA_STORES: Dict[str, tuple] = {
     "waiting":       ("WAITING_FILE",         "load_waiting",      "save_waiting",      list),
     "experiments":   ("EXPERIMENTS_FILE",     "load_experiments",  "save_experiments",  list),
     "tripwires":     ("TRIPWIRES_FILE",       "load_tripwires",    "save_tripwires",    list),
+    "timebudgets":   ("TIMEBUDGETS_FILE",     "load_timebudgets",  "save_timebudgets",  list),
 }
 
 

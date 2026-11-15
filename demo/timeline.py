@@ -21,7 +21,7 @@ DEFAULT_DAYS = 7
 MAX_DAYS = 90
 MAX_LINES = 120
 KINDS = ("tasks", "priorities", "blocks", "library", "trips", "reviews", "wheel", "decisions", "waiting",
-         "experiments", "health")
+         "experiments", "health", "focus")
 
 Event = Tuple[str, str, str]  # (date, kind, text)
 
@@ -139,10 +139,19 @@ def _health(first: str, last: str) -> List[Event]:
     return out
 
 
+def _focus(first: str, last: str) -> List[Event]:
+    by_day: Dict[str, int] = {}
+    for r in _rows("load_focus"):
+        mins = r.get("duration")
+        if _ok(r.get("date"), first, last) and isinstance(mins, (int, float)) and not isinstance(mins, bool) and mins > 0:
+            by_day[r["date"]] = by_day.get(r["date"], 0) + int(mins)
+    return [(d, "focus", f"Focused for {m // 60}h{m % 60:02d}" if m >= 60 else f"Focused for {m}m") for d, m in by_day.items()]
+
+
 SOURCES: Dict[str, Callable[[str, str], List[Event]]] = {
     "tasks": _tasks, "priorities": _priorities, "blocks": _blocks, "library": _library, "trips": _trips,
     "reviews": _reviews, "wheel": _wheel, "decisions": _decisions, "waiting": _waiting,
-    "experiments": _experiments, "health": _health,
+    "experiments": _experiments, "health": _health, "focus": _focus,
 }
 
 
