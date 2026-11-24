@@ -92,3 +92,45 @@ def test_damaged_rows(planner):
                                                    "days": 5, "baseline_days": 5, "start": "2026-10-13"}])
     assert [r["name"] for r in experiments.listing()] == ["ok"]
     assert planner.dispatch_tool("get_experiments", {}).startswith("1 experiment")
+
+
+def corr(a, b, r, n=14):
+    return {"metric_a": a, "metric_b": b, "r": r, "n_days": n, "strength": "strong", "direction": "positive" if r > 0 else "negative",
+            "note": "x"}
+
+
+def test_ideas_follow_the_direction_that_helps(planner, monkeypatch):
+    import experiments
+    monkeypatch.setattr(experiments, "_correlations", lambda: [
+        corr("hydration", "mood", 0.7),          # more water helps mood
+        corr("caffeine", "sleep", -0.6),         # less caffeine helps sleep
+        corr("meeting_hours", "stress", 0.5),    # fewer meetings, less stress
+        corr("mood", "stress", -0.9),            # neither is a lever
+        corr("hydration", "stress", 0.5),        # more water would raise stress: no idea
+        corr("meeting_hours", "mood", 0.5),      # would need more meetings: no idea
+    ])
+    got = experiments.ideas(10)
+    assert [(g["lever"], g["metric"]) for g in got] == [("hydration", "mood"), ("caffeine", "sleep"), ("meeting_hours", "stress")]
+    assert got[0]["change"] == "Drink more water through the day" and "Cut back on caffeine" in got[1]["change"]
+    out = planner.dispatch_tool("suggest_experiment", {"limit": 2})
+    assert out.startswith("2 experiment ideas from your own data:") and "start_experiment name=" in out and "not proof" in out
+
+
+def test_ideas_skip_busy_metrics_and_handle_no_data(planner, monkeypatch):
+    import experiments
+    monkeypatch.setattr(experiments, "_correlations", lambda: [corr("hydration", "mood", 0.7)])
+    planner.dispatch_tool("start_experiment", {"name": "Walks", "metric": "mood"})
+    assert experiments.ideas() == []
+    assert planner.dispatch_tool("suggest_experiment", {}).startswith("No clear pattern to test yet")
+    for bad in (0, 11, "x", True):
+        assert planner.dispatch_tool("suggest_experiment", {"limit": bad}).startswith("No idea:")
+
+
+def test_ideas_use_the_real_journal(planner):
+    import experiments, storage
+    from datetime import datetime, timedelta
+    for k in range(10):
+        ts = (datetime.utcnow() - timedelta(days=k + 1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        storage.write_memory({"type": "hydration", "amount_ml": 500 + 200 * k, "content": "w", "timestamp": ts})
+        storage.write_memory({"type": "mood", "score": 3 + k % 7 if False else 3 + k * 0.5, "content": "m", "timestamp": ts})
+    assert isinstance(experiments.ideas(), list)

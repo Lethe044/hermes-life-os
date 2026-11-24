@@ -20,11 +20,11 @@ import clock
 LOGGED = ("mood", "energy", "stress", "sleep", "hydration", "meeting_hours", "readiness", "spending",
           "social_quality", "caffeine", "reading_min")
 # Live planner counts, read as they are right now.
-STATE = ("overdue_tasks", "open_tasks", "inbox_items", "overdue_follow_ups")
+STATE = ("overdue_tasks", "open_tasks", "inbox_items", "overdue_follow_ups", "overloaded_days")
 METRICS = LOGGED + STATE
 # For these a lower value is the better direction.
 LOWER_IS_BETTER = {"stress", "spending", "caffeine", "meeting_hours", "overdue_tasks", "open_tasks",
-                   "inbox_items", "overdue_follow_ups"}
+                   "inbox_items", "overdue_follow_ups", "overloaded_days"}
 HISTORY_DAYS = 400
 
 
@@ -67,6 +67,9 @@ def state_value(name: str) -> Optional[int]:
         if name == "inbox_items":
             import inbox
             return len(inbox._load()) if hasattr(inbox, "_load") else None
+        if name == "overloaded_days":
+            import workload
+            return sum(1 for r in workload.forecast(7)["days"] if r["status"] == "overloaded")
         if name == "overdue_follow_ups":
             import waiting
             return sum(1 for r in waiting.open_items() if str(r.get("chase")) < today)

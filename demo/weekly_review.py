@@ -83,6 +83,32 @@ def facts() -> Dict[str, Any]:
         out["inbox"] = len(inbox.listing())
     except Exception:  # noqa: BLE001
         pass
+    try:
+        import experiments
+        daily = None
+        out["experiments"] = []
+        for e in experiments.listing("running"):
+            if daily is None:
+                import metricseries
+                daily = metricseries.load_daily()
+            out["experiments"].append((e["name"], experiments.analyze(e, daily)["verdict"]))
+    except Exception:  # noqa: BLE001
+        out.pop("experiments", None)
+    try:
+        import tripwires
+        out["tripwires"] = [t["wire"]["name"] for t in tripwires.tripped()]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import timebudgets
+        out["budgets"] = [(x["budget"]["category"], x["status"]) for x in timebudgets.progress()["rows"]]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import workload
+        out["overloaded"] = [x["date"] for x in workload.forecast(7)["days"] if x["status"] == "overloaded"]
+    except Exception:  # noqa: BLE001
+        pass
     return out
 
 
@@ -103,6 +129,14 @@ def start_text() -> str:
     if "wheel" in f:
         low = f"; lowest: {', '.join(f['wheel'][1])}" if f["wheel"][1] else ""
         lines.append(f"- Life wheel last checked {f['wheel'][0]}{low}")
+    if f.get("budgets"):
+        lines.append("- Time budgets: " + ", ".join(f"{c} {s}" for c, s in f["budgets"][:5]))
+    if f.get("experiments"):
+        lines.append("- Running experiments: " + ", ".join(f"{n} ({v})" for n, v in f["experiments"][:3]))
+    if f.get("tripwires"):
+        lines.append(f"- Tripwires tripped: {', '.join(f['tripwires'][:3])}")
+    if f.get("overloaded"):
+        lines.append(f"- Overloaded days ahead: {', '.join(f['overloaded'][:4])} (see get_workload_forecast)")
     prev = next((r for r in reviews() if r["week"] < week), None)
     if prev and prev.get("focus"):
         lines.append(f"- Last week you wanted to focus on: {', '.join(prev['focus'])}")

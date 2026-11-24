@@ -8,7 +8,9 @@ already have a time block are skipped because the block holds their time)
 (scaled by how long your finished tasks really took, once the focus log has enough data) and compares that with the free time left in the day plan, capped at eight
 hours of focused work. Days are marked clear, ok, tight or overloaded, and
 for overloaded days Hermes proposes which lower priority tasks to move to the
-next day with room. Nothing is changed by this module: it only reads, and no
+next day with room. Forecasting only reads. check_capacity asks whether a new piece of work fits before a
+deadline, and rebalance_workload proposes (or with apply=true makes) the moves of
+lower priority tasks to days with room; high priority tasks are never moved. No
 network call is made.
 """
 
@@ -81,14 +83,14 @@ def forecast(days: Any = None, calibrate: Any = None) -> Dict[str, Any]:
 
 def _moves(rows: List[Dict[str, Any]], factor: float = 1.0) -> List[Dict[str, Any]]:
     """Greedy proposals: from each overloaded day, the lowest priority tasks
-    that are due that day (not overdue ones) go to the next day with room."""
+    that are due that day (not overdue ones, never high priority ones) go to the next day with room."""
     room = {r["date"]: r["free"] - r["load"] for r in rows}
     moves: List[Dict[str, Any]] = []
     for i, r in enumerate(rows):
         over = r["load"] - r["free"]
         if over <= 0:
             continue
-        movable = sorted((t for t in r["tasks"] if t["due"] == r["date"]),
+        movable = sorted((t for t in r["tasks"] if t["due"] == r["date"] and t.get("priority") != "high"),
                          key=lambda t: (_RANK.get(t.get("priority"), 1), -_minutes(t, factor)))
         for t in movable:
             if over <= 0:
@@ -100,7 +102,8 @@ def _moves(rows: List[Dict[str, Any]], factor: float = 1.0) -> List[Dict[str, An
             room[target] -= need
             room[r["date"]] += need
             over -= need
-            moves.append({"task": t.get("text", "?"), "minutes": need, "from": r["date"], "to": target})
+            moves.append({"task": t.get("text", "?"), "task_id": t.get("id"), "minutes": need, "from": r["date"],
+                          "to": target})
     return moves
 
 
@@ -140,6 +143,77 @@ def format_forecast(res: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def check_capacity(minutes: Any, by: Any, calibrate: Any = None) -> Dict[str, Any]:
+    """Whether `minutes` of new work fits before the deadline `by`: {"need",
+    "by", "room", "fits", "plan": [(date, minutes)]}. Room is the free time of
+    each day minus the work already due, filled from the earliest day."""
+    import tasks
+    if isinstance(minutes, bool) or not isinstance(minutes, (int, float)) or minutes != int(minutes) or not 5 <= minutes <= 2400:
+        raise ValueError("minutes must be a whole number from 5 to 2400.")
+    if by in (None, ""):
+        raise ValueError("say the deadline (by): YYYY-MM-DD, today, tomorrow or a weekday.")
+    deadline = tasks.parse_due(by)
+    span = (clock.parse_day(deadline) - clock.today()).days + 1
+    if span < 1:
+        raise ValueError("the deadline is in the past.")
+    if span > MAX_DAYS:
+        raise ValueError(f"the deadline can be at most {MAX_DAYS} days away.")
+    res = forecast(span, calibrate)
+    factor = res.get("factor") or 1.0
+    need = max(1, round(int(minutes) * factor))
+    left, plan = need, []
+    room = 0
+    for r in res["days"]:
+        free = max(0, r["free"] - r["load"])
+        room += free
+        take = min(left, free)
+        if take > 0:
+            plan.append((r["date"], take))
+            left -= take
+    return {"need": need, "asked": int(minutes), "by": deadline, "room": room, "fits": left == 0, "plan": plan,
+            "factor": res.get("factor")}
+
+
+def format_capacity(c: Dict[str, Any]) -> str:
+    scale = f" ({_hm(c['asked'])} scaled by {c['factor']:.2f} from your estimate history)" if c["factor"] and abs(c["factor"] - 1) >= 0.05 else ""
+    if c["fits"]:
+        parts = ", ".join(f"{_hm(m)} on {clock.parse_day(d).strftime('%a %d %b')}" for d, m in c["plan"])
+        return f"Yes, {_hm(c['need'])} fits before {c['by']}{scale}. Room is there on: {parts}."
+    short = c["need"] - c["room"]
+    return (f"No. {_hm(c['need'])} does not fit before {c['by']}{scale}: only {_hm(c['room'])} of room is left after the "
+            f"work already due, {_hm(short)} short. Move the deadline, drop something or shorten the estimate.")
+
+
+def rebalance(days: Any = None, apply: Any = None) -> Dict[str, Any]:
+    """The moves of the forecast; with apply=true the tasks get their new due
+    dates. High priority tasks are never moved."""
+    if apply not in (None, True, False):
+        raise ValueError("apply must be true or false.")
+    import tasks
+    res = forecast(days)
+    done: List[Dict[str, Any]] = []
+    if apply:
+        for m in res["moves"]:
+            if m.get("task_id") is None:
+                continue
+            tasks.update_task(m["task_id"], {"due": m["to"]})
+            done.append(m)
+    return {"moves": res["moves"], "applied": done, "overloaded": [r["date"] for r in res["days"] if r["status"] == "overloaded"]}
+
+
+def format_rebalance(r: Dict[str, Any], applied: bool) -> str:
+    if not r["overloaded"]:
+        return "No day is overloaded, so there is nothing to rebalance."
+    if not r["moves"]:
+        return ("Some days are overloaded but no lower priority task can move to a day with room. High priority tasks "
+                "are never moved: drop something, shorten an estimate or extend the window.")
+    head = "Moved:" if applied else "Proposed moves (nothing changed yet):"
+    lines = [head] + [f"- '{m['task']}' ({m['minutes']} min) from {m['from']} to {m['to']}" for m in r["moves"]]
+    if not applied:
+        lines.append("Run rebalance_workload again with apply=true to change the due dates.")
+    return "\n".join(lines)
+
+
 def _worst_soon() -> List[str]:
     try:
         res = forecast(2)
@@ -162,9 +236,15 @@ def agenda_lines() -> List[str]:
 
 
 def run_tool(name: str, inp: Dict[str, Any], **_ctx: Any) -> str:
-    if name != "get_workload_forecast":
+    if name not in ("get_workload_forecast", "check_capacity", "rebalance_workload"):
         return f"Unknown workload tool: {name}"
     try:
+        if name == "check_capacity":
+            return format_capacity(check_capacity(inp.get("minutes"), inp.get("by"), inp.get("calibrate")))
+        if name == "rebalance_workload":
+            res = rebalance(inp.get("days"), inp.get("apply"))
+            return format_rebalance(res, bool(inp.get("apply")))
         return format_forecast(forecast(inp.get("days"), inp.get("calibrate")))
     except (ValueError, TypeError) as e:
-        return f"Cannot forecast the workload: {e}"
+        return {"check_capacity": "Cannot check capacity", "rebalance_workload": "Cannot rebalance"}.get(
+            name, "Cannot forecast the workload") + f": {e}"

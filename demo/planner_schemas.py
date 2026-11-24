@@ -788,6 +788,9 @@ EXPERIMENT_SCHEMAS = [
     _tool("conclude_experiment", "Close an experiment and keep its result, optionally with a decision (keep, drop, unsure).",
           {"experiment": _EXP_REF, "decision": {"type": "string", "enum": ["keep", "drop", "unsure"]}}, ["experiment"]),
     _tool("delete_experiment", "Delete an experiment.", {"experiment": _EXP_REF}, ["experiment"]),
+    _tool("suggest_experiment", "Suggest experiments worth running, from the correlations in your own logged data "
+                                "(only changes you can act on, in the direction that should help).",
+          {"limit": {"type": "integer", "description": "1 to 10, default 3."}}, []),
 ]
 
 TRIPWIRE_SCHEMAS = [
@@ -795,7 +798,7 @@ TRIPWIRE_SCHEMAS = [
                           "for some days in a row. Metrics: logged ones (mood, sleep, stress, ...) or live counts "
                           "(overdue_tasks, open_tasks, inbox_items, overdue_follow_ups).",
           {"name": {"type": "string"},
-           "metric": {"type": "string", "enum": _METRIC_ENUM + ["overdue_tasks", "open_tasks", "inbox_items", "overdue_follow_ups"]},
+           "metric": {"type": "string", "enum": _METRIC_ENUM + ["overdue_tasks", "open_tasks", "inbox_items", "overdue_follow_ups", "overloaded_days"]},
            "condition": {"type": "string", "enum": ["above", "below"]}, "threshold": {"type": "number"},
            "days": {"type": "integer", "description": "Days in a row, 1 to 30, default 3 (live counts use the current value)."},
            "message": {"type": "string", "description": "What to tell yourself when it trips."}},
@@ -805,12 +808,26 @@ TRIPWIRE_SCHEMAS = [
           ["tripwire"]),
 ]
 
+QUICKADD_SCHEMAS = [
+    _tool("quick_add", "Add a task from one line typed naturally: 'call Sam tomorrow #work !high ~30m', 'water plants every "
+                       "week', 'send invoice by fri ~15m'. Picks out the due date, #tags, !priority, ~estimate and repeat.",
+          {"line": {"type": "string"}, "preview": {"type": "boolean", "description": "Show how it is understood without saving."}},
+          ["line"]),
+]
+
 WORKLOAD_SCHEMAS = [
     _tool("get_workload_forecast", "Look ahead: minutes of work due each day against the free time in the day plan. "
                                    "Marks overloaded days and suggests which tasks to move. Read-only.",
           {"days": {"type": "integer", "description": "How many days ahead, 1 to 30, default 14."},
            "calibrate": {"type": "boolean", "description": "Scale estimates by how long finished tasks really took "
                                                           "(default: automatic once enough focus sessions match finished tasks)."}}, []),
+    _tool("check_capacity", "Does a new piece of work fit? Checks the room left before a deadline after the work already due.",
+          {"minutes": {"type": "integer", "description": "How long it will take, 5 to 2400."},
+           "by": {"type": "string", "description": "Deadline: YYYY-MM-DD, today, tomorrow or a weekday."},
+           "calibrate": {"type": "boolean"}}, ["minutes", "by"]),
+    _tool("rebalance_workload", "Move lower priority tasks from overloaded days to the next day with room. Proposes by "
+                                "default; apply=true changes the due dates. High priority tasks are never moved.",
+          {"days": {"type": "integer", "description": "Window, 1 to 30, default 14."}, "apply": {"type": "boolean"}}, []),
 ]
 
 TIMELINE_SCHEMAS = [
@@ -854,7 +871,7 @@ PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_S
                    + FLASHCARD_SCHEMAS + NETWORTH_SCHEMAS
                    + PROJECT_SCHEMAS + WAITING_SCHEMAS
                    + EXPERIMENT_SCHEMAS + TRIPWIRE_SCHEMAS + WORKLOAD_SCHEMAS + TIMELINE_SCHEMAS
-                   + ESTIMATE_SCHEMAS + TIMEBUDGET_SCHEMAS)
+                   + ESTIMATE_SCHEMAS + TIMEBUDGET_SCHEMAS + QUICKADD_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
@@ -874,6 +891,6 @@ for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBS
                           (WAITING_SCHEMAS, "waiting"), (EXPERIMENT_SCHEMAS, "experiments"),
                           (TRIPWIRE_SCHEMAS, "tripwires"), (WORKLOAD_SCHEMAS, "workload"),
                           (TIMELINE_SCHEMAS, "timeline"), (ESTIMATE_SCHEMAS, "estimates"),
-                          (TIMEBUDGET_SCHEMAS, "timebudgets")):
+                          (TIMEBUDGET_SCHEMAS, "timebudgets"), (QUICKADD_SCHEMAS, "quickadd")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module
