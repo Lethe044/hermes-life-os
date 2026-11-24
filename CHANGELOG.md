@@ -2,6 +2,23 @@
 
 All notable changes to Hermes Life OS, newest first. The latest releases are also summarised in the [README](README.md#whats-new).
 
+**v1.55.0 - Say It, Test It, Fit It**
+- New **quick add**: `quick_add` turns one typed line into a task. "call Sam tomorrow #work !high
+  ~30m", "water plants every week" or "send invoice by fri ~15m" gives the due date, tags,
+  priority, estimate and repeat. `preview=true` shows how a line is read without saving it.
+- New **experiment ideas**: `suggest_experiment` reads the correlations in your own logged data
+  and proposes experiments worth running (only changes you can act on, in the direction that
+  should help, never for a metric that already has a running experiment).
+- New **capacity check**: `check_capacity` answers "does 3 hours of new work fit before Friday?"
+  from the room left after the work already due, scaled by your estimate history when known.
+- New **rebalancing**: `rebalance_workload` proposes (or with `apply=true` makes) the moves of
+  lower priority tasks from overloaded days to the next day with room. High priority tasks are
+  never moved, and the forecast no longer suggests moving them either.
+- New tripwire metric `overloaded_days` (overloaded days in the next week).
+- The weekly review now also shows time budgets, running experiments, tripped tripwires and
+  overloaded days ahead.
+- 34 new tests - suite grew from 5142 to 5176.
+
 **v1.54.0 - Time Budgets and Honest Estimates**
 - New **weekly time budgets**: `set_time_budget`, `get_time_budget`, `delete_time_budget`. Give a
   time block category an hour budget, either at least (deep work, exercise) or at most (meetings).

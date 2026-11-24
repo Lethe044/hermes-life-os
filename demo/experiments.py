@@ -222,6 +222,70 @@ def agenda_lines() -> List[str]:
            [f"'{r['name']}' is over, conclude it" for r in finished_waiting()]
 
 
+# ------------------------------------------------------------------ ideas
+
+# What you can change (lever) and what you hope moves (outcome). For each lever
+# the text of the change that raises ("up") or lowers ("down") it.
+LEVERS: Dict[str, Dict[str, Optional[str]]] = {
+    "hydration": {"up": "Drink more water through the day", "down": None},
+    "meeting_hours": {"up": None, "down": "Cut back on meetings"},
+    "caffeine": {"up": None, "down": "Cut back on caffeine (for example nothing after 2pm)"},
+    "reading_min": {"up": "Read for a while every evening", "down": None},
+    "social_quality": {"up": "Make time for people who lift you", "down": None},
+    "sleep": {"up": "Go to bed earlier", "down": None},
+}
+OUTCOMES = ("mood", "energy", "stress", "sleep", "readiness")
+IDEA_MIN_DAYS = 7
+IDEA_MIN_R = 0.4
+
+
+def _correlations() -> List[Dict[str, Any]]:
+    import analytics
+    import storage
+    return analytics.compute_correlations(storage.get_recent_memory(days=ms.HISTORY_DAYS), min_days=IDEA_MIN_DAYS,
+                                          min_abs_r=IDEA_MIN_R)
+
+
+def ideas(limit: Any = None) -> List[Dict[str, Any]]:
+    """Experiment ideas from your own correlations: {"name", "metric",
+    "change", "lever", "r", "n_days"}. Only levers you can act on, only the
+    direction that should help, and not for a metric that already has a
+    running experiment."""
+    cap = 3 if limit in (None, "") else limit
+    if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= 10:
+        raise ValueError("limit must be a whole number from 1 to 10.")
+    busy = {r["metric"] for r in listing("running")}
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for c in _correlations():
+        for lever, outcome in ((c["metric_a"], c["metric_b"]), (c["metric_b"], c["metric_a"])):
+            if lever not in LEVERS or outcome not in OUTCOMES or lever == outcome or outcome in busy:
+                continue
+            good_up = outcome not in ms.LOWER_IS_BETTER
+            up = (c["r"] > 0) == good_up
+            change = LEVERS[lever]["up" if up else "down"]
+            if change is None or (lever, outcome) in seen:
+                continue
+            seen.add((lever, outcome))
+            out.append({"name": f"{change.split(' (')[0]} and watch {outcome}", "metric": outcome, "change": change,
+                        "lever": lever, "r": c["r"], "n_days": c["n_days"]})
+    return out[:cap]
+
+
+def format_ideas(rows: List[Dict[str, Any]]) -> str:
+    if not rows:
+        return ("No clear pattern to test yet. Hermes needs a week or more of overlapping readings (for example sleep "
+                "and mood) with a moderate or stronger link before it suggests an experiment.")
+    lines = [f"{kit.plural(len(rows), 'experiment idea')} from your own data:"]
+    for i, r in enumerate(rows, 1):
+        lines.append(f"{i}. {r['change']}, then watch {r['metric']}. Your {r['lever'].replace('_', ' ')} and "
+                     f"{r['metric']} move together (r={r['r']}, {r['n_days']} days). A link is not proof of cause, "
+                     f"which is why you test it.")
+        lines.append(f"   Start it with start_experiment name='{r['name'][:60]}', metric='{r['metric']}', "
+                     f"change='{r['change'][:70]}'.")
+    return "\n".join(lines)
+
+
 # ------------------------------------------------------------------ formatting
 
 def _num(v: Optional[float]) -> str:
@@ -299,6 +363,8 @@ def run_tool(name: str, inp: Dict[str, Any], **_ctx: Any) -> str:
             return (f"Experiment started: {r['name']} on {r['metric']}, {kit.plural(r['days'], 'day')} from {r['start']} "
                     f"(compared with the {kit.plural(r['baseline_days'], 'day')} before). Keep logging {r['metric']}; "
                     f"check progress with get_experiment. [id={r['id']}]")
+        if name == "suggest_experiment":
+            return format_ideas(ideas(inp.get("limit")))
         if name == "get_experiments":
             status = inp.get("status")
             if status not in (None, "") and status not in STATUSES:
@@ -314,7 +380,7 @@ def run_tool(name: str, inp: Dict[str, Any], **_ctx: Any) -> str:
             return f"Deleted experiment '{delete_experiment(inp.get('experiment'))['name']}'."
     except (ValueError, TypeError) as e:
         verb = {"start_experiment": "Experiment not started", "get_experiments": "Cannot list experiments",
-                "get_experiment": "Cannot show the experiment", "conclude_experiment": "Not concluded"}.get(
+                "get_experiment": "Cannot show the experiment", "suggest_experiment": "No idea", "conclude_experiment": "Not concluded"}.get(
             name, "Experiment not deleted")
         return f"{verb}: {e}"
     return f"Unknown experiment tool: {name}"

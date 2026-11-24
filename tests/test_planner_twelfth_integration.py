@@ -88,3 +88,40 @@ class TestDoctor:
         storage.save_store("timebudgets", [row])
         assert [f for f in doctor.check_planner_data() if f["level"] == "warn"]
         assert row["id"] in planner.dispatch_tool("get_repair_suggestions", {})
+
+
+class TestEleventhAndTwelfthTools:
+    NEW = ["quick_add", "suggest_experiment", "check_capacity", "rebalance_workload"]
+
+    @pytest.mark.parametrize("tool", NEW)
+    def test_junk_input_never_raises(self, planner, tool):
+        d = planner.dispatch_tool
+        assert isinstance(d(tool, {}), str)
+        assert isinstance(d(tool, {"line": 5, "limit": "x", "minutes": [], "by": {}, "days": "z", "apply": 3, "preview": 2,
+                                   "calibrate": "q"}), str)
+
+    def test_schemas_are_wired(self, planner):
+        import planner_schemas as ps
+        names = {s["function"]["name"] for s in ps.PLANNER_SCHEMAS}
+        assert set(self.NEW) <= names and all(t in ps.TOOL_MODULES for t in self.NEW)
+
+
+class TestWeeklyReviewSummaries:
+    def test_start_text_shows_the_new_sections(self, planner, monkeypatch):
+        import metricseries
+        d = planner.dispatch_tool
+        monkeypatch.setattr(metricseries, "load_daily", lambda: {})
+        d("start_experiment", {"name": "Early bed", "metric": "sleep"})
+        d("set_time_budget", {"category": "deep work", "hours": 10})
+        d("add_tripwire", {"name": "Backlog", "metric": "open_tasks", "condition": "above", "threshold": 0})
+        d("add_task", {"text": "Huge", "due": "2026-10-14", "minutes": 480})
+        d("add_task", {"text": "Huger", "due": "2026-10-14", "minutes": 240})
+        out = d("start_weekly_review", {})
+        assert "Time budgets: deep work short" in out and "Running experiments: Early bed (not enough data)" in out
+        assert "Tripwires tripped: Backlog" in out and "Overloaded days ahead: 2026-10-14" in out
+
+    def test_a_broken_section_does_not_break_the_review(self, planner, monkeypatch):
+        import experiments, timebudgets, tripwires, workload
+        for mod, fn in ((experiments, "listing"), (tripwires, "tripped"), (timebudgets, "progress"), (workload, "forecast")):
+            monkeypatch.setattr(mod, fn, lambda *a, **k: 1 / 0)
+        assert planner.dispatch_tool("start_weekly_review", {}).startswith("Weekly review for the week of")

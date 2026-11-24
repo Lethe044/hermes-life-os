@@ -30,6 +30,9 @@ Ask in plain language; Hermes calls the right tool and answers from your own dat
 | --- | --- | --- |
 | Test a habit on yourself | "no coffee after 2pm for 14 days, watch my sleep" | `start_experiment` |
 | Set a rule that warns you | "warn me if sleep stays below 6 hours for 3 days" | `add_tripwire` |
+| Add a task in one line | "call Sam tomorrow #work !high ~30m" | `quick_add` |
+| Know what to test next | "what experiment should I try?" | `suggest_experiment` |
+| Check if work fits | "can I fit 3 hours of work before Friday?" | `check_capacity` |
 | Budget your week | "at least 10 hours of deep work a week" | `set_time_budget` |
 | Check your estimates | "how good am I at estimating?" | `get_estimate_accuracy` |
 | See if the week is too full | "can I do everything due this week?" | `get_workload_forecast` |
@@ -48,7 +51,7 @@ Ask in plain language; Hermes calls the right tool and answers from your own dat
 | Undo a mistake | "put the rent task back" | `restore_deleted` |
 | Understand yourself | "what affects my sleep?" | `get_correlations` |
 
-All 313 tools are listed in the [tool reference](docs/TOOLS.md).
+All 317 tools are listed in the [tool reference](docs/TOOLS.md).
 
 ## Contents
 
@@ -605,6 +608,13 @@ recently deleted list.
   hours. Overloaded days come with suggested moves. Read-only.
 - **Life timeline**: what happened, newest day first. Filter with `kinds` (tasks, priorities,
   blocks, library, trips, reviews, wheel, decisions, waiting, experiments, health, focus).
+- **Quick add**: type a task the way you would say it. Hermes picks out the due date (today,
+  tomorrow, a weekday, `by fri`, `in 3 days`, an ISO date), `#tags`, a `!priority`, an estimate
+  (`~30m`, `~1h30m`) and a repeat (`every week`, `daily`). `preview=true` shows the reading only.
+- **Experiment ideas**: `suggest_experiment` proposes experiments from the correlations in your
+  own data, only for things you can change and in the direction that should help.
+- **Capacity and rebalancing**: `check_capacity` says whether new work fits before a deadline;
+  `rebalance_workload` moves lower priority tasks off overloaded days (high priority never moves).
 - **Time budgets**: a weekly hour budget per time block category, as a minimum or a limit,
   checked against blocks done since Monday and blocks still planned. From Thursday on, a nudge
   when one is short or over.
@@ -2247,6 +2257,23 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.55.0 - Say It, Test It, Fit It**
+- New **quick add**: `quick_add` turns one typed line into a task. "call Sam tomorrow #work !high
+  ~30m", "water plants every week" or "send invoice by fri ~15m" gives the due date, tags,
+  priority, estimate and repeat. `preview=true` shows how a line is read without saving it.
+- New **experiment ideas**: `suggest_experiment` reads the correlations in your own logged data
+  and proposes experiments worth running (only changes you can act on, in the direction that
+  should help, never for a metric that already has a running experiment).
+- New **capacity check**: `check_capacity` answers "does 3 hours of new work fit before Friday?"
+  from the room left after the work already due, scaled by your estimate history when known.
+- New **rebalancing**: `rebalance_workload` proposes (or with `apply=true` makes) the moves of
+  lower priority tasks from overloaded days to the next day with room. High priority tasks are
+  never moved, and the forecast no longer suggests moving them either.
+- New tripwire metric `overloaded_days` (overloaded days in the next week).
+- The weekly review now also shows time budgets, running experiments, tripped tripwires and
+  overloaded days ahead.
+- 34 new tests - suite grew from 5142 to 5176.
 
 **v1.54.0 - Time Budgets and Honest Estimates**
 - New **weekly time budgets**: `set_time_budget`, `get_time_budget`, `delete_time_budget`. Give a
