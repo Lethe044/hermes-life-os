@@ -91,7 +91,8 @@ class TestDoctor:
 
 
 class TestEleventhAndTwelfthTools:
-    NEW = ["quick_add", "suggest_experiment", "check_capacity", "rebalance_workload"]
+    NEW = ["quick_add", "suggest_experiment", "check_capacity", "rebalance_workload", "batch_tasks", "fill_time_budget",
+           "act_on_tripwires"]
 
     @pytest.mark.parametrize("tool", NEW)
     def test_junk_input_never_raises(self, planner, tool):

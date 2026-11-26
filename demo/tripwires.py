@@ -10,7 +10,8 @@ how many days in a row it has to hold. When it trips, the message you wrote
 shows in the agenda and in the nudges.
 
 Stored in tripwires.json as {"id", "name", "metric", "op", "threshold",
-"days", "message", "created"} dicts. Evaluation is deterministic and local;
+"days", "message", "created", "task"} dicts (`task`, optional, is a task that
+act_on_tripwires creates once when the tripwire has tripped). Evaluation is deterministic and local;
 no network call is made by this module.
 """
 
@@ -27,6 +28,7 @@ OPS = ("above", "below")
 MAX_ITEMS = 30
 MAX_NAME = 60
 MAX_MESSAGE = 160
+MAX_TASK = 100
 MAX_DAYS = 30
 STREAK_LOOKBACK = 60
 
@@ -81,7 +83,8 @@ def evaluate(r: Dict[str, Any], daily: Optional[Dict[str, Dict[str, float]]] = N
     return {"state": "tripped" if run >= r["days"] else "ok", "run": run, "latest": latest}
 
 
-def add_tripwire(name: Any, metric: Any, op: Any, threshold: Any, days: Any = None, message: Any = None) -> Dict[str, Any]:
+def add_tripwire(name: Any, metric: Any, op: Any, threshold: Any, days: Any = None, message: Any = None,
+                 task: Any = None) -> Dict[str, Any]:
     clean = kit.clean_text(name, "name", MAX_NAME)
     key = ms.check_metric(metric)
     word = op.strip().lower() if isinstance(op, str) else ""
@@ -106,9 +109,34 @@ def add_tripwire(name: Any, metric: Any, op: Any, threshold: Any, days: Any = No
     item = {"id": kit.new_id(), "name": clean, "metric": key, "op": word, "threshold": threshold, "days": length,
             "message": kit.clean_text(message, "message", MAX_MESSAGE, required=False) or default,
             "created": clock.today_str()}
+    follow = kit.clean_text(task, "task", MAX_TASK, required=False)
+    if follow:
+        item["task"] = follow
     rows.append(item)
     _storage().save_tripwires(rows)
     return item
+
+
+def act(apply: bool = True) -> Dict[str, List[str]]:
+    """For every tripped tripwire that has a follow-up task: create it as an
+    open task due today unless an open task with the same text exists.
+    Returns {"created": [...], "existing": [...]} (nothing is created when
+    `apply` is false)."""
+    import tasks
+    open_texts = {str(t.get("text", "")).strip().lower() for t in tasks._rows(tasks._load()) if not t.get("done")}
+    out: Dict[str, List[str]] = {"created": [], "existing": []}
+    for t in tripped():
+        text = t["wire"].get("task")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        if text.strip().lower() in open_texts:
+            out["existing"].append(text)
+            continue
+        if apply:
+            tasks.add_task(text, clock.today_str(), "high", ["tripwire"])
+            open_texts.add(text.strip().lower())
+        out["created"].append(text)
+    return out
 
 
 def delete_tripwire(ref: Any) -> Dict[str, Any]:
@@ -143,7 +171,8 @@ def agenda_lines() -> List[str]:
 
 def format_rule(r: Dict[str, Any]) -> str:
     when = "now" if r["metric"] in ms.STATE else f"for {kit.plural(r['days'], 'day')} in a row"
-    return f"{r['name']}: {r['metric']} {r['op']} {r['threshold']:g} {when}"
+    then = f" then add task '{r['task']}'" if r.get("task") else ""
+    return f"{r['name']}: {r['metric']} {r['op']} {r['threshold']:g} {when}{then}"
 
 
 def format_all() -> str:
@@ -172,13 +201,28 @@ def run_tool(name: str, inp: Dict[str, Any], **_ctx: Any) -> str:
     try:
         if name == "add_tripwire":
             r = add_tripwire(inp.get("name"), inp.get("metric"), inp.get("condition"), inp.get("threshold"),
-                             inp.get("days"), inp.get("message"))
+                             inp.get("days"), inp.get("message"), inp.get("task"))
             return f"Tripwire set: {format_rule(r)}. [id={r['id']}]"
+        if name == "act_on_tripwires":
+            apply = inp.get("apply")
+            if apply not in (None, True, False):
+                raise ValueError("apply must be true or false.")
+            got = act(apply is not False)
+            if not got["created"] and not got["existing"]:
+                return "No tripped tripwire has a follow-up task to create."
+            lines = []
+            verb = "Created" if apply is not False else "Would create"
+            if got["created"]:
+                lines.append(f"{verb} {kit.plural(len(got['created']), 'task')} due today: " + ", ".join(f"'{x}'" for x in got["created"]) + ".")
+            if got["existing"]:
+                lines.append("Already open: " + ", ".join(f"'{x}'" for x in got["existing"]) + ".")
+            return "\n".join(lines)
         if name == "get_tripwires":
             return format_all()
         if name == "delete_tripwire":
             return f"Deleted tripwire '{delete_tripwire(inp.get('tripwire'))['name']}'."
     except (ValueError, TypeError) as e:
-        verb = {"add_tripwire": "Tripwire not set", "get_tripwires": "Cannot show tripwires"}.get(name, "Tripwire not deleted")
+        verb = {"add_tripwire": "Tripwire not set", "get_tripwires": "Cannot show tripwires",
+                "act_on_tripwires": "Cannot act on tripwires"}.get(name, "Tripwire not deleted")
         return f"{verb}: {e}"
     return f"Unknown tripwire tool: {name}"

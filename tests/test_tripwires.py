@@ -67,3 +67,25 @@ def test_delete_and_damaged(planner):
     assert [r["name"] for r in tripwires.listing()] == ["ok"]
     assert "Deleted tripwire 'ok'" in d("delete_tripwire", {"tripwire": "ok"})
     assert d("delete_tripwire", {"tripwire": "ok"}).startswith("Tripwire not deleted:")
+
+
+def test_follow_up_task_is_created_once(planner, monkeypatch):
+    import tasks
+    d = planner.dispatch_tool
+    assert d("act_on_tripwires", {}) == "No tripped tripwire has a follow-up task to create."
+    out = d("add_tripwire", {"name": "Sleep debt", "metric": "sleep", "condition": "below", "threshold": 6, "days": 2,
+                             "task": "Protect tonight's sleep"})
+    assert "then add task 'Protect tonight's sleep'" in out
+    d("add_tripwire", {"name": "Plain", "metric": "sleep", "condition": "below", "threshold": 6, "days": 2})
+    feed(monkeypatch, "sleep", {0: 5, -1: 5})
+    assert "Would create 1 task due today" in d("act_on_tripwires", {"apply": False})
+    assert not tasks._rows(tasks._load())
+    out = d("act_on_tripwires", {})
+    assert out == "Created 1 task due today: 'Protect tonight's sleep'."
+    made = tasks._rows(tasks._load())[0]
+    assert made["due"] == "2026-10-13" and made["priority"] == "high" and made["tags"] == ["tripwire"]
+    assert d("act_on_tripwires", {}) == "Already open: 'Protect tonight's sleep'."
+    feed(monkeypatch, "sleep", {0: 8})
+    assert d("act_on_tripwires", {}).startswith("No tripped")
+    assert d("act_on_tripwires", {"apply": "x"}).startswith("Cannot act on tripwires:")
+    assert d("add_tripwire", {"name": "n2", "metric": "mood", "condition": "below", "threshold": 2, "task": "x" * 101}).startswith("Tripwire not set:")

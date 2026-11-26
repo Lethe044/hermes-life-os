@@ -452,7 +452,7 @@ def dispatch_tool(name: str, inp: Dict[str, Any]) -> str:
         return format_missing_days(tracker, missing, days)
 
     # ── planner modules: tasks, body, subscriptions, people, agenda, lists, savings, symptoms, notes,
-    #    income, debts, countdowns, supplies, timeblocks, okrs, recipes, trips, finder, closing, repair_hints, chores, expiries, routines, gifts, decisions, weekahead, trash, recledger, backup (pins), priorities, planday, wheel, library, calendar_export, inbox, weekly_review, flashcards, networth, projects, waiting, experiments, tripwires, workload, timeline, estimates, timebudgets, quickadd ──
+    #    income, debts, countdowns, supplies, timeblocks, okrs, recipes, trips, finder, closing, repair_hints, chores, expiries, routines, gifts, decisions, weekahead, trash, recledger, backup (pins), priorities, planday, wheel, library, calendar_export, inbox, weekly_review, flashcards, networth, projects, waiting, experiments, tripwires, workload, timeline, estimates, timebudgets, quickadd, batching ──
     elif name in _PLANNER_MODULES:
         import importlib
         planner_mod = importlib.import_module(_PLANNER_MODULES[name])

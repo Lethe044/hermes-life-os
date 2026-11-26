@@ -6,7 +6,8 @@ Say how many hours a week a category of your time blocks should get: at least
 Hermes compares each budget with the blocks you marked done since Monday and
 the blocks still planned for the rest of the week, then tells you which
 budgets are met, on course, short or over. Late in the week a nudge points at
-budgets that are still short or already over.
+budgets that are still short or already over, and fill_time_budget proposes (or with
+apply=true creates) the time blocks that would close a shortfall.
 
 Stored in timebudgets.json as {"id", "category", "hours", "kind"} dicts, one
 per category. No network call is made by this module.
@@ -144,6 +145,89 @@ def agenda_lines() -> List[str]:
     return _concerns()
 
 
+CHUNK = 120
+MIN_CHUNK = 30
+ROUND = 15
+
+
+def _free_gaps(day: str) -> List[List[int]]:
+    import planday
+    import timeblocks
+    if day == clock.today_str():
+        return [list(g) for g in planday._gaps(day)]
+    return [list(g) for g in timeblocks.day_plan(day)["gaps"]]
+
+
+def fill_plan(category: Any = None) -> Dict[str, Any]:
+    """Proposed time blocks that would close the shortfall of every minimum
+    budget that is short this week (or just `category`): {"proposals":
+    [{"category", "date", "start", "end", "minutes"}], "uncovered": {category:
+    minutes}}. At most one block of two hours per day and budget; overloaded
+    days are skipped."""
+    import timeblocks
+    import workload
+    want = timeblocks._clean_category(category) if category not in (None, "") else None
+    prog = progress()
+    last = prog["to"]
+    days = []
+    cursor = clock.today()
+    while cursor.isoformat() <= last:
+        days.append(cursor.isoformat())
+        cursor += timedelta(days=1)
+    status = {r["date"]: r["status"] for r in workload.forecast(len(days))["days"]} if days else {}
+    gaps = {d: _free_gaps(d) for d in days if status.get(d) != "overloaded"}
+    proposals: List[Dict[str, Any]] = []
+    uncovered: Dict[str, int] = {}
+    for r in prog["rows"]:
+        b = r["budget"]
+        if b["kind"] != "min" or r["status"] != "short" or (want and b["category"] != want):
+            continue
+        need = round(b["hours"] * 60) - r["done"] - r["planned"]
+        for d in days:
+            if need < MIN_CHUNK:
+                break
+            if d not in gaps:
+                continue
+            for g in gaps[d]:
+                length = g[1] - g[0]
+                take = min(CHUNK, length, need)
+                take -= take % ROUND
+                if take < MIN_CHUNK:
+                    continue
+                proposals.append({"category": b["category"], "date": d, "start": timeblocks.fmt_time(g[0]),
+                                  "end": timeblocks.fmt_time(g[0] + take), "minutes": take})
+                g[0] += take + 5
+                need -= take
+                break
+        if need >= MIN_CHUNK:
+            uncovered[b["category"]] = need
+    return {"proposals": proposals, "uncovered": uncovered}
+
+
+def apply_fill(plan: Dict[str, Any]) -> int:
+    import timeblocks
+    made = 0
+    for p in plan["proposals"]:
+        timeblocks.add_time_block(title=p["category"].capitalize(), start=p["start"], end=p["end"], date=p["date"],
+                                  category=p["category"])
+        made += 1
+    return made
+
+
+def format_fill(plan: Dict[str, Any], applied: bool) -> str:
+    if not plan["proposals"] and not plan["uncovered"]:
+        return "No minimum budget is short this week, so there is nothing to fill."
+    lines = ["Time blocks created:" if applied else "Proposed time blocks (nothing saved yet):"]
+    for p in plan["proposals"]:
+        lines.append(f"- {clock.parse_day(p['date']).strftime('%a %d %b')} {p['start']}-{p['end']} {p['category']} "
+                     f"({_hm(p['minutes'])})")
+    for cat, mins in plan["uncovered"].items():
+        lines.append(f"Still {_hm(mins)} short for '{cat}': no more room this week.")
+    if not applied and plan["proposals"]:
+        lines.append("Run fill_time_budget again with apply=true to save these as time blocks.")
+    return "\n".join(lines)
+
+
 def format_progress(p: Dict[str, Any]) -> str:
     if not p["rows"]:
         return "No time budgets yet. Set one with set_time_budget, for example category 'deep work', 10 hours, kind 'min'."
@@ -165,9 +249,18 @@ def run_tool(name: str, inp: Dict[str, Any], **_ctx: Any) -> str:
             return f"Budget set: '{b['category']}' {word} {b['hours']:g} hours a week."
         if name == "get_time_budget":
             return format_progress(progress())
+        if name == "fill_time_budget":
+            apply = inp.get("apply")
+            if apply not in (None, True, False):
+                raise ValueError("apply must be true or false.")
+            plan = fill_plan(inp.get("category"))
+            if apply and plan["proposals"]:
+                apply_fill(plan)
+            return format_fill(plan, bool(apply) and bool(plan["proposals"]))
         if name == "delete_time_budget":
             return f"Deleted the budget for '{delete_budget(inp.get('category'))['category']}'."
     except (ValueError, TypeError) as e:
-        verb = {"set_time_budget": "Budget not set", "get_time_budget": "Cannot show budgets"}.get(name, "Budget not deleted")
+        verb = {"set_time_budget": "Budget not set", "get_time_budget": "Cannot show budgets",
+                "fill_time_budget": "Cannot fill the budget"}.get(name, "Budget not deleted")
         return f"{verb}: {e}"
     return f"Unknown time budget tool: {name}"

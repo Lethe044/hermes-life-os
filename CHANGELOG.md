@@ -2,6 +2,18 @@
 
 All notable changes to Hermes Life OS, newest first. The latest releases are also summarised in the [README](README.md#whats-new).
 
+**v1.56.0 - Close the Gap**
+- New **`fill_time_budget`**: when a minimum time budget is short this week, Hermes proposes the
+  time blocks that would close the gap (up to two hours a day and budget, in free gaps, skipping
+  overloaded days). `apply=true` creates the blocks.
+- New **`batch_tasks`**: groups open tasks that share a tag (all the calls, all the errands) with
+  the time they would take together. With `tag` and `apply=true` it blocks one slot for the whole
+  batch and lists the tasks in the block's notes.
+- Tripwires can now carry a **follow-up task** (`task` on `add_tripwire`). The new
+  **`act_on_tripwires`** creates it, due today with a `tripwire` tag, once per tripped wire (it
+  skips a task that is already open; `apply=false` only shows what would be created).
+- 12 new tests - suite grew from 5176 to 5188.
+
 **v1.55.0 - Say It, Test It, Fit It**
 - New **quick add**: `quick_add` turns one typed line into a task. "call Sam tomorrow #work !high
   ~30m", "water plants every week" or "send invoice by fri ~15m" gives the due date, tags,
