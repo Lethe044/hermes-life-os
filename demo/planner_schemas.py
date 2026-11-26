@@ -801,9 +801,13 @@ TRIPWIRE_SCHEMAS = [
            "metric": {"type": "string", "enum": _METRIC_ENUM + ["overdue_tasks", "open_tasks", "inbox_items", "overdue_follow_ups", "overloaded_days"]},
            "condition": {"type": "string", "enum": ["above", "below"]}, "threshold": {"type": "number"},
            "days": {"type": "integer", "description": "Days in a row, 1 to 30, default 3 (live counts use the current value)."},
-           "message": {"type": "string", "description": "What to tell yourself when it trips."}},
+           "message": {"type": "string", "description": "What to tell yourself when it trips."},
+           "task": {"type": "string", "description": "A task for act_on_tripwires to create once when it trips."}},
           ["name", "metric", "condition", "threshold"]),
     _tool("get_tripwires", "Every tripwire with its state: tripped, ok or no data.", {}, []),
+    _tool("act_on_tripwires", "Create the follow-up tasks of tripped tripwires (due today, skipped when an open task with the "
+                              "same text exists). apply=false only shows what would be created.",
+          {"apply": {"type": "boolean", "description": "Default true."}}, []),
     _tool("delete_tripwire", "Delete a tripwire.", {"tripwire": {"type": "string", "description": "Its id or some words from its name."}},
           ["tripwire"]),
 ]
@@ -813,6 +817,13 @@ QUICKADD_SCHEMAS = [
                        "week', 'send invoice by fri ~15m'. Picks out the due date, #tags, !priority, ~estimate and repeat.",
           {"line": {"type": "string"}, "preview": {"type": "boolean", "description": "Show how it is understood without saving."}},
           ["line"]),
+]
+
+BATCH_SCHEMAS = [
+    _tool("batch_tasks", "Group open tasks by tag into batches (two or more tasks sharing a tag) with the time they would "
+                         "take together. With tag and apply=true, block one time slot for the whole batch.",
+          {"tag": {"type": "string"}, "apply": {"type": "boolean"}, "date": {"type": "string", "description": "Default today."}},
+          []),
 ]
 
 WORKLOAD_SCHEMAS = [
@@ -850,6 +861,10 @@ TIMEBUDGET_SCHEMAS = [
           {"category": {"type": "string"}, "hours": {"type": "number", "description": "0.5 to 80 hours a week."},
            "kind": {"type": "string", "enum": ["min", "max"], "description": "Default min."}}, ["category", "hours"]),
     _tool("get_time_budget", "This week's time budgets against the time blocks done and still planned.", {}, []),
+    _tool("fill_time_budget", "Propose (or with apply=true create) time blocks in the free gaps of this week that would close "
+                              "the shortfall of the minimum budgets. Overloaded days are skipped.",
+          {"category": {"type": "string", "description": "Only this budget; default all short ones."},
+           "apply": {"type": "boolean"}}, []),
     _tool("delete_time_budget", "Delete a time budget.", {"category": {"type": "string", "description": "Its category."}},
           ["category"]),
 ]
@@ -871,7 +886,8 @@ PLANNER_SCHEMAS = (TASK_SCHEMAS + BODY_SCHEMAS + SUBSCRIPTION_SCHEMAS + PEOPLE_S
                    + FLASHCARD_SCHEMAS + NETWORTH_SCHEMAS
                    + PROJECT_SCHEMAS + WAITING_SCHEMAS
                    + EXPERIMENT_SCHEMAS + TRIPWIRE_SCHEMAS + WORKLOAD_SCHEMAS + TIMELINE_SCHEMAS
-                   + ESTIMATE_SCHEMAS + TIMEBUDGET_SCHEMAS + QUICKADD_SCHEMAS)
+                   + ESTIMATE_SCHEMAS + TIMEBUDGET_SCHEMAS + QUICKADD_SCHEMAS
+                   + BATCH_SCHEMAS)
 
 TOOL_MODULES: Dict[str, str] = {}
 for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBSCRIPTION_SCHEMAS, "subscriptions"),
@@ -891,6 +907,6 @@ for _schemas, _module in ((TASK_SCHEMAS, "tasks"), (BODY_SCHEMAS, "body"), (SUBS
                           (WAITING_SCHEMAS, "waiting"), (EXPERIMENT_SCHEMAS, "experiments"),
                           (TRIPWIRE_SCHEMAS, "tripwires"), (WORKLOAD_SCHEMAS, "workload"),
                           (TIMELINE_SCHEMAS, "timeline"), (ESTIMATE_SCHEMAS, "estimates"),
-                          (TIMEBUDGET_SCHEMAS, "timebudgets"), (QUICKADD_SCHEMAS, "quickadd")):
+                          (TIMEBUDGET_SCHEMAS, "timebudgets"), (QUICKADD_SCHEMAS, "quickadd"), (BATCH_SCHEMAS, "batching")):
     for _s in _schemas:
         TOOL_MODULES[_s["function"]["name"]] = _module

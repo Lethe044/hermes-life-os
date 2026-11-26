@@ -25,7 +25,7 @@ HEADING = {"tasks": "Tasks", "body": "Body metrics", "subscriptions": "Subscript
            "library": "Library", "calendar_export": "Calendar export", "inbox": "Inbox",
            "weekly_review": "Weekly review", "flashcards": "Flashcards",
            "networth": "Net worth", "projects": "Projects",
-           "waiting": "Waiting for", "experiments": "Experiments", "tripwires": "Tripwires", "estimates": "Estimate accuracy", "timebudgets": "Time budgets", "quickadd": "Quick add",
+           "waiting": "Waiting for", "experiments": "Experiments", "tripwires": "Tripwires", "estimates": "Estimate accuracy", "timebudgets": "Time budgets", "quickadd": "Quick add", "batching": "Task batching",
            "workload": "Workload forecast", "timeline": "Life timeline"}
 
 

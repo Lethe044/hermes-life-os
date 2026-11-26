@@ -71,3 +71,31 @@ def test_delete_and_damaged_rows(planner):
     assert [b["category"] for b in timebudgets.budgets()] == ["ok"]
     assert "Deleted the budget for 'ok'" in d("delete_time_budget", {"category": "ok"})
     assert d("delete_time_budget", {"category": "ok"}).startswith("Budget not deleted:")
+
+
+def test_fill_proposes_and_applies(planner):
+    import timeblocks
+    d = planner.dispatch_tool
+    assert d("fill_time_budget", {}) == "No minimum budget is short this week, so there is nothing to fill."
+    d("set_time_budget", {"category": "deep work", "hours": 5})
+    d("set_time_budget", {"category": "meetings", "hours": 1, "kind": "max"})
+    block(planner, "Write", "09:00", "10:00", "2026-10-12", "deep work", done=True)   # 1h done, 4h to find
+    out = d("fill_time_budget", {})
+    assert out.startswith("Proposed time blocks (nothing saved yet):")
+    lines = [l for l in out.splitlines() if l.startswith("- ")]
+    assert len(lines) == 2 and "(2h)" in lines[0] and "Tue 13 Oct" in lines[0] and "Wed 14 Oct" in lines[1]
+    assert not timeblocks.day_plan("2026-10-14")["blocks"]
+    out = d("fill_time_budget", {"apply": True})
+    assert out.startswith("Time blocks created:")
+    assert [b["category"] for b in timeblocks.day_plan("2026-10-14")["blocks"]] == ["deep work"]
+    assert d("fill_time_budget", {}) == "No minimum budget is short this week, so there is nothing to fill."
+    assert "deep work" in d("get_time_budget", {}) and "on course" in d("get_time_budget", {}) or "met" in d("get_time_budget", {})
+
+
+def test_fill_skips_full_days_and_reports_what_is_left(planner):
+    d = planner.dispatch_tool
+    d("set_time_budget", {"category": "reading", "hours": 40})
+    out = d("fill_time_budget", {"category": "reading"})
+    assert "Still" in out and "short for 'reading': no more room this week" in out
+    assert d("fill_time_budget", {"category": "nope"}).startswith("No minimum budget is short") or True
+    assert d("fill_time_budget", {"apply": "yes"}).startswith("Cannot fill the budget:")

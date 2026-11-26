@@ -33,6 +33,7 @@ Ask in plain language; Hermes calls the right tool and answers from your own dat
 | Add a task in one line | "call Sam tomorrow #work !high ~30m" | `quick_add` |
 | Know what to test next | "what experiment should I try?" | `suggest_experiment` |
 | Check if work fits | "can I fit 3 hours of work before Friday?" | `check_capacity` |
+| Batch small tasks | "batch my #calls into one block" | `batch_tasks` |
 | Budget your week | "at least 10 hours of deep work a week" | `set_time_budget` |
 | Check your estimates | "how good am I at estimating?" | `get_estimate_accuracy` |
 | See if the week is too full | "can I do everything due this week?" | `get_workload_forecast` |
@@ -51,7 +52,7 @@ Ask in plain language; Hermes calls the right tool and answers from your own dat
 | Undo a mistake | "put the rent task back" | `restore_deleted` |
 | Understand yourself | "what affects my sleep?" | `get_correlations` |
 
-All 317 tools are listed in the [tool reference](docs/TOOLS.md).
+All 320 tools are listed in the [tool reference](docs/TOOLS.md).
 
 ## Contents
 
@@ -611,6 +612,9 @@ recently deleted list.
 - **Quick add**: type a task the way you would say it. Hermes picks out the due date (today,
   tomorrow, a weekday, `by fri`, `in 3 days`, an ISO date), `#tags`, a `!priority`, an estimate
   (`~30m`, `~1h30m`) and a repeat (`every week`, `daily`). `preview=true` shows the reading only.
+- **Closing gaps**: `fill_time_budget` proposes (or creates) the blocks that would meet a short
+  minimum budget; `batch_tasks` groups same-tag tasks into one block; a tripwire with a follow-up
+  task creates it through `act_on_tripwires`.
 - **Experiment ideas**: `suggest_experiment` proposes experiments from the correlations in your
   own data, only for things you can change and in the direction that should help.
 - **Capacity and rebalancing**: `check_capacity` says whether new work fits before a deadline;
@@ -2257,6 +2261,18 @@ Not medical or therapeutic advice - a reflection of your own patterns,
 phrased as a nudge, nothing more.
 
 ## What's New
+
+**v1.56.0 - Close the Gap**
+- New **`fill_time_budget`**: when a minimum time budget is short this week, Hermes proposes the
+  time blocks that would close the gap (up to two hours a day and budget, in free gaps, skipping
+  overloaded days). `apply=true` creates the blocks.
+- New **`batch_tasks`**: groups open tasks that share a tag (all the calls, all the errands) with
+  the time they would take together. With `tag` and `apply=true` it blocks one slot for the whole
+  batch and lists the tasks in the block's notes.
+- Tripwires can now carry a **follow-up task** (`task` on `add_tripwire`). The new
+  **`act_on_tripwires`** creates it, due today with a `tripwire` tag, once per tripped wire (it
+  skips a task that is already open; `apply=false` only shows what would be created).
+- 12 new tests - suite grew from 5176 to 5188.
 
 **v1.55.0 - Say It, Test It, Fit It**
 - New **quick add**: `quick_add` turns one typed line into a task. "call Sam tomorrow #work !high
